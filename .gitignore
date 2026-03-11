@@ -1,0 +1,9 @@
+CLAUDE.md
+.cursorrules
+AGENTS.md
+node_modules
+dist
+tests/**/*.js
+.project-memory.env
+.project-memory.codex.toml
+.project-memory.claude.mcp.json

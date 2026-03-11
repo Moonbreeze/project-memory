@@ -1,0 +1,6 @@
+# Modules for this project (one per line)
+# targets: CLAUDE.md .cursorrules AGENTS.md
+targets: CLAUDE.md AGENTS.md
+
+workflow
+typescript

@@ -1,0 +1,19 @@
+{
+  "name": "project-memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install-memory": "node --experimental-strip-types src/cli/index.ts install",
+    "cli": "node --experimental-strip-types src/cli/index.ts",
+    "cli:local": "./scripts/run-cli.sh",
+    "mcp": "node --experimental-strip-types src/mcp/server.ts",
+    "mcp:local": "./scripts/run-mcp.sh",
+    "test": "node --experimental-strip-types --test tests/core/*.test.ts tests/mcp/*.test.ts tests/cli/*.test.ts tests/e2e/*.test.ts",
+    "test:stdio-integration": "bash scripts/test-stdio-integration.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "typescript": "^5.9.3"
+  }
+}
