@@ -23,7 +23,6 @@ export const upsertCanonicalDocCommand: CliCommandHandler = (flags, io) => {
       source: parseOptionalDocumentSource(flags.source),
       status: parseOptionalDocumentStatus(flags.status),
       date: flags.date,
-      projectCommit: flags.projectCommit,
     }),
     io,
   );

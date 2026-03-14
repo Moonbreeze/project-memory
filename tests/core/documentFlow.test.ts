@@ -40,6 +40,45 @@ test("appendSessionNote writes a structured document to the expected path", () =
   );
   assert.match(fs.readFileSync(document.path, "utf8"), /## Summary/);
   assert.match(fs.readFileSync(document.path, "utf8"), /project: acme-app/);
+  assert.doesNotMatch(fs.readFileSync(document.path, "utf8"), /project_commit:/);
+});
+
+test("readDocument rejects legacy project_commit frontmatter", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  const relativePath = "projects/acme-app/runbooks/legacy-runbook.md";
+
+  fs.mkdirSync(`${rootDir}/projects/acme-app/runbooks`, { recursive: true });
+  fs.writeFileSync(
+    `${rootDir}/${relativePath}`,
+    [
+      "---",
+      "date: 2026-03-11",
+      "project: acme-app",
+      "topic: legacy-runbook",
+      "source: manual",
+      "status: active",
+      "project_commit: deadbeef",
+      "---",
+      "",
+      "# Runbook",
+      "",
+      "## Purpose",
+      "",
+      "Keep legacy frontmatter readable during migration.",
+      "",
+      "## Procedure",
+      "",
+      "- Read legacy docs",
+      "",
+      "## Verification",
+      "",
+      "- Confirm no validation error",
+    ].join("\n"),
+    "utf8",
+  );
+
+  assert.throws(() => readDocument(context, relativePath), /Unknown metadata field: project_commit/);
 });
 
 test("validation rejects secret-like content", () => {

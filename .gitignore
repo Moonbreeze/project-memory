@@ -7,3 +7,4 @@ tests/**/*.js
 .project-memory.env
 .project-memory.codex.toml
 .project-memory.claude.mcp.json
+.ai-migrations-state

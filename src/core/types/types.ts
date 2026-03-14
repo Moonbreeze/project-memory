@@ -59,8 +59,6 @@ export type Frontmatter = {
   source: DocumentSource;
   /** Current document lifecycle status. */
   status: DocumentStatus;
-  /** Optional application repository commit SHA. */
-  project_commit?: string;
 };
 
 /**
@@ -125,8 +123,6 @@ export type CreateDocumentInput = {
   source?: DocumentSource;
   /** Optional explicit document status. */
   status?: DocumentStatus;
-  /** Optional application repository commit SHA. */
-  projectCommit?: string;
 };
 
 /**

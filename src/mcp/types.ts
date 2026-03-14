@@ -578,7 +578,6 @@ export const parseSessionNoteInput = (value: unknown): SessionNoteInput => {
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),
-    projectCommit: readOptionalString(params.projectCommit, "projectCommit"),
   };
 };
 
@@ -599,7 +598,6 @@ export const parseVerificationResultInput = (
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),
-    projectCommit: readOptionalString(params.projectCommit, "projectCommit"),
   };
 };
 
@@ -619,7 +617,6 @@ export const parseProviderNoteInput = (value: unknown): ProviderNoteInput => {
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),
-    projectCommit: readOptionalString(params.projectCommit, "projectCommit"),
   };
 };
 
@@ -638,7 +635,6 @@ export const parseDecisionInput = (value: unknown): DecisionInput => {
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),
-    projectCommit: readOptionalString(params.projectCommit, "projectCommit"),
   };
 };
 
@@ -657,7 +653,6 @@ export const parseRunbookInput = (value: unknown): RunbookInput => {
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),
-    projectCommit: readOptionalString(params.projectCommit, "projectCommit"),
   };
 };
 
@@ -677,7 +672,6 @@ export const parseCanonicalDocInput = (value: unknown): CanonicalDocInput => {
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),
-    projectCommit: readOptionalString(params.projectCommit, "projectCommit"),
   };
 };
 

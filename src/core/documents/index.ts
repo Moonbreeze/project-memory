@@ -31,7 +31,6 @@ type DefaultFrontmatterInput = {
   registryScope?: string;
   source?: Frontmatter["source"];
   status?: Frontmatter["status"];
-  projectCommit?: string;
 };
 
 type DocumentPathPattern = {
@@ -183,10 +182,6 @@ const buildFrontmatter = (frontmatter: Frontmatter): string => {
 
   lines.push(`source: ${frontmatter.source}`, `status: ${frontmatter.status}`);
 
-  if (frontmatter.project_commit) {
-    lines.push(`project_commit: ${frontmatter.project_commit}`);
-  }
-
   lines.push("---", "");
   return lines.join("\n");
 };
@@ -324,10 +319,6 @@ const normalizeFrontmatter = (metadata: Record<string, string>): Frontmatter => 
     normalized.registry_scope = metadata.registry_scope;
   }
 
-  if (metadata.project_commit) {
-    normalized.project_commit = metadata.project_commit;
-  }
-
   return normalized;
 };
 
@@ -378,7 +369,6 @@ const defaultFrontmatter = (input: DefaultFrontmatterInput): Frontmatter => {
     topic: ensureSlug(input.topic, "Topic"),
     source: input.source ?? "agent",
     status: input.status ?? "active",
-    project_commit: input.projectCommit,
   };
 
   if (input.registryScope) {

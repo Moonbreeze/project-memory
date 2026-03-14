@@ -45,7 +45,6 @@ export const FrontmatterKey = [
   "registry_scope",
   "source",
   "status",
-  "project_commit",
 ] as const;
 
 /**
