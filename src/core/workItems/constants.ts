@@ -15,6 +15,11 @@ export const WorkItemState = [
 ] as const;
 
 /**
+ * Terminal lifecycle states accepted by the dedicated close helper.
+ */
+export const CloseWorkItemState = ["done", "canceled"] as const;
+
+/**
  * Derived planning states used by future backlog and bounded-read helpers.
  */
 export const WorkItemPlanningState = [

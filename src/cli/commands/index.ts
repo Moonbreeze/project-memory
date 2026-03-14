@@ -2,6 +2,7 @@ import { appendSessionNoteCommand } from "./appendSessionNote.ts";
 import { archiveDocumentCommand } from "./archiveDocument.ts";
 import { bootstrapCommand } from "./bootstrap.ts";
 import { commitPendingChangesCommand } from "./commitPendingChanges.ts";
+import { closeWorkItemCommand } from "./closeWorkItem.ts";
 import { createDecisionCommand } from "./createDecision.ts";
 import { createRunbookCommand } from "./createRunbook.ts";
 import { installCommand } from "./install.ts";
@@ -29,6 +30,7 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "upsert-provider-note": upsertProviderNoteCommand,
   "upsert-canonical-doc": upsertCanonicalDocCommand,
   "upsert-work-item": upsertWorkItemCommand,
+  "close-work-item": closeWorkItemCommand,
   "create-decision": createDecisionCommand,
   "create-runbook": createRunbookCommand,
   "list-documents": listDocumentsCommand,

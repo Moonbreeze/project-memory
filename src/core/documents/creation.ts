@@ -10,12 +10,14 @@ import type {
   VerificationResultInput,
 } from "../types/index.ts";
 import type {
+  CloseWorkItemInput,
   WorkItemDefinition,
   WorkItemDocumentStatus,
   WorkItemInput,
   WorkItemState,
 } from "../workItems/index.ts";
 import {
+  parseWorkItemDocument,
   renderWorkItemBody,
   validateWorkItemDefinition,
 } from "../workItems/index.ts";
@@ -27,7 +29,7 @@ import {
   ensureSlug,
   resolveDocumentRelativePath,
 } from "./pathLayout.ts";
-import { writeDocument } from "./storage.ts";
+import { readDocument, writeDocument } from "./storage.ts";
 
 /**
  * Shared frontmatter inputs accepted by document creation helpers.
@@ -246,4 +248,53 @@ export const upsertWorkItem = (
     metadata.date,
   );
   return writeDocument(context, relativePath, metadata, body);
+};
+
+/**
+ * Closes one existing work-item by applying a terminal lifecycle state.
+ */
+export const closeWorkItem = (
+  input: CloseWorkItemInput,
+  context = createRepositoryContext(),
+): ParsedDocument => {
+  const relativePath = resolveDocumentRelativePath(
+    input.project,
+    "work-item",
+    input.topic,
+    input.date,
+  );
+  const existingDocument = readDocument(context, relativePath);
+  const existingDefinition = parseWorkItemDocument(existingDocument);
+  const currentState = existingDefinition.metadata.workItemState;
+
+  if (existingDefinition.metadata.status === "archived") {
+    throw new Error("Archived work items cannot be closed");
+  }
+
+  if (currentState === input.state) {
+    return existingDocument;
+  }
+
+  if (currentState === "done" || currentState === "canceled") {
+    throw new Error(`Cannot transition work item from ${currentState} to ${input.state}`);
+  }
+
+  return upsertWorkItem(
+    {
+      project: existingDefinition.metadata.project,
+      topic: existingDefinition.metadata.topic,
+      date: existingDefinition.metadata.date,
+      source: existingDocument.metadata.source,
+      status: existingDefinition.metadata.status,
+      workItemState: input.state,
+      summary: existingDefinition.summary,
+      outcome: existingDefinition.outcome,
+      origin: existingDefinition.origin,
+      dependencies: existingDefinition.dependencies,
+      context: existingDefinition.context,
+      verification: existingDefinition.verification,
+      evidence: existingDefinition.evidence,
+    },
+    context,
+  );
 };

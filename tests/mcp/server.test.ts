@@ -292,6 +292,7 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert(toolNames.includes("read_rationale_entry"));
   assert(toolNames.includes("append_session_note"));
   assert(toolNames.includes("commit_pending_changes"));
+  assert(toolNames.includes("close_work_item"));
   assert(toolNames.includes("upsert_work_item"));
 });
 
@@ -488,6 +489,53 @@ test("MCP upsert_work_item feeds the project backlog planning view", () => {
   assert.equal(document.planningState, "ready");
   assert.equal(document.unresolvedDependencyCount, 0);
   assert.equal(backlogResult.structuredContent.appliedQuery.type, "work-item");
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP close_work_item closes a work item and removes it from the active backlog", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const createResponse = callTool("work-close-1", "upsert_work_item", {
+    project: "acme-app",
+    topic: "closeable slice",
+    summary: "Implement the closeable work slice.",
+    outcome: "A dedicated lifecycle helper can finish the item.",
+    originKind: "ad-hoc",
+    originNote: "MCP close coverage.",
+    verification: ["Run MCP close coverage."],
+    date: "2026-03-11",
+    workItemState: "in_progress",
+  });
+  assert.equal(readToolResult(createResponse).isError, false);
+
+  const closeResponse = callTool("work-close-2", "close_work_item", {
+    project: "acme-app",
+    topic: "closeable slice",
+    date: "2026-03-11",
+    state: "done",
+  });
+  const closeResult = readToolResult(closeResponse);
+  if (!isRecord(closeResult.structuredContent) || !isRecord(closeResult.structuredContent.metadata)) {
+    throw new Error("Expected structured close_work_item result");
+  }
+
+  assert.equal(closeResult.structuredContent.metadata.work_item_state, "done");
+
+  const backlogResponse = callTool("work-close-3", "list_documents", {
+    project: "acme-app",
+    preset: "backlog",
+  });
+  const backlogResult = readToolResult(backlogResponse);
+  if (
+    !isRecord(backlogResult.structuredContent)
+    || !Array.isArray(backlogResult.structuredContent.documents)
+  ) {
+    throw new Error("Expected structured backlog result after close_work_item");
+  }
+
+  assert.equal(backlogResult.structuredContent.documents.length, 0);
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

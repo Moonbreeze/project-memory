@@ -2,6 +2,7 @@
  * Work-item spec constants for the future Session 6 implementation.
  */
 export {
+  CloseWorkItemState as CloseWorkItemStateValues,
   WorkItemContextLocatorType as WorkItemContextLocatorTypeValues,
   WorkItemDocumentStatus as WorkItemDocumentStatusValues,
   WorkItemEvidenceLocatorType as WorkItemEvidenceLocatorTypeValues,
@@ -17,6 +18,8 @@ export {
  */
 export type {
   CanonicalDocLocator,
+  CloseWorkItemInput,
+  CloseWorkItemState,
   DecisionLocator,
   SessionNoteLocator,
   VerificationResultLocator,
@@ -45,6 +48,7 @@ export type {
  * Work-item spec type guards.
  */
 export {
+  isCloseWorkItemState,
   isWorkItemContextLocatorType,
   isWorkItemDocumentStatus,
   isWorkItemEvidenceLocatorType,

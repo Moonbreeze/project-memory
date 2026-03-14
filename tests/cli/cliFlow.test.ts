@@ -644,6 +644,72 @@ test("CLI upserts work items and exposes planning metadata through list-document
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("CLI closes work items through the dedicated lifecycle command", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  await runCli(
+    [
+      "upsert-work-item",
+      "--project",
+      "acme-app",
+      "--topic",
+      "closeable slice",
+      "--summary",
+      "Implement the closeable work slice.",
+      "--outcome",
+      "A dedicated lifecycle helper can finish the item.",
+      "--origin-kind",
+      "ad-hoc",
+      "--origin-note",
+      "CLI close coverage.",
+      "--verification",
+      "Run CLI close coverage",
+      "--date",
+      "2026-03-11",
+      "--work-item-state",
+      "in_progress",
+    ],
+  );
+
+  const closeCapture = createCapturedIo();
+  await runCli(
+    [
+      "close-work-item",
+      "--project",
+      "acme-app",
+      "--topic",
+      "closeable slice",
+      "--date",
+      "2026-03-11",
+      "--state",
+      "done",
+    ],
+    closeCapture.io,
+  );
+
+  const closeResult = parseLastJson(closeCapture.captured.stdout);
+  if (!isRecord(closeResult) || !isRecord(closeResult.metadata)) {
+    throw new Error("Unexpected close-work-item result shape");
+  }
+
+  assert.equal(closeResult.metadata.work_item_state, "done");
+
+  const listCapture = createCapturedIo();
+  await runCli(
+    ["list-documents", "--project", "acme-app", "--preset", "backlog"],
+    listCapture.io,
+  );
+  const listResult = parseLastJson(listCapture.captured.stdout);
+  if (!isRecord(listResult) || !Array.isArray(listResult.documents)) {
+    throw new Error("Unexpected backlog result shape after close-work-item");
+  }
+
+  assert.equal(listResult.documents.length, 0);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("CLI rejects reading unmanaged document paths", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;

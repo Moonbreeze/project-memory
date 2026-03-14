@@ -1,4 +1,5 @@
 import {
+  CloseWorkItemState as CloseWorkItemStateValues,
   WorkItemContextLocatorType as WorkItemContextLocatorTypeValues,
   WorkItemDocumentStatus as WorkItemDocumentStatusValues,
   WorkItemEvidenceLocatorType as WorkItemEvidenceLocatorTypeValues,
@@ -20,6 +21,11 @@ export type WorkItemDocumentStatus = typeof WorkItemDocumentStatusValues[number]
  * A future execution lifecycle state for work-item documents.
  */
 export type WorkItemState = typeof WorkItemStateValues[number];
+
+/**
+ * A terminal lifecycle state accepted by the dedicated close helper.
+ */
+export type CloseWorkItemState = typeof CloseWorkItemStateValues[number];
 
 /**
  * A derived planning state for future backlog and bounded-read helpers.
@@ -247,6 +253,20 @@ export type WorkItemInput = {
 };
 
 /**
+ * Input required to close one existing work-item without rewriting its body fields.
+ */
+export type CloseWorkItemInput = {
+  /** Target project slug. */
+  project: string;
+  /** Existing work-item topic slug or label. */
+  topic: string;
+  /** Exact work-item date in `YYYY-MM-DD` format. */
+  date: string;
+  /** Terminal lifecycle state to apply. */
+  state: CloseWorkItemState;
+};
+
+/**
  * Inputs used to derive a planning state from lifecycle and dependency data.
  */
 export type WorkItemPlanningStateInput = {
@@ -272,6 +292,15 @@ export const isWorkItemDocumentStatus = (
  */
 export const isWorkItemState = (value: unknown): value is WorkItemState => {
   return isLiteralMember(WorkItemStateValues, value);
+};
+
+/**
+ * Returns `true` when `value` is a supported close-work-item target state.
+ */
+export const isCloseWorkItemState = (
+  value: unknown,
+): value is CloseWorkItemState => {
+  return isLiteralMember(CloseWorkItemStateValues, value);
 };
 
 /**

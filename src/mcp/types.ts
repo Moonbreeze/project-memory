@@ -1,4 +1,5 @@
 import {
+  isCloseWorkItemState,
   isDocumentSource,
   isDocumentStatus,
   isDocumentType,
@@ -14,6 +15,8 @@ import {
 import type {
   ColdStartInput,
   CanonicalDocInput,
+  CloseWorkItemInput,
+  CloseWorkItemState,
   CommitPendingChangesInput,
   DecisionInput,
   DocumentSource,
@@ -385,6 +388,18 @@ const readOptionalWorkItemState = (value: unknown) => {
   }
 
   return value;
+};
+
+/**
+ * Reads one validated close-work-item target state from unknown input.
+ */
+const readCloseWorkItemState = (value: unknown): CloseWorkItemState => {
+  const state = readRequiredString(value, "state");
+  if (!isCloseWorkItemState(state)) {
+    throw new Error("Invalid close-work-item state");
+  }
+
+  return state;
 };
 
 /**
@@ -833,6 +848,22 @@ export const parseWorkItemInput = (value: unknown): WorkItemInput => {
     source: readOptionalDocumentSource(params.source),
     status: readOptionalWorkItemDocumentStatus(params.status),
     workItemState: readOptionalWorkItemState(params.workItemState),
+  };
+};
+
+/**
+ * Parses params for `close_work_item`.
+ */
+export const parseCloseWorkItemInput = (
+  value: unknown,
+): CloseWorkItemInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    topic: readRequiredString(params.topic, "topic"),
+    date: readRequiredString(params.date, "date"),
+    state: readCloseWorkItemState(params.state),
   };
 };
 

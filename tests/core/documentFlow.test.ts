@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   appendSessionNote,
   archiveDocument,
+  closeWorkItem,
   commitPendingChanges,
   createDecision,
   createRunbook,
@@ -380,6 +381,61 @@ test("upsertWorkItem writes a managed work item and exposes planning metadata th
   const reread = readDocument(context, initial.relativePath);
   assert.equal(reread.metadata.work_item_state, "open");
   assert.match(reread.body, /Session 6 implementation seed/);
+});
+
+test("closeWorkItem applies a terminal lifecycle state and removes the item from backlog planning", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "closeable slice",
+      date: "2026-03-11",
+      summary: "Finish the first closeable slice.",
+      outcome: "The lifecycle helper can mark work complete without rewriting the body.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Session 7 close helper coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Confirm the close helper updates only lifecycle metadata."],
+      evidence: [],
+      workItemState: "in_progress",
+    },
+    context,
+  );
+
+  const closed = closeWorkItem(
+    {
+      project: "acme-app",
+      topic: "closeable slice",
+      date: "2026-03-11",
+      state: "done",
+    },
+    context,
+  );
+
+  assert.equal(closed.metadata.work_item_state, "done");
+  assert.match(closed.body, /Finish the first closeable slice/);
+
+  const backlog = listDocuments({ project: "acme-app", preset: "backlog" }, context);
+  assert.equal(backlog.documents.length, 0);
+
+  assert.throws(
+    () =>
+      closeWorkItem(
+        {
+          project: "acme-app",
+          topic: "closeable slice",
+          date: "2026-03-11",
+          state: "canceled",
+        },
+        context,
+      ),
+    /Cannot transition work item from done to canceled/,
+  );
 });
 
 test("readDocument rejects work-item documents without work_item_state metadata", () => {
