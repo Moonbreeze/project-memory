@@ -2,6 +2,7 @@ import { listDocumentsTool } from "../listDocuments.ts";
 import { readColdStartTool } from "../readColdStart.ts";
 import { readDocumentTool } from "../readDocument.ts";
 import { readPlanningBacklogTool } from "../readPlanningBacklog.ts";
+import { readPlanningTopicEntryTool } from "../readPlanningTopicEntry.ts";
 import { readRationaleEntryTool } from "../readRationaleEntry.ts";
 import { readTopicEntryTool } from "../readTopicEntry.ts";
 import { searchDocumentsTool } from "../searchDocuments.ts";
@@ -140,6 +141,25 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
       ["project"],
     ),
     handler: readPlanningBacklogTool,
+  },
+  read_planning_topic_entry: {
+    name: "read_planning_topic_entry",
+    description:
+      "Read a bounded exact-topic planning package for one project/topic using only same-project active work-item documents.",
+    inputSchema: createObjectSchema(
+      {
+        project: {
+          type: "string",
+          description: "Target project slug.",
+        },
+        topic: {
+          type: "string",
+          description: "Requested topic label or slug.",
+        },
+      },
+      ["project", "topic"],
+    ),
+    handler: readPlanningTopicEntryTool,
   },
   read_topic_entry: {
     name: "read_topic_entry",

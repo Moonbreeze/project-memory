@@ -289,6 +289,7 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert(toolNames.includes("list_documents"));
   assert(toolNames.includes("read_cold_start"));
   assert(toolNames.includes("read_planning_backlog"));
+  assert(toolNames.includes("read_planning_topic_entry"));
   assert(toolNames.includes("read_topic_entry"));
   assert(toolNames.includes("read_rationale_entry"));
   assert(toolNames.includes("append_session_note"));
@@ -850,6 +851,27 @@ test("MCP server exposes bounded read entrypoints", () => {
     || planningResult.structuredContent.planningExplainability.length !== 1
   ) {
     throw new Error("Expected read_planning_backlog planning explainability");
+  }
+
+  const planningTopicResponse = callTool("bounded-planning-topic", "read_planning_topic_entry", {
+    project: "acme-app",
+    topic: "resume slice",
+  });
+  const planningTopicResult = readToolResult(planningTopicResponse);
+  if (
+    !isRecord(planningTopicResult.structuredContent)
+    || !Array.isArray(planningTopicResult.structuredContent.documents)
+  ) {
+    throw new Error("Expected read_planning_topic_entry payload");
+  }
+
+  assert.equal(planningTopicResult.structuredContent.entrypoint, "planning-topic-entry");
+  assert.equal(planningTopicResult.structuredContent.topic, "resume-slice");
+  if (
+    !Array.isArray(planningTopicResult.structuredContent.planningExplainability)
+    || planningTopicResult.structuredContent.planningExplainability.length !== 1
+  ) {
+    throw new Error("Expected read_planning_topic_entry planning explainability");
   }
 
   const topicResponse = callTool("bounded-topic", "read_topic_entry", {

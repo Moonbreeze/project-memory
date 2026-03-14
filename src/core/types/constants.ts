@@ -32,6 +32,7 @@ export const ListDocumentsPreset = ["backlog"] as const;
 export const BoundedReadEntrypoint = [
   "cold-start",
   "planning-backlog",
+  "planning-topic-entry",
   "topic-entry",
   "rationale-entry",
 ] as const;

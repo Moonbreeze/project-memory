@@ -15,6 +15,7 @@ import {
   readDocument,
   readColdStart,
   readPlanningBacklog,
+  readPlanningTopicEntry,
   readRationaleEntry,
   readTopicEntry,
   recordVerificationResult,
@@ -842,6 +843,115 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
   assert(
     result.notes.includes(
       "Planning backlog reads only same-project active work-item documents and never falls back to decision backlog behavior.",
+    ),
+  );
+});
+
+test("readPlanningTopicEntry returns a bounded exact-topic work-item planning slice", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  const createWorkItem = (
+    project: string,
+    topic: string,
+    date: string,
+    overrides: Partial<Parameters<typeof upsertWorkItem>[0]> = {},
+  ) => {
+    upsertWorkItem(
+      {
+        project,
+        topic,
+        date,
+        summary: `Planning slice for ${topic}.`,
+        outcome: `Bounded planning can reason about ${topic}.`,
+        origin: {
+          kind: "ad-hoc",
+          note: "Planning topic coverage.",
+        },
+        dependencies: [],
+        context: [],
+        verification: [`Confirm ${topic} appears in the bounded planning topic read.`],
+        evidence: [],
+        ...overrides,
+      },
+      context,
+    );
+  };
+
+  createWorkItem("acme-app", "resume slice", "2026-03-11", { workItemState: "canceled" });
+  createWorkItem("acme-app", "resume slice", "2026-03-12", { workItemState: "done" });
+  createWorkItem("acme-app", "resume slice", "2026-03-13", {
+    dependencies: [
+      {
+        type: "work-item",
+        project: "acme-app",
+        date: "2026-03-15",
+        topic: "resume-slice",
+      },
+    ],
+  });
+  createWorkItem("acme-app", "resume slice", "2026-03-14", { workItemState: "in_progress" });
+  createWorkItem("acme-app", "resume slice", "2026-03-15", {
+    dependencies: [
+      {
+        type: "work-item",
+        project: "acme-app",
+        date: "2026-03-12",
+        topic: "resume-slice",
+      },
+    ],
+  });
+  createWorkItem("acme-app", "resume slice", "2026-03-16", { status: "draft" });
+  createWorkItem("acme-app", "resume slice follow-up", "2026-03-17");
+  createWorkItem("beta-app", "resume slice", "2026-03-18");
+
+  const result = readPlanningTopicEntry(
+    { project: "acme-app", topic: "resume slice" },
+    context,
+  );
+
+  assert.equal(result.entrypoint, "planning-topic-entry");
+  assert.equal(result.topic, "resume-slice");
+  assert.deepEqual(
+    result.stages.map((stage) => [stage.name, stage.relativePaths.length]),
+    [["work-item-exact", 4]],
+  );
+  assert.deepEqual(
+    result.documents.map((document) => document.relativePath),
+    [
+      "projects/acme-app/work-items/2026/2026-03-15-resume-slice.md",
+      "projects/acme-app/work-items/2026/2026-03-14-resume-slice.md",
+      "projects/acme-app/work-items/2026/2026-03-13-resume-slice.md",
+      "projects/acme-app/work-items/2026/2026-03-12-resume-slice.md",
+    ],
+  );
+  assert.deepEqual(
+    result.planningExplainability?.map((entry) => [
+      entry.relativePath,
+      entry.planningState,
+      entry.unresolvedDependencyCount,
+      entry.dependencySurfaces.map((dependency) => [dependency.relativePath, dependency.resolved]),
+    ]),
+    [
+      [
+        "projects/acme-app/work-items/2026/2026-03-15-resume-slice.md",
+        "ready",
+        0,
+        [["projects/acme-app/work-items/2026/2026-03-12-resume-slice.md", true]],
+      ],
+      ["projects/acme-app/work-items/2026/2026-03-14-resume-slice.md", "in_progress", 0, []],
+      [
+        "projects/acme-app/work-items/2026/2026-03-13-resume-slice.md",
+        "blocked",
+        1,
+        [["projects/acme-app/work-items/2026/2026-03-15-resume-slice.md", false]],
+      ],
+      ["projects/acme-app/work-items/2026/2026-03-12-resume-slice.md", "done", 0, []],
+    ],
+  );
+  assert(
+    result.notes.includes(
+      "Planning topic entry reads only same-project active work-item documents whose topic exactly matches the requested topic.",
     ),
   );
 });

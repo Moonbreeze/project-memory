@@ -36,6 +36,7 @@ export { listDocuments, searchDocuments } from "./search/index.ts";
 export {
   readColdStart,
   readPlanningBacklog,
+  readPlanningTopicEntry,
   readRationaleEntry,
   readTopicEntry,
 } from "./boundedReads/index.ts";

@@ -11,6 +11,7 @@ import { listDocumentsCommand } from "./listDocuments.ts";
 import { readDocumentCommand } from "./readDocument.ts";
 import { readColdStartCommand } from "./readColdStart.ts";
 import { readPlanningBacklogCommand } from "./readPlanningBacklog.ts";
+import { readPlanningTopicEntryCommand } from "./readPlanningTopicEntry.ts";
 import { readRationaleEntryCommand } from "./readRationaleEntry.ts";
 import { readTopicEntryCommand } from "./readTopicEntry.ts";
 import { recordVerificationResultCommand } from "./recordVerificationResult.ts";
@@ -41,6 +42,7 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "read-document": readDocumentCommand,
   "read-cold-start": readColdStartCommand,
   "read-planning-backlog": readPlanningBacklogCommand,
+  "read-planning-topic-entry": readPlanningTopicEntryCommand,
   "read-topic-entry": readTopicEntryCommand,
   "read-rationale-entry": readRationaleEntryCommand,
   "commit-pending-changes": commitPendingChangesCommand,

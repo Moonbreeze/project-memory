@@ -245,6 +245,16 @@ export type PlanningBacklogInput = {
 };
 
 /**
+ * Input required to read one bounded exact-topic planning entry.
+ */
+export type PlanningTopicEntryInput = {
+  /** Target project slug. */
+  project: string;
+  /** Requested topic label or slug. */
+  topic: string;
+};
+
+/**
  * Input required to read one bounded topic entry.
  */
 export type TopicEntryInput = {

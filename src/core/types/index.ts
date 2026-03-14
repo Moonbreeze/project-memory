@@ -51,6 +51,7 @@ export type {
   SearchResult,
   SessionNoteInput,
   SortOrder,
+  PlanningTopicEntryInput,
   TopicEntryInput,
   ValidationResult,
   VerificationResultInput,

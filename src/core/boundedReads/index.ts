@@ -18,12 +18,16 @@ import type {
   DocumentStatus,
   DocumentType,
   PlanningBacklogInput,
+  PlanningTopicEntryInput,
   ParsedDocument,
   RationaleEntryInput,
   RepositoryContext,
   TopicEntryInput,
 } from "../types/index.ts";
-import type { WorkItemPlanningEntry } from "../workItems/index.ts";
+import type {
+  WorkItemPlanningEntry,
+  WorkItemPlanningState,
+} from "../workItems/index.ts";
 
 type PathMatchMode = "all" | "exact" | "contains";
 
@@ -69,6 +73,10 @@ const planningBacklogLimits = {
   ready: 4,
   inProgress: 2,
   blocked: 2,
+} as const;
+
+const planningTopicEntryLimits = {
+  workItems: 4,
 } as const;
 
 const topicEntryLimits = {
@@ -467,6 +475,38 @@ const listProjectWorkItemPlanningEntries = (
 };
 
 /**
+ * Returns planning entries in stable planning rank order.
+ */
+const sortPlanningEntries = (
+  entries: WorkItemPlanningEntry[],
+): WorkItemPlanningEntry[] => {
+  const planningPriority: Record<WorkItemPlanningState, number> = {
+    ready: 0,
+    in_progress: 1,
+    blocked: 2,
+    done: 3,
+    canceled: 4,
+    draft: 5,
+    archived: 6,
+  };
+
+  return [...entries].sort((left, right) => {
+    const priorityDifference =
+      planningPriority[left.planning.planningState] - planningPriority[right.planning.planningState];
+    if (priorityDifference !== 0) {
+      return priorityDifference;
+    }
+
+    const dateDifference = right.document.metadata.date.localeCompare(left.document.metadata.date);
+    if (dateDifference !== 0) {
+      return dateDifference;
+    }
+
+    return left.document.relativePath.localeCompare(right.document.relativePath);
+  });
+};
+
+/**
  * Returns `true` when a planning state belongs to the backlog read surface.
  */
 const isPlanningBacklogState = (planningState: string): boolean => {
@@ -479,30 +519,9 @@ const isPlanningBacklogState = (planningState: string): boolean => {
 const listPlanningBacklogEntries = (
   entries: WorkItemPlanningEntry[],
 ): WorkItemPlanningEntry[] => {
-  const planningPriority: Record<string, number> = {
-    ready: 0,
-    in_progress: 1,
-    blocked: 2,
-  };
-
-  return entries
-    .filter((entry) => {
-      return isPlanningBacklogState(entry.planning.planningState);
-    })
-    .sort((left, right) => {
-      const priorityDifference =
-        planningPriority[left.planning.planningState] - planningPriority[right.planning.planningState];
-      if (priorityDifference !== 0) {
-        return priorityDifference;
-      }
-
-      const dateDifference = right.document.metadata.date.localeCompare(left.document.metadata.date);
-      if (dateDifference !== 0) {
-        return dateDifference;
-      }
-
-      return left.document.relativePath.localeCompare(right.document.relativePath);
-    });
+  return sortPlanningEntries(entries).filter((entry) => {
+    return isPlanningBacklogState(entry.planning.planningState);
+  });
 };
 
 /**
@@ -717,6 +736,58 @@ export const readPlanningBacklog = (
     documents,
     notes,
     undefined,
+    buildPlanningExplainability(allPlanningEntries, documents),
+  );
+};
+
+/**
+ * Reads a bounded exact-topic planning package for one project/topic.
+ */
+export const readPlanningTopicEntry = (
+  input: PlanningTopicEntryInput,
+  context = createRepositoryContext(),
+): BoundedReadResult => {
+  const project = ensureKebabCaseProject(input.project);
+  const topic = ensureSlug(input.topic, "Topic");
+  const stages: BoundedReadStage[] = [];
+  const documents: ParsedDocument[] = [];
+  const notes = [
+    "Planning topic entry reads only same-project active work-item documents whose topic exactly matches the requested topic.",
+    "Planning topic entry stays bounded and ordered by derived planning state before date/path tie-breaks.",
+  ];
+  const seenRelativePaths = new Set<string>();
+  const allPlanningEntries = listProjectWorkItemPlanningEntries(context, project);
+  const planningEntries = sortPlanningEntries(allPlanningEntries).filter((entry) => {
+    return entry.definition.metadata.topic === topic;
+  });
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "work-item-exact",
+      documentType: "work-item",
+      strategy: "topic-exact",
+      limit: planningTopicEntryLimits.workItems,
+      description: "Read bounded exact-topic active work items in planning-ranked order.",
+      candidatePaths: planningEntries.map((entry) => entry.document.relativePath),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
+
+  if (documents.length === 0) {
+    notes.push("No bounded planning topic work items were found for this topic.");
+  }
+
+  return createBoundedReadResult(
+    "planning-topic-entry",
+    project,
+    stages,
+    documents,
+    notes,
+    topic,
     buildPlanningExplainability(allPlanningEntries, documents),
   );
 };

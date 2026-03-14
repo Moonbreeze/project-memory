@@ -27,6 +27,7 @@ import type {
   ListDocumentsQuery,
   ListDocumentsSortField,
   PlanningBacklogInput,
+  PlanningTopicEntryInput,
   ProviderNoteInput,
   RationaleEntryInput,
   RunbookInput,
@@ -944,6 +945,18 @@ export const parsePlanningBacklogInput = (value: unknown): PlanningBacklogInput 
 
   return {
     project: readRequiredString(params.project, "project"),
+  };
+};
+
+/**
+ * Parses params for `read_planning_topic_entry`.
+ */
+export const parsePlanningTopicEntryInput = (value: unknown): PlanningTopicEntryInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    topic: readRequiredString(params.topic, "topic"),
   };
 };
 

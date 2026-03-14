@@ -905,6 +905,35 @@ test("CLI exposes bounded read entrypoints", async () => {
     throw new Error("Expected read-planning-backlog planning explainability");
   }
 
+  const planningTopicCapture = createCapturedIo();
+  await runCli(
+    ["read-planning-topic-entry", "--project", "acme-app", "--topic", "resume slice"],
+    planningTopicCapture.io,
+  );
+  const planningTopicResult = parseLastJson(planningTopicCapture.captured.stdout);
+  if (!isRecord(planningTopicResult) || !Array.isArray(planningTopicResult.documents)) {
+    throw new Error("Unexpected read-planning-topic-entry result shape");
+  }
+
+  assert.equal(planningTopicResult.entrypoint, "planning-topic-entry");
+  assert.equal(planningTopicResult.topic, "resume-slice");
+  assert.deepEqual(
+    planningTopicResult.documents.map((document) => {
+      if (!isRecord(document) || !isRecord(document.metadata) || typeof document.metadata.topic !== "string") {
+        throw new Error("Expected read-planning-topic-entry document metadata");
+      }
+
+      return document.metadata.topic;
+    }),
+    ["resume-slice"],
+  );
+  if (
+    !Array.isArray(planningTopicResult.planningExplainability)
+    || planningTopicResult.planningExplainability.length !== 1
+  ) {
+    throw new Error("Expected read-planning-topic-entry planning explainability");
+  }
+
   const topicCapture = createCapturedIo();
   await runCli(
     ["read-topic-entry", "--project", "acme-app", "--topic", "resume policy"],
