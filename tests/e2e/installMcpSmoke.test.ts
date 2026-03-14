@@ -176,11 +176,11 @@ test("install script provisions wrappers and local wrapper flow reaches the exte
   appendSessionNoteThroughCliWrapper(toolRootDir, homeDir);
 
   const listedDocuments = listDocumentsThroughCliWrapper(toolRootDir, homeDir);
-  if (!Array.isArray(listedDocuments)) {
-    throw new Error("Expected list-documents to return an array");
+  if (!isRecord(listedDocuments) || !Array.isArray(listedDocuments.documents)) {
+    throw new Error("Expected list-documents to return a structured result");
   }
 
-  const firstDocument = listedDocuments[0];
+  const firstDocument = listedDocuments.documents[0];
   if (!isRecord(firstDocument) || typeof firstDocument.relativePath !== "string") {
     throw new Error("Expected managed document metadata from list-documents");
   }

@@ -20,6 +20,21 @@ export const DocumentSource = ["agent", "user", "manual", "tool", "imported"] as
 export const DocumentStatus = ["draft", "active", "superseded", "archived"] as const;
 
 /**
+ * Supported list-documents presets.
+ */
+export const ListDocumentsPreset = ["backlog"] as const;
+
+/**
+ * Supported list-documents sort fields.
+ */
+export const ListDocumentsSortField = ["date", "path"] as const;
+
+/**
+ * Supported list-documents sort orders.
+ */
+export const SortOrder = ["asc", "desc"] as const;
+
+/**
  * Allowed top-level frontmatter keys.
  */
 export const FrontmatterKey = [

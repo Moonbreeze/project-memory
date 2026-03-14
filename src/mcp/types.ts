@@ -2,6 +2,9 @@ import {
   isDocumentSource,
   isDocumentStatus,
   isDocumentType,
+  isListDocumentsPreset,
+  isListDocumentsSortField,
+  isSortOrder,
 } from "../core/index.ts";
 import type {
   CommitPendingChangesInput,
@@ -9,10 +12,14 @@ import type {
   DocumentSource,
   DocumentStatus,
   DocumentType,
+  ListDocumentsPreset,
+  ListDocumentsQuery,
+  ListDocumentsSortField,
   ProviderNoteInput,
   RunbookInput,
   SearchQuery,
   SessionNoteInput,
+  SortOrder,
   VerificationResultInput,
 } from "../core/index.ts";
 
@@ -136,7 +143,7 @@ export type ToolCallResult = {
  */
 export type JsonSchemaProperty = {
   /** Property JSON schema type. */
-  type: "string" | "number" | "array";
+  type: "string" | "number" | "array" | "boolean";
   /** Optional property description. */
   description: string;
   /** Optional array item schema. */
@@ -277,6 +284,21 @@ const readOptionalNumber = (value: unknown, fieldName: string): number | undefin
 };
 
 /**
+ * Reads an optional boolean field from unknown input.
+ */
+const readOptionalBoolean = (value: unknown, fieldName: string): boolean | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error(`Invalid boolean field: ${fieldName}`);
+  }
+
+  return value;
+};
+
+/**
  * Reads an optional validated document source from unknown input.
  */
 const readOptionalDocumentSource = (value: unknown): DocumentSource | undefined => {
@@ -316,6 +338,82 @@ const readOptionalDocumentType = (value: unknown): DocumentType | undefined => {
 
   if (!isDocumentType(value)) {
     throw new Error("Invalid document type");
+  }
+
+  return value;
+};
+
+/**
+ * Reads an optional validated document-status array from unknown input.
+ */
+const readOptionalDocumentStatusArray = (
+  value: unknown,
+  fieldName: string,
+): DocumentStatus[] | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value) || value.some((entry) => !isDocumentStatus(entry))) {
+    throw new Error(`Invalid document status array field: ${fieldName}`);
+  }
+
+  const statuses: DocumentStatus[] = [];
+  for (const entry of value) {
+    if (!isDocumentStatus(entry)) {
+      throw new Error(`Invalid document status array field: ${fieldName}`);
+    }
+
+    statuses.push(entry);
+  }
+
+  return statuses;
+};
+
+/**
+ * Reads an optional validated list-documents preset from unknown input.
+ */
+const readOptionalListDocumentsPreset = (
+  value: unknown,
+): ListDocumentsPreset | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isListDocumentsPreset(value)) {
+    throw new Error("Invalid list_documents preset");
+  }
+
+  return value;
+};
+
+/**
+ * Reads an optional validated list-documents sort field from unknown input.
+ */
+const readOptionalListDocumentsSortField = (
+  value: unknown,
+): ListDocumentsSortField | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isListDocumentsSortField(value)) {
+    throw new Error("Invalid list_documents sort field");
+  }
+
+  return value;
+};
+
+/**
+ * Reads an optional validated sort order from unknown input.
+ */
+const readOptionalSortOrder = (value: unknown): SortOrder | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isSortOrder(value)) {
+    throw new Error("Invalid sort order");
   }
 
   return value;
@@ -565,13 +663,19 @@ export const parseRunbookInput = (value: unknown): RunbookInput => {
 /**
  * Parses params for `list_documents`.
  */
-export const parseListDocumentsQuery = (value: unknown): Omit<SearchQuery, "text"> => {
+export const parseListDocumentsQuery = (value: unknown): ListDocumentsQuery => {
   const params = readParams(value);
 
   return {
     project: readOptionalString(params.project, "project"),
+    preset: readOptionalListDocumentsPreset(params.preset),
     type: readOptionalDocumentType(params.type),
+    status: readOptionalDocumentStatus(params.status),
+    excludeStatuses: readOptionalDocumentStatusArray(params.excludeStatuses, "excludeStatuses"),
+    sort: readOptionalListDocumentsSortField(params.sort),
+    order: readOptionalSortOrder(params.order),
     limit: readOptionalNumber(params.limit, "limit"),
+    includeBody: readOptionalBoolean(params.includeBody, "includeBody"),
   };
 };
 

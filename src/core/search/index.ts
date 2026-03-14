@@ -1,6 +1,17 @@
 import { createRepositoryContext } from "../config/index.ts";
 import { listAllActiveDocumentPaths, readDocument } from "../documents/index.ts";
-import type { ParsedDocument, SearchQuery, SearchResult } from "../types/index.ts";
+import type {
+  AppliedListDocumentsQuery,
+  DocumentStatus,
+  ListDocumentsQuery,
+  ListDocumentsResult,
+  ListedDocument,
+  ParsedDocument,
+  SearchQuery,
+  SearchResult,
+} from "../types/index.ts";
+
+const backlogExcludedStatuses: DocumentStatus[] = ["superseded", "archived"];
 
 /**
  * Returns `true` when a parsed document satisfies the query filters.
@@ -24,6 +35,117 @@ const matchesQuery = (document: ParsedDocument, query: SearchQuery): boolean => 
   return true;
 };
 
+/**
+ * Applies list-documents-specific filters to one parsed document.
+ */
+const matchesListDocumentsQuery = (
+  document: ParsedDocument,
+  query: AppliedListDocumentsQuery,
+): boolean => {
+  if (query.project && document.metadata.project !== query.project) {
+    return false;
+  }
+
+  if (query.type && document.type !== query.type) {
+    return false;
+  }
+
+  if (query.status && document.metadata.status !== query.status) {
+    return false;
+  }
+
+  if (query.excludeStatuses?.includes(document.metadata.status)) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Expands presets and defaults into one normalized list-documents query.
+ */
+const normalizeListDocumentsQuery = (
+  query: ListDocumentsQuery,
+): AppliedListDocumentsQuery => {
+  const presetDefaults: Partial<AppliedListDocumentsQuery> =
+    query.preset === "backlog"
+      ? {
+          type: "decision",
+          excludeStatuses: backlogExcludedStatuses,
+          sort: "date",
+          order: "desc",
+        }
+      : {};
+
+  const statusOverridesPreset = query.status !== undefined || query.excludeStatuses !== undefined;
+  const normalizedQuery: AppliedListDocumentsQuery = {
+    sort: query.sort ?? presetDefaults.sort ?? "path",
+    order: query.order ?? presetDefaults.order ?? "asc",
+    limit: query.limit ?? 100,
+    includeBody: query.includeBody ?? false,
+  };
+
+  if (query.project) {
+    normalizedQuery.project = query.project;
+  }
+
+  if (query.type ?? presetDefaults.type) {
+    normalizedQuery.type = query.type ?? presetDefaults.type;
+  }
+
+  if (query.status) {
+    normalizedQuery.status = query.status;
+  }
+
+  const excludeStatuses = statusOverridesPreset
+    ? query.excludeStatuses
+    : (query.excludeStatuses ?? presetDefaults.excludeStatuses);
+  if (excludeStatuses) {
+    normalizedQuery.excludeStatuses = excludeStatuses;
+  }
+
+  if (query.preset) {
+    normalizedQuery.preset = query.preset;
+  }
+
+  return normalizedQuery;
+};
+
+/**
+ * Compares two documents using the configured list sort.
+ */
+const compareDocuments = (
+  left: ParsedDocument,
+  right: ParsedDocument,
+  query: AppliedListDocumentsQuery,
+): number => {
+  const ascendingFactor = query.order === "asc" ? 1 : -1;
+
+  if (query.sort === "date") {
+    const dateComparison = left.metadata.date.localeCompare(right.metadata.date);
+    if (dateComparison !== 0) {
+      return dateComparison * ascendingFactor;
+    }
+  }
+
+  return left.relativePath.localeCompare(right.relativePath) * ascendingFactor;
+};
+
+/**
+ * Removes the body field from list results unless it was explicitly requested.
+ */
+const toListedDocument = (
+  document: ParsedDocument,
+  includeBody: boolean,
+): ListedDocument => {
+  if (includeBody) {
+    return document;
+  }
+
+  const { body: _body, ...listedDocument } = document;
+  return listedDocument;
+};
+
 const buildExcerpt = (document: ParsedDocument, queryText?: string): string => {
   const body = document.body.replace(/\s+/g, " ").trim();
   if (!queryText) {
@@ -42,16 +164,23 @@ const buildExcerpt = (document: ParsedDocument, queryText?: string): string => {
 };
 
 /**
- * Lists active documents filtered by project, type, and limit.
+ * Lists active documents filtered by project, status, type, and sort options.
  */
 export const listDocuments = (
-  query: Omit<SearchQuery, "text"> = {},
+  query: ListDocumentsQuery = {},
   context = createRepositoryContext(),
-): ParsedDocument[] => {
+): ListDocumentsResult => {
+  const appliedQuery = normalizeListDocumentsQuery(query);
   const documents = listAllActiveDocumentPaths(context).map((relativePath) => readDocument(context, relativePath));
-  return documents
-    .filter((document) => matchesQuery(document, query))
-    .slice(0, query.limit ?? 100);
+
+  return {
+    documents: documents
+      .filter((document) => matchesListDocumentsQuery(document, appliedQuery))
+      .sort((left, right) => compareDocuments(left, right, appliedQuery))
+      .slice(0, appliedQuery.limit)
+      .map((document) => toListedDocument(document, appliedQuery.includeBody)),
+    appliedQuery,
+  };
 };
 
 /**

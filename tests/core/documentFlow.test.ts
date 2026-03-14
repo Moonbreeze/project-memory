@@ -7,6 +7,7 @@ import {
   appendSessionNote,
   archiveDocument,
   commitPendingChanges,
+  createDecision,
   listDocuments,
   recordVerificationResult,
   resolveArchiveRelativePath,
@@ -125,8 +126,111 @@ test("list and search ignore markdown files outside the managed document structu
   const listed = listDocuments({ project: "acme-app" }, context);
   const searched = searchDocuments({ project: "acme-app", text: "managed surface" }, context);
 
-  assert.equal(listed.length, 0);
+  assert.equal(listed.documents.length, 0);
   assert.equal(searched.length, 0);
+});
+
+test("listDocuments omits bodies by default and includes them on request", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "list metadata",
+      date: "2026-03-11",
+      summary: "Validate metadata-only listing.",
+      actions: ["Created one note"],
+      followUp: ["Read it back if needed"],
+    },
+    context,
+  );
+
+  const listedWithoutBody = listDocuments({ project: "acme-app" }, context);
+  const listedWithBody = listDocuments({ project: "acme-app", includeBody: true }, context);
+
+  assert.equal(listedWithoutBody.appliedQuery.includeBody, false);
+  assert.equal(listedWithBody.appliedQuery.includeBody, true);
+  assert.equal(listedWithoutBody.documents.length, 1);
+  assert.equal(listedWithBody.documents.length, 1);
+  assert.equal("body" in (listedWithoutBody.documents[0] ?? {}), false);
+  assert.match((listedWithBody.documents[0]?.body ?? ""), /Validate metadata-only listing/);
+});
+
+test("listDocuments backlog preset applies decision-focused sorting and status filtering", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "older active decision",
+      date: "2026-03-10",
+      context: "Need one older backlog item.",
+      decision: "Keep the older item visible.",
+      consequences: ["Shows sorted order"],
+      status: "active",
+    },
+    context,
+  );
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "newer draft decision",
+      date: "2026-03-12",
+      context: "Need one newer backlog item.",
+      decision: "Keep draft decisions visible too.",
+      consequences: ["Shows backlog filtering"],
+      status: "draft",
+    },
+    context,
+  );
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "superseded decision",
+      date: "2026-03-13",
+      context: "Need one hidden item.",
+      decision: "Do not show superseded decisions in the backlog preset.",
+      consequences: ["Should be filtered out"],
+      status: "superseded",
+    },
+    context,
+  );
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "non-decision note",
+      date: "2026-03-14",
+      summary: "Should not appear in the backlog preset.",
+      actions: ["Created unrelated note"],
+      followUp: ["Ignore it"],
+    },
+    context,
+  );
+
+  const listed = listDocuments({ project: "acme-app", preset: "backlog" }, context);
+
+  assert.deepEqual(
+    listed.appliedQuery,
+    {
+      project: "acme-app",
+      type: "decision",
+      excludeStatuses: ["superseded", "archived"],
+      preset: "backlog",
+      sort: "date",
+      order: "desc",
+      limit: 100,
+      includeBody: false,
+    },
+  );
+  assert.deepEqual(
+    listed.documents.map((document) => document.metadata.topic),
+    ["newer-draft-decision", "older-active-decision"],
+  );
 });
 
 test("commitPendingChanges stages and commits approved document paths", () => {

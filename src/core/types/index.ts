@@ -6,21 +6,31 @@ export {
   DocumentStatus as DocumentStatusValues,
   DocumentType as DocumentTypeValues,
   FrontmatterKey as FrontmatterKeyValues,
+  ListDocumentsPreset as ListDocumentsPresetValues,
+  ListDocumentsSortField as ListDocumentsSortFieldValues,
   RequiredFrontmatterKey,
+  SortOrder as SortOrderValues,
 } from "./constants.ts";
 
 /**
  * Core domain types and type guards.
  */
 export type {
+  AppliedListDocumentsQuery,
   ArchiveDocumentInput,
   CommitPendingChangesInput,
   CreateDocumentInput,
+  DecisionInput,
   DocumentSource,
   DocumentStatus,
   DocumentType,
   Frontmatter,
   FrontmatterKey,
+  ListDocumentsPreset,
+  ListDocumentsQuery,
+  ListDocumentsResult,
+  ListDocumentsSortField,
+  ListedDocument,
   ParsedDocument,
   ProviderNoteInput,
   RepositoryContext,
@@ -29,9 +39,9 @@ export type {
   SearchQuery,
   SearchResult,
   SessionNoteInput,
+  SortOrder,
   ValidationResult,
   VerificationResultInput,
-  DecisionInput,
 } from "./types.ts";
 
 /**
@@ -42,4 +52,7 @@ export {
   isDocumentStatus,
   isDocumentType,
   isFrontmatterKey,
+  isListDocumentsPreset,
+  isListDocumentsSortField,
+  isSortOrder,
 } from "./types.ts";

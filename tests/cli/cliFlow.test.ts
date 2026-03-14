@@ -401,11 +401,13 @@ test("CLI can append, list, read, and archive documents", async () => {
   const listCapture = createCapturedIo();
   await runCli(["list-documents", "--project", "acme-app"], listCapture.io);
   const listed = parseLastJson(listCapture.captured.stdout);
-  if (!Array.isArray(listed)) {
+  if (!isRecord(listed) || !Array.isArray(listed.documents) || !isRecord(listed.appliedQuery)) {
     throw new Error("Unexpected list-documents result shape");
   }
 
-  assert.equal(listed.length, 1);
+  assert.equal(listed.documents.length, 1);
+  assert.equal("body" in (listed.documents[0] ?? {}), false);
+  assert.equal(listed.appliedQuery.includeBody, false);
 
   const readCapture = createCapturedIo();
   await runCli(["read-document", "--path", appended.relativePath], readCapture.io);

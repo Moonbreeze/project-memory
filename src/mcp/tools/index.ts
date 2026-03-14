@@ -12,6 +12,9 @@ import {
   DocumentSourceValues,
   DocumentStatusValues,
   DocumentTypeValues,
+  ListDocumentsPresetValues,
+  ListDocumentsSortFieldValues,
+  SortOrderValues,
 } from "../../core/types/index.ts";
 import type { JsonSchemaObject, McpToolDefinition } from "../types.ts";
 
@@ -49,20 +52,51 @@ const createObjectSchema = (
 const registeredMcpTools: Record<string, RegisteredMcpTool> = {
   list_documents: {
     name: "list_documents",
-    description: "List active project-memory documents, optionally filtered by project or type.",
+    description: "List active project-memory documents as metadata by default, with optional filters, sorting, and presets.",
     inputSchema: createObjectSchema({
       project: {
         type: "string",
         description: "Optional project slug filter.",
+      },
+      preset: {
+        type: "string",
+        description: "Optional list preset, such as a current decision backlog view.",
+        enum: [...ListDocumentsPresetValues],
       },
       type: {
         type: "string",
         description: "Optional document type filter.",
         enum: [...DocumentTypeValues],
       },
+      status: {
+        type: "string",
+        description: "Optional exact document status filter.",
+        enum: [...DocumentStatusValues],
+      },
+      excludeStatuses: {
+        type: "array",
+        description: "Optional document statuses to exclude from the result.",
+        items: {
+          type: "string",
+        },
+      },
+      sort: {
+        type: "string",
+        description: "Optional result sort field.",
+        enum: [...ListDocumentsSortFieldValues],
+      },
+      order: {
+        type: "string",
+        description: "Optional ascending or descending sort order.",
+        enum: [...SortOrderValues],
+      },
       limit: {
         type: "number",
         description: "Optional maximum number of results.",
+      },
+      includeBody: {
+        type: "boolean",
+        description: "Includes full Markdown bodies when true.",
       },
     }),
     handler: listDocumentsTool,

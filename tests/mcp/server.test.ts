@@ -357,7 +357,11 @@ test("MCP server appends and lists documents through standard tools/call", () =>
     project: "acme-app",
   });
   const listResult = readToolResult(listResponse);
-  if (!isRecord(listResult.structuredContent) || !Array.isArray(listResult.structuredContent.documents)) {
+  if (
+    !isRecord(listResult.structuredContent) ||
+    !Array.isArray(listResult.structuredContent.documents) ||
+    !isRecord(listResult.structuredContent.appliedQuery)
+  ) {
     throw new Error("Expected structured list result to be an object with documents array");
   }
 
@@ -369,6 +373,73 @@ test("MCP server appends and lists documents through standard tools/call", () =>
 
   assert.equal(documents.length, 1);
   assert.match(firstResult.relativePath, /projects\/acme-app\/session-log\//);
+  assert.equal("body" in firstResult, false);
+  assert.equal(listResult.structuredContent.appliedQuery.includeBody, false);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP list_documents backlog preset returns newest current decisions first", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  callTool("10", "create_decision", {
+    project: "acme-app",
+    topic: "older active",
+    date: "2026-03-10",
+    context: "Need an older active decision.",
+    decision: "Keep older decisions visible.",
+    consequences: ["Older item stays in backlog"],
+    status: "active",
+  });
+
+  callTool("11", "create_decision", {
+    project: "acme-app",
+    topic: "newer draft",
+    date: "2026-03-12",
+    context: "Need a newer draft decision.",
+    decision: "Keep draft decisions visible.",
+    consequences: ["Newer item should sort first"],
+    status: "draft",
+  });
+
+  callTool("12", "create_decision", {
+    project: "acme-app",
+    topic: "superseded hidden",
+    date: "2026-03-13",
+    context: "Need a hidden decision.",
+    decision: "Superseded decisions should stay out of backlog.",
+    consequences: ["Should be filtered"],
+    status: "superseded",
+  });
+
+  const response = callTool("13", "list_documents", {
+    project: "acme-app",
+    preset: "backlog",
+  });
+  const toolResult = readToolResult(response);
+  if (
+    !isRecord(toolResult.structuredContent) ||
+    !Array.isArray(toolResult.structuredContent.documents) ||
+    !isRecord(toolResult.structuredContent.appliedQuery)
+  ) {
+    throw new Error("Expected structured backlog list result");
+  }
+
+  const documents = toolResult.structuredContent.documents;
+  assert.deepEqual(
+    documents.map((document) => {
+      if (!isRecord(document) || !isRecord(document.metadata) || typeof document.metadata.topic !== "string") {
+        throw new Error("Expected listed document metadata");
+      }
+
+      return document.metadata.topic;
+    }),
+    ["newer-draft", "older-active"],
+  );
+  assert.deepEqual(toolResult.structuredContent.appliedQuery.excludeStatuses, ["superseded", "archived"]);
+  assert.equal(toolResult.structuredContent.appliedQuery.sort, "date");
+  assert.equal(toolResult.structuredContent.appliedQuery.order, "desc");
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

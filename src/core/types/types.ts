@@ -3,6 +3,9 @@ import {
   DocumentStatus as DocumentStatusValues,
   DocumentType as DocumentTypeValues,
   FrontmatterKey as FrontmatterKeyValues,
+  ListDocumentsPreset as ListDocumentsPresetValues,
+  ListDocumentsSortField as ListDocumentsSortFieldValues,
+  SortOrder as SortOrderValues,
 } from "./constants.ts";
 
 /**
@@ -19,6 +22,21 @@ export type DocumentSource = typeof DocumentSourceValues[number];
  * A supported project-memory document lifecycle status.
  */
 export type DocumentStatus = typeof DocumentStatusValues[number];
+
+/**
+ * A supported list-documents preset.
+ */
+export type ListDocumentsPreset = typeof ListDocumentsPresetValues[number];
+
+/**
+ * A supported list-documents sort field.
+ */
+export type ListDocumentsSortField = typeof ListDocumentsSortFieldValues[number];
+
+/**
+ * A supported ascending or descending sort order.
+ */
+export type SortOrder = typeof SortOrderValues[number];
 
 /**
  * A supported top-level frontmatter field.
@@ -186,6 +204,72 @@ export type SearchQuery = {
 };
 
 /**
+ * One explicit list-documents query received from a caller.
+ */
+export type ListDocumentsQuery = {
+  /** Optional project slug filter. */
+  project?: string;
+  /** Optional document kind filter. */
+  type?: DocumentType;
+  /** Optional exact lifecycle status filter. */
+  status?: DocumentStatus;
+  /** Optional statuses to exclude. */
+  excludeStatuses?: DocumentStatus[];
+  /** Optional list preset name. */
+  preset?: ListDocumentsPreset;
+  /** Optional sort field. */
+  sort?: ListDocumentsSortField;
+  /** Optional sort order. */
+  order?: SortOrder;
+  /** Optional result limit. */
+  limit?: number;
+  /** Includes Markdown bodies when `true`. */
+  includeBody?: boolean;
+};
+
+/**
+ * One normalized list-documents query after presets and defaults are applied.
+ */
+export type AppliedListDocumentsQuery = {
+  /** Optional project slug filter. */
+  project?: string;
+  /** Optional document kind filter. */
+  type?: DocumentType;
+  /** Optional exact lifecycle status filter. */
+  status?: DocumentStatus;
+  /** Optional statuses excluded from the result. */
+  excludeStatuses?: DocumentStatus[];
+  /** Optional list preset name. */
+  preset?: ListDocumentsPreset;
+  /** Final sort field. */
+  sort: ListDocumentsSortField;
+  /** Final sort order. */
+  order: SortOrder;
+  /** Final result limit. */
+  limit: number;
+  /** Final body-inclusion flag. */
+  includeBody: boolean;
+};
+
+/**
+ * One document returned by list-documents.
+ */
+export type ListedDocument = Omit<ParsedDocument, "body"> & {
+  /** Optional Markdown body, included only when explicitly requested. */
+  body?: string;
+};
+
+/**
+ * Structured list-documents result.
+ */
+export type ListDocumentsResult = {
+  /** Documents matching the normalized query. */
+  documents: ListedDocument[];
+  /** Effective query after presets and defaults are applied. */
+  appliedQuery: AppliedListDocumentsQuery;
+};
+
+/**
  * Search hit with a short excerpt.
  */
 export type SearchResult = ParsedDocument & {
@@ -253,6 +337,27 @@ export const isDocumentSource = (value: unknown): value is DocumentSource => {
  */
 export const isDocumentStatus = (value: unknown): value is DocumentStatus => {
   return isLiteralMember(DocumentStatusValues, value);
+};
+
+/**
+ * Returns `true` when `value` is a supported list-documents preset.
+ */
+export const isListDocumentsPreset = (value: unknown): value is ListDocumentsPreset => {
+  return isLiteralMember(ListDocumentsPresetValues, value);
+};
+
+/**
+ * Returns `true` when `value` is a supported list-documents sort field.
+ */
+export const isListDocumentsSortField = (value: unknown): value is ListDocumentsSortField => {
+  return isLiteralMember(ListDocumentsSortFieldValues, value);
+};
+
+/**
+ * Returns `true` when `value` is a supported sort order.
+ */
+export const isSortOrder = (value: unknown): value is SortOrder => {
+  return isLiteralMember(SortOrderValues, value);
 };
 
 /**

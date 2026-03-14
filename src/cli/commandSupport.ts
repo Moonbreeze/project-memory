@@ -2,11 +2,17 @@ import {
   isDocumentSource,
   isDocumentStatus,
   isDocumentType,
+  isListDocumentsPreset,
+  isListDocumentsSortField,
+  isSortOrder,
 } from "../core/index.ts";
 import type {
   DocumentSource,
   DocumentStatus,
   DocumentType,
+  ListDocumentsPreset,
+  ListDocumentsSortField,
+  SortOrder,
 } from "../core/index.ts";
 import type { CliIo, ParsedArgs } from "./types.ts";
 
@@ -128,6 +134,106 @@ export const parseOptionalLimit = (value: string | undefined): number | undefine
   }
 
   return numericValue;
+};
+
+/**
+ * Parses an optional boolean flag encoded as `true` or `false`.
+ */
+export const parseOptionalBoolean = (
+  value: string | undefined,
+  key: string,
+): boolean | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  throw new Error(`Invalid --${key} value: ${value}`);
+};
+
+/**
+ * Parses an optional pipe-delimited document-status list.
+ */
+export const parseOptionalDocumentStatusList = (
+  value: string | undefined,
+): DocumentStatus[] | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const entries = parseList(value);
+  if (entries.length === 0) {
+    throw new Error("Invalid --exclude-status value: expected one or more statuses");
+  }
+
+  const statuses: DocumentStatus[] = [];
+  for (const entry of entries) {
+    if (!isDocumentStatus(entry)) {
+      throw new Error(`Invalid --exclude-status value: ${value}`);
+    }
+
+    statuses.push(entry);
+  }
+
+  return statuses;
+};
+
+/**
+ * Parses an optional list-documents preset flag.
+ */
+export const parseOptionalListDocumentsPreset = (
+  value: string | undefined,
+): ListDocumentsPreset | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isListDocumentsPreset(value)) {
+    throw new Error(`Invalid --preset value: ${value}`);
+  }
+
+  return value;
+};
+
+/**
+ * Parses an optional list-documents sort flag.
+ */
+export const parseOptionalListDocumentsSortField = (
+  value: string | undefined,
+): ListDocumentsSortField | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isListDocumentsSortField(value)) {
+    throw new Error(`Invalid --sort value: ${value}`);
+  }
+
+  return value;
+};
+
+/**
+ * Parses an optional sort-order flag.
+ */
+export const parseOptionalSortOrder = (
+  value: string | undefined,
+): SortOrder | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isSortOrder(value)) {
+    throw new Error(`Invalid --order value: ${value}`);
+  }
+
+  return value;
 };
 
 /**

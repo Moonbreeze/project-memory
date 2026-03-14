@@ -41,6 +41,7 @@ There is no generic legacy `.mcp.json` artifact in the normal path anymore.
 
 ```bash
 ./scripts/run-cli.sh list-documents --project project-memory
+./scripts/run-cli.sh list-documents --project project-memory --preset backlog
 ```
 
 4. Use the generated local wrapper for the MCP server:
@@ -65,8 +66,12 @@ Examples:
 
 ```bash
 ./scripts/run-cli.sh append-session-note --project project-memory --topic setup --summary "Validated install flow." --actions "created memory repo" --follow-up "document MCP config"
+./scripts/run-cli.sh list-documents --project project-memory --preset backlog
 ./scripts/run-cli.sh commit-pending-changes --message "docs(session): record install validation"
 ```
+
+`list-documents` returns metadata only by default. Use `--include-body true` only when the full Markdown body is actually needed.
+The `backlog` preset expands to the current decision backlog view: `type=decision`, excludes `superseded` and `archived`, and sorts by date descending.
 
 ## Install Command
 
