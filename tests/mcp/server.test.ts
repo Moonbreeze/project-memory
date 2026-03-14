@@ -845,6 +845,12 @@ test("MCP server exposes bounded read entrypoints", () => {
     }),
     ["resume-slice"],
   );
+  if (
+    !Array.isArray(planningResult.structuredContent.planningExplainability)
+    || planningResult.structuredContent.planningExplainability.length !== 1
+  ) {
+    throw new Error("Expected read_planning_backlog planning explainability");
+  }
 
   const topicResponse = callTool("bounded-topic", "read_topic_entry", {
     project: "acme-app",

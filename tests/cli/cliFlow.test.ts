@@ -901,6 +901,9 @@ test("CLI exposes bounded read entrypoints", async () => {
     }),
     ["resume-slice"],
   );
+  if (!Array.isArray(planningResult.planningExplainability) || planningResult.planningExplainability.length !== 1) {
+    throw new Error("Expected read-planning-backlog planning explainability");
+  }
 
   const topicCapture = createCapturedIo();
   await runCli(

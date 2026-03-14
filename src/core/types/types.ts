@@ -382,6 +382,32 @@ export type BoundedReadStage = {
 };
 
 /**
+ * One dependency surface returned for bounded planning explainability.
+ */
+export type BoundedReadDependencySurface = {
+  /** Repository-relative path of the dependency target. */
+  relativePath: string;
+  /** Indicates whether the dependency currently resolves to a done work item. */
+  resolved: boolean;
+};
+
+/**
+ * Planning explainability returned for one bounded-read work-item document.
+ */
+export type BoundedReadPlanningExplainability = {
+  /** Repository-relative path of the selected work-item document. */
+  relativePath: string;
+  /** Derived planning state attached to the work item. */
+  planningState: string;
+  /** Total declared dependency count on the work item. */
+  dependencyCount: number;
+  /** Count of dependencies that are still unresolved. */
+  unresolvedDependencyCount: number;
+  /** Explicit dependency surfaces in the stored document order. */
+  dependencySurfaces: BoundedReadDependencySurface[];
+};
+
+/**
  * Structured result for one bounded read entrypoint.
  */
 export type BoundedReadResult = {
@@ -395,6 +421,8 @@ export type BoundedReadResult = {
   documents: ParsedDocument[];
   /** Selection stages attempted by the entrypoint. */
   stages: BoundedReadStage[];
+  /** Optional work-item planning explainability for returned documents. */
+  planningExplainability?: BoundedReadPlanningExplainability[];
   /** Notes describing fallbacks or intentional omissions. */
   notes: string[];
 };

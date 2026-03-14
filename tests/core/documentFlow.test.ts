@@ -746,7 +746,16 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
   createWorkItem("ready beta", "2026-03-12");
   createWorkItem("ready gamma", "2026-03-13");
   createWorkItem("ready delta", "2026-03-14");
-  createWorkItem("ready epsilon", "2026-03-15");
+  createWorkItem("ready epsilon", "2026-03-15", {
+    dependencies: [
+      {
+        type: "work-item",
+        project: "acme-app",
+        date: "2026-03-16",
+        topic: "done-hidden",
+      },
+    ],
+  });
 
   createWorkItem("in progress alpha", "2026-03-13", { workItemState: "in_progress" });
   createWorkItem("in progress beta", "2026-03-14", { workItemState: "in_progress" });
@@ -763,7 +772,17 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
     ],
   });
   createWorkItem("blocked beta", "2026-03-13", { workItemState: "blocked" });
-  createWorkItem("blocked gamma", "2026-03-14", { workItemState: "blocked" });
+  createWorkItem("blocked gamma", "2026-03-14", {
+    workItemState: "blocked",
+    dependencies: [
+      {
+        type: "work-item",
+        project: "acme-app",
+        date: "2026-03-15",
+        topic: "ready-epsilon",
+      },
+    ],
+  });
 
   createWorkItem("done hidden", "2026-03-16", { workItemState: "done" });
   createWorkItem("draft hidden", "2026-03-17", { status: "draft" });
@@ -790,6 +809,34 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
       "in-progress-beta",
       "blocked-gamma",
       "blocked-beta",
+    ],
+  );
+  assert.deepEqual(
+    result.planningExplainability?.map((entry) => [
+      entry.relativePath,
+      entry.planningState,
+      entry.unresolvedDependencyCount,
+      entry.dependencySurfaces.map((dependency) => [dependency.relativePath, dependency.resolved]),
+    ]),
+    [
+      [
+        "projects/acme-app/work-items/2026/2026-03-15-ready-epsilon.md",
+        "ready",
+        0,
+        [["projects/acme-app/work-items/2026/2026-03-16-done-hidden.md", true]],
+      ],
+      ["projects/acme-app/work-items/2026/2026-03-14-ready-delta.md", "ready", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-13-ready-gamma.md", "ready", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-12-ready-beta.md", "ready", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-15-in-progress-gamma.md", "in_progress", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-14-in-progress-beta.md", "in_progress", 0, []],
+      [
+        "projects/acme-app/work-items/2026/2026-03-14-blocked-gamma.md",
+        "blocked",
+        1,
+        [["projects/acme-app/work-items/2026/2026-03-15-ready-epsilon.md", false]],
+      ],
+      ["projects/acme-app/work-items/2026/2026-03-13-blocked-beta.md", "blocked", 0, []],
     ],
   );
   assert(

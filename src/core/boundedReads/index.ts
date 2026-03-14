@@ -3,8 +3,13 @@ import path from "node:path";
 
 import { createRepositoryContext } from "../config/index.ts";
 import { ensureKebabCaseProject, ensureSlug, readDocument } from "../documents/index.ts";
-import { buildWorkItemPlanningEntries } from "../workItems/index.ts";
+import {
+  buildWorkItemPlanningEntries,
+  resolveWorkItemLocatorRelativePath,
+} from "../workItems/index.ts";
 import type {
+  BoundedReadDependencySurface,
+  BoundedReadPlanningExplainability,
   BoundedReadEntrypoint,
   BoundedReadResult,
   BoundedReadStage,
@@ -18,6 +23,7 @@ import type {
   RepositoryContext,
   TopicEntryInput,
 } from "../types/index.ts";
+import type { WorkItemPlanningEntry } from "../workItems/index.ts";
 
 type PathMatchMode = "all" | "exact" | "contains";
 
@@ -431,6 +437,7 @@ const createBoundedReadResult = (
   documents: ParsedDocument[],
   notes: string[],
   topic?: string,
+  planningExplainability?: BoundedReadPlanningExplainability[],
 ): BoundedReadResult => {
   return {
     entrypoint,
@@ -438,14 +445,15 @@ const createBoundedReadResult = (
     topic,
     documents,
     stages,
+    planningExplainability,
     notes,
   };
 };
 
 /**
- * Returns planning entries sorted the same way as the active work-item backlog.
+ * Reads all active work-item planning entries for one project.
  */
-const listPlanningBacklogEntries = (
+const listProjectWorkItemPlanningEntries = (
   context: RepositoryContext,
   project: string,
 ) => {
@@ -455,19 +463,31 @@ const listPlanningBacklogEntries = (
       return document.type === "work-item" && document.metadata.status === "active";
     });
 
+  return buildWorkItemPlanningEntries(workItemDocuments);
+};
+
+/**
+ * Returns `true` when a planning state belongs to the backlog read surface.
+ */
+const isPlanningBacklogState = (planningState: string): boolean => {
+  return planningState === "ready" || planningState === "in_progress" || planningState === "blocked";
+};
+
+/**
+ * Returns planning entries sorted the same way as the active work-item backlog.
+ */
+const listPlanningBacklogEntries = (
+  entries: WorkItemPlanningEntry[],
+): WorkItemPlanningEntry[] => {
   const planningPriority: Record<string, number> = {
     ready: 0,
     in_progress: 1,
     blocked: 2,
   };
 
-  return buildWorkItemPlanningEntries(workItemDocuments)
+  return entries
     .filter((entry) => {
-      return (
-        entry.planning.planningState === "ready"
-        || entry.planning.planningState === "in_progress"
-        || entry.planning.planningState === "blocked"
-      );
+      return isPlanningBacklogState(entry.planning.planningState);
     })
     .sort((left, right) => {
       const priorityDifference =
@@ -483,6 +503,43 @@ const listPlanningBacklogEntries = (
 
       return left.document.relativePath.localeCompare(right.document.relativePath);
     });
+};
+
+/**
+ * Builds bounded planning explainability for the selected planning documents.
+ */
+const buildPlanningExplainability = (
+  allEntries: WorkItemPlanningEntry[],
+  selectedDocuments: ParsedDocument[],
+): BoundedReadPlanningExplainability[] => {
+  const entryByPath = new Map(
+    allEntries.map((entry) => [entry.document.relativePath, entry] as const),
+  );
+
+  return selectedDocuments.map((document) => {
+    const entry = entryByPath.get(document.relativePath);
+    if (!entry) {
+      throw new Error(`Missing planning entry for ${document.relativePath}`);
+    }
+
+    const dependencySurfaces: BoundedReadDependencySurface[] = entry.definition.dependencies.map((dependency) => {
+      const dependencyRelativePath = resolveWorkItemLocatorRelativePath(dependency);
+      const dependencyEntry = entryByPath.get(dependencyRelativePath);
+
+      return {
+        relativePath: dependencyRelativePath,
+        resolved: dependencyEntry?.definition.metadata.workItemState === "done",
+      };
+    });
+
+    return {
+      relativePath: entry.document.relativePath,
+      planningState: entry.planning.planningState,
+      dependencyCount: entry.planning.dependencyCount,
+      unresolvedDependencyCount: entry.planning.unresolvedDependencyCount,
+      dependencySurfaces,
+    };
+  });
 };
 
 /**
@@ -592,7 +649,8 @@ export const readPlanningBacklog = (
     "Planning backlog stays bounded to ready, in-progress, and blocked work-item states only.",
   ];
   const seenRelativePaths = new Set<string>();
-  const planningEntries = listPlanningBacklogEntries(context, project);
+  const allPlanningEntries = listProjectWorkItemPlanningEntries(context, project);
+  const planningEntries = listPlanningBacklogEntries(allPlanningEntries);
 
   appendStage(
     stages,
@@ -652,7 +710,15 @@ export const readPlanningBacklog = (
     notes.push("No bounded planning backlog work items were found for this project.");
   }
 
-  return createBoundedReadResult("planning-backlog", project, stages, documents, notes);
+  return createBoundedReadResult(
+    "planning-backlog",
+    project,
+    stages,
+    documents,
+    notes,
+    undefined,
+    buildPlanningExplainability(allPlanningEntries, documents),
+  );
 };
 
 /**
