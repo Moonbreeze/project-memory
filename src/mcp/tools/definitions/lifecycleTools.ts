@@ -1,4 +1,5 @@
 import { CloseWorkItemStateValues } from "../../../core/workItems/index.ts";
+import { archiveWorkItemTool } from "../archiveWorkItem.ts";
 import { closeWorkItemTool } from "../closeWorkItem.ts";
 import { commitPendingChangesTool } from "../commitPendingChanges.ts";
 
@@ -10,6 +11,28 @@ import { createObjectSchema } from "../schema.ts";
  * MCP lifecycle-oriented tool definitions.
  */
 export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
+  archive_work_item: {
+    name: "archive_work_item",
+    description: "Archive one existing work-item after it reaches a terminal lifecycle state.",
+    inputSchema: createObjectSchema(
+      {
+        project: {
+          type: "string",
+          description: "Target project slug.",
+        },
+        topic: {
+          type: "string",
+          description: "Existing work-item topic slug or label.",
+        },
+        date: {
+          type: "string",
+          description: "Exact work-item date in YYYY-MM-DD format.",
+        },
+      },
+      ["project", "topic", "date"],
+    ),
+    handler: archiveWorkItemTool,
+  },
   close_work_item: {
     name: "close_work_item",
     description: "Close one existing work-item by applying a terminal lifecycle state.",

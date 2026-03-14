@@ -1,5 +1,6 @@
 import { appendSessionNoteCommand } from "./appendSessionNote.ts";
 import { archiveDocumentCommand } from "./archiveDocument.ts";
+import { archiveWorkItemCommand } from "./archiveWorkItem.ts";
 import { bootstrapCommand } from "./bootstrap.ts";
 import { commitPendingChangesCommand } from "./commitPendingChanges.ts";
 import { closeWorkItemCommand } from "./closeWorkItem.ts";
@@ -31,6 +32,7 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "upsert-canonical-doc": upsertCanonicalDocCommand,
   "upsert-work-item": upsertWorkItemCommand,
   "close-work-item": closeWorkItemCommand,
+  "archive-work-item": archiveWorkItemCommand,
   "create-decision": createDecisionCommand,
   "create-runbook": createRunbookCommand,
   "list-documents": listDocumentsCommand,

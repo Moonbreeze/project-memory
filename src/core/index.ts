@@ -8,6 +8,7 @@ export { createRepositoryContext } from "./config/index.ts";
  */
 export {
   appendSessionNote,
+  archiveWorkItem,
   closeWorkItem,
   createDecision,
   createRunbook,

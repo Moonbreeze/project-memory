@@ -13,6 +13,7 @@ import {
   isSortOrder,
 } from "../core/index.ts";
 import type {
+  ArchiveWorkItemInput,
   ColdStartInput,
   CanonicalDocInput,
   CloseWorkItemInput,
@@ -864,6 +865,21 @@ export const parseCloseWorkItemInput = (
     topic: readRequiredString(params.topic, "topic"),
     date: readRequiredString(params.date, "date"),
     state: readCloseWorkItemState(params.state),
+  };
+};
+
+/**
+ * Parses params for `archive_work_item`.
+ */
+export const parseArchiveWorkItemInput = (
+  value: unknown,
+): ArchiveWorkItemInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    topic: readRequiredString(params.topic, "topic"),
+    date: readRequiredString(params.date, "date"),
   };
 };
 

@@ -13,6 +13,7 @@ export { listAllActiveDocumentPaths, readDocument } from "./storage.ts";
 
 export {
   appendSessionNote,
+  archiveWorkItem,
   closeWorkItem,
   createDecision,
   createRunbook,

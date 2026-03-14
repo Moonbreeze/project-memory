@@ -710,6 +710,71 @@ test("CLI closes work items through the dedicated lifecycle command", async () =
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("CLI archives terminal work items through the dedicated lifecycle command", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  await runCli(
+    [
+      "upsert-work-item",
+      "--project",
+      "acme-app",
+      "--topic",
+      "archivable slice",
+      "--summary",
+      "Implement the archivable work slice.",
+      "--outcome",
+      "A dedicated archive helper can retire the item in place.",
+      "--origin-kind",
+      "ad-hoc",
+      "--origin-note",
+      "CLI archive coverage.",
+      "--verification",
+      "Run CLI archive coverage",
+      "--date",
+      "2026-03-11",
+      "--work-item-state",
+      "done",
+    ],
+  );
+
+  const archiveCapture = createCapturedIo();
+  await runCli(
+    [
+      "archive-work-item",
+      "--project",
+      "acme-app",
+      "--topic",
+      "archivable slice",
+      "--date",
+      "2026-03-11",
+    ],
+    archiveCapture.io,
+  );
+
+  const archiveResult = parseLastJson(archiveCapture.captured.stdout);
+  if (!isRecord(archiveResult) || !isRecord(archiveResult.metadata)) {
+    throw new Error("Unexpected archive-work-item result shape");
+  }
+
+  assert.equal(archiveResult.metadata.status, "archived");
+  assert.equal(archiveResult.metadata.work_item_state, "done");
+
+  const listCapture = createCapturedIo();
+  await runCli(
+    ["list-documents", "--project", "acme-app", "--preset", "backlog"],
+    listCapture.io,
+  );
+  const listResult = parseLastJson(listCapture.captured.stdout);
+  if (!isRecord(listResult) || !Array.isArray(listResult.documents)) {
+    throw new Error("Unexpected backlog result shape after archive-work-item");
+  }
+
+  assert.equal(listResult.documents.length, 0);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("CLI rejects reading unmanaged document paths", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;

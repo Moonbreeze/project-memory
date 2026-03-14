@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   appendSessionNote,
   archiveDocument,
+  archiveWorkItem,
   closeWorkItem,
   commitPendingChanges,
   createDecision,
@@ -435,6 +436,89 @@ test("closeWorkItem applies a terminal lifecycle state and removes the item from
         context,
       ),
     /Cannot transition work item from done to canceled/,
+  );
+});
+
+test("archiveWorkItem archives terminal work items without moving them into the archive tree", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "archivable slice",
+      date: "2026-03-11",
+      summary: "Archive the first completed work-item slice.",
+      outcome: "The bounded archive helper can retire finished work in place.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Session 8 archive helper coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Confirm archival updates only the document status."],
+      evidence: [],
+      workItemState: "done",
+    },
+    context,
+  );
+
+  const archived = archiveWorkItem(
+    {
+      project: "acme-app",
+      topic: "archivable slice",
+      date: "2026-03-11",
+    },
+    context,
+  );
+
+  assert.equal(archived.metadata.status, "archived");
+  assert.equal(archived.metadata.work_item_state, "done");
+  assert.match(archived.relativePath, /projects\/acme-app\/work-items\/2026\//);
+
+  const archivedAgain = archiveWorkItem(
+    {
+      project: "acme-app",
+      topic: "archivable slice",
+      date: "2026-03-11",
+    },
+    context,
+  );
+  assert.equal(archivedAgain.metadata.status, "archived");
+
+  const backlog = listDocuments({ project: "acme-app", preset: "backlog" }, context);
+  assert.equal(backlog.documents.length, 0);
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "non-terminal slice",
+      date: "2026-03-12",
+      summary: "Keep one work item active.",
+      outcome: "Archival must reject non-terminal lifecycle states.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Negative archive coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Confirm archival rejects open work items."],
+      evidence: [],
+    },
+    context,
+  );
+
+  assert.throws(
+    () =>
+      archiveWorkItem(
+        {
+          project: "acme-app",
+          topic: "non-terminal slice",
+          date: "2026-03-12",
+        },
+        context,
+      ),
+    /Only done or canceled work items can be archived; received open/,
   );
 });
 

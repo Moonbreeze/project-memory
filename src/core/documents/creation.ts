@@ -10,6 +10,7 @@ import type {
   VerificationResultInput,
 } from "../types/index.ts";
 import type {
+  ArchiveWorkItemInput,
   CloseWorkItemInput,
   WorkItemDefinition,
   WorkItemDocumentStatus,
@@ -287,6 +288,52 @@ export const closeWorkItem = (
       source: existingDocument.metadata.source,
       status: existingDefinition.metadata.status,
       workItemState: input.state,
+      summary: existingDefinition.summary,
+      outcome: existingDefinition.outcome,
+      origin: existingDefinition.origin,
+      dependencies: existingDefinition.dependencies,
+      context: existingDefinition.context,
+      verification: existingDefinition.verification,
+      evidence: existingDefinition.evidence,
+    },
+    context,
+  );
+};
+
+/**
+ * Archives one existing work-item after it reaches a terminal lifecycle state.
+ */
+export const archiveWorkItem = (
+  input: ArchiveWorkItemInput,
+  context = createRepositoryContext(),
+): ParsedDocument => {
+  const relativePath = resolveDocumentRelativePath(
+    input.project,
+    "work-item",
+    input.topic,
+    input.date,
+  );
+  const existingDocument = readDocument(context, relativePath);
+  const existingDefinition = parseWorkItemDocument(existingDocument);
+  const currentStatus = existingDefinition.metadata.status;
+  const currentState = existingDefinition.metadata.workItemState;
+
+  if (currentStatus === "archived") {
+    return existingDocument;
+  }
+
+  if (currentState !== "done" && currentState !== "canceled") {
+    throw new Error(`Only done or canceled work items can be archived; received ${currentState}`);
+  }
+
+  return upsertWorkItem(
+    {
+      project: existingDefinition.metadata.project,
+      topic: existingDefinition.metadata.topic,
+      date: existingDefinition.metadata.date,
+      source: existingDocument.metadata.source,
+      status: "archived",
+      workItemState: currentState,
       summary: existingDefinition.summary,
       outcome: existingDefinition.outcome,
       origin: existingDefinition.origin,

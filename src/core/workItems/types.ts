@@ -267,6 +267,18 @@ export type CloseWorkItemInput = {
 };
 
 /**
+ * Input required to archive one existing work-item without moving it into `archives/`.
+ */
+export type ArchiveWorkItemInput = {
+  /** Target project slug. */
+  project: string;
+  /** Existing work-item topic slug or label. */
+  topic: string;
+  /** Exact work-item date in `YYYY-MM-DD` format. */
+  date: string;
+};
+
+/**
  * Inputs used to derive a planning state from lifecycle and dependency data.
  */
 export type WorkItemPlanningStateInput = {

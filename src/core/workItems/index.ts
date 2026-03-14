@@ -17,6 +17,7 @@ export {
  * Work-item spec types and type guards.
  */
 export type {
+  ArchiveWorkItemInput,
   CanonicalDocLocator,
   CloseWorkItemInput,
   CloseWorkItemState,

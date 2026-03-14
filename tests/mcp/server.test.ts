@@ -292,6 +292,7 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert(toolNames.includes("read_rationale_entry"));
   assert(toolNames.includes("append_session_note"));
   assert(toolNames.includes("commit_pending_changes"));
+  assert(toolNames.includes("archive_work_item"));
   assert(toolNames.includes("close_work_item"));
   assert(toolNames.includes("upsert_work_item"));
 });
@@ -533,6 +534,53 @@ test("MCP close_work_item closes a work item and removes it from the active back
     || !Array.isArray(backlogResult.structuredContent.documents)
   ) {
     throw new Error("Expected structured backlog result after close_work_item");
+  }
+
+  assert.equal(backlogResult.structuredContent.documents.length, 0);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP archive_work_item archives a terminal work item and removes it from the active backlog", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const createResponse = callTool("work-archive-1", "upsert_work_item", {
+    project: "acme-app",
+    topic: "archivable slice",
+    summary: "Implement the archivable work slice.",
+    outcome: "A dedicated lifecycle helper can archive the finished item.",
+    originKind: "ad-hoc",
+    originNote: "MCP archive coverage.",
+    verification: ["Run MCP archive coverage."],
+    date: "2026-03-11",
+    workItemState: "done",
+  });
+  assert.equal(readToolResult(createResponse).isError, false);
+
+  const archiveResponse = callTool("work-archive-2", "archive_work_item", {
+    project: "acme-app",
+    topic: "archivable slice",
+    date: "2026-03-11",
+  });
+  const archiveResult = readToolResult(archiveResponse);
+  if (!isRecord(archiveResult.structuredContent) || !isRecord(archiveResult.structuredContent.metadata)) {
+    throw new Error("Expected structured archive_work_item result");
+  }
+
+  assert.equal(archiveResult.structuredContent.metadata.status, "archived");
+  assert.equal(archiveResult.structuredContent.metadata.work_item_state, "done");
+
+  const backlogResponse = callTool("work-archive-3", "list_documents", {
+    project: "acme-app",
+    preset: "backlog",
+  });
+  const backlogResult = readToolResult(backlogResponse);
+  if (
+    !isRecord(backlogResult.structuredContent)
+    || !Array.isArray(backlogResult.structuredContent.documents)
+  ) {
+    throw new Error("Expected structured backlog result after archive_work_item");
   }
 
   assert.equal(backlogResult.structuredContent.documents.length, 0);
