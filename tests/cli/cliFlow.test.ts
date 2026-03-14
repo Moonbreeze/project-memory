@@ -851,6 +851,27 @@ test("CLI exposes bounded read entrypoints", async () => {
       "2026-03-12",
     ],
   );
+  await runCli(
+    [
+      "upsert-work-item",
+      "--project",
+      "acme-app",
+      "--topic",
+      "resume slice",
+      "--summary",
+      "Implement the planning slice.",
+      "--outcome",
+      "Dedicated planning reads can return work-item-only context.",
+      "--origin-kind",
+      "ad-hoc",
+      "--origin-note",
+      "CLI bounded planning coverage.",
+      "--verification",
+      "Run planning backlog coverage",
+      "--date",
+      "2026-03-13",
+    ],
+  );
 
   const coldStartCapture = createCapturedIo();
   await runCli(["read-cold-start", "--project", "acme-app"], coldStartCapture.io);
@@ -861,6 +882,25 @@ test("CLI exposes bounded read entrypoints", async () => {
 
   assert.equal(coldStartResult.entrypoint, "cold-start");
   assert.equal(coldStartResult.documents.length, 3);
+
+  const planningCapture = createCapturedIo();
+  await runCli(["read-planning-backlog", "--project", "acme-app"], planningCapture.io);
+  const planningResult = parseLastJson(planningCapture.captured.stdout);
+  if (!isRecord(planningResult) || !Array.isArray(planningResult.documents)) {
+    throw new Error("Unexpected read-planning-backlog result shape");
+  }
+
+  assert.equal(planningResult.entrypoint, "planning-backlog");
+  assert.deepEqual(
+    planningResult.documents.map((document) => {
+      if (!isRecord(document) || !isRecord(document.metadata) || typeof document.metadata.topic !== "string") {
+        throw new Error("Expected read-planning-backlog document metadata");
+      }
+
+      return document.metadata.topic;
+    }),
+    ["resume-slice"],
+  );
 
   const topicCapture = createCapturedIo();
   await runCli(

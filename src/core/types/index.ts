@@ -40,6 +40,7 @@ export type {
   ListDocumentsSortField,
   ListedDocument,
   ManagedDocumentPathInfo,
+  PlanningBacklogInput,
   ParsedDocument,
   ProviderNoteInput,
   RationaleEntryInput,

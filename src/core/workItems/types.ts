@@ -9,7 +9,7 @@ import {
   WorkItemSectionHeading as WorkItemSectionHeadingValues,
   WorkItemState as WorkItemStateValues,
 } from "./constants.ts";
-import type { DocumentSource } from "../types/index.ts";
+import type { DocumentSource, ParsedDocument } from "../types/index.ts";
 import { isLiteralMember } from "../shared/index.ts";
 
 /**
@@ -31,6 +31,30 @@ export type CloseWorkItemState = typeof CloseWorkItemStateValues[number];
  * A derived planning state for future backlog and bounded-read helpers.
  */
 export type WorkItemPlanningState = typeof WorkItemPlanningStateValues[number];
+
+/**
+ * Derived planning metadata attached to one parsed work-item document.
+ */
+export type WorkItemPlanningMetadata = {
+  /** Final planning state derived from status, lifecycle, and dependencies. */
+  planningState: WorkItemPlanningState;
+  /** Total declared dependency count on the work item. */
+  dependencyCount: number;
+  /** Dependency count that is still unresolved under current active work-item state. */
+  unresolvedDependencyCount: number;
+};
+
+/**
+ * Parsed work-item document enriched with derived planning metadata.
+ */
+export type WorkItemPlanningEntry = {
+  /** Parsed managed work-item document. */
+  document: ParsedDocument;
+  /** Parsed structured work-item body for relationship inspection. */
+  definition: WorkItemDefinition;
+  /** Derived planning metadata used by backlog-style readers. */
+  planning: WorkItemPlanningMetadata;
+};
 
 /**
  * A supported provenance origin kind for future work-item documents.

@@ -26,6 +26,7 @@ import type {
   ListDocumentsPreset,
   ListDocumentsQuery,
   ListDocumentsSortField,
+  PlanningBacklogInput,
   ProviderNoteInput,
   RationaleEntryInput,
   RunbookInput,
@@ -928,6 +929,17 @@ export const parseReadDocumentPath = (value: unknown): string => {
  * Parses params for `read_cold_start`.
  */
 export const parseColdStartInput = (value: unknown): ColdStartInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+  };
+};
+
+/**
+ * Parses params for `read_planning_backlog`.
+ */
+export const parsePlanningBacklogInput = (value: unknown): PlanningBacklogInput => {
   const params = readParams(value);
 
   return {

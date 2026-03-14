@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { createRepositoryContext } from "../config/index.ts";
 import { ensureKebabCaseProject, ensureSlug, readDocument } from "../documents/index.ts";
+import { buildWorkItemPlanningEntries } from "../workItems/index.ts";
 import type {
   BoundedReadEntrypoint,
   BoundedReadResult,
@@ -11,6 +12,7 @@ import type {
   ColdStartInput,
   DocumentStatus,
   DocumentType,
+  PlanningBacklogInput,
   ParsedDocument,
   RationaleEntryInput,
   RepositoryContext,
@@ -55,6 +57,12 @@ const coldStartLimits = {
   runbooks: 2,
   canonicalDocs: 3,
   decisions: 3,
+} as const;
+
+const planningBacklogLimits = {
+  ready: 4,
+  inProgress: 2,
+  blocked: 2,
 } as const;
 
 const topicEntryLimits = {
@@ -287,6 +295,36 @@ const collectDatedTopicPaths = (
 };
 
 /**
+ * Collects all dated work-item paths for one project in newest-first path order.
+ */
+const collectProjectWorkItemPaths = (
+  context: RepositoryContext,
+  project: string,
+): string[] => {
+  const absoluteRoot = path.join(context.projectsDir, project, "work-items");
+  const relativeRoot = path.join("projects", project, "work-items");
+  const matches: string[] = [];
+
+  for (const yearEntry of readSortedEntries(absoluteRoot, "desc")) {
+    if (!yearEntry.isDirectory()) {
+      continue;
+    }
+
+    const absoluteYearDir = path.join(absoluteRoot, yearEntry.name);
+    const relativeYearDir = path.join(relativeRoot, yearEntry.name);
+    for (const fileEntry of readSortedEntries(absoluteYearDir, "desc")) {
+      if (!fileEntry.isFile() || !fileEntry.name.endsWith(".md")) {
+        continue;
+      }
+
+      matches.push(path.join(relativeYearDir, fileEntry.name));
+    }
+  }
+
+  return matches;
+};
+
+/**
  * Reads selected candidate paths with dedupe and status filtering.
  */
 const readStageDocuments = (
@@ -405,6 +443,49 @@ const createBoundedReadResult = (
 };
 
 /**
+ * Returns planning entries sorted the same way as the active work-item backlog.
+ */
+const listPlanningBacklogEntries = (
+  context: RepositoryContext,
+  project: string,
+) => {
+  const workItemDocuments = collectProjectWorkItemPaths(context, project)
+    .map((relativePath) => readDocument(context, relativePath))
+    .filter((document) => {
+      return document.type === "work-item" && document.metadata.status === "active";
+    });
+
+  const planningPriority: Record<string, number> = {
+    ready: 0,
+    in_progress: 1,
+    blocked: 2,
+  };
+
+  return buildWorkItemPlanningEntries(workItemDocuments)
+    .filter((entry) => {
+      return (
+        entry.planning.planningState === "ready"
+        || entry.planning.planningState === "in_progress"
+        || entry.planning.planningState === "blocked"
+      );
+    })
+    .sort((left, right) => {
+      const priorityDifference =
+        planningPriority[left.planning.planningState] - planningPriority[right.planning.planningState];
+      if (priorityDifference !== 0) {
+        return priorityDifference;
+      }
+
+      const dateDifference = right.document.metadata.date.localeCompare(left.document.metadata.date);
+      if (dateDifference !== 0) {
+        return dateDifference;
+      }
+
+      return left.document.relativePath.localeCompare(right.document.relativePath);
+    });
+};
+
+/**
  * Reads a bounded cold-start snapshot for one project.
  */
 export const readColdStart = (
@@ -416,7 +497,7 @@ export const readColdStart = (
   const documents: ParsedDocument[] = [];
   const notes = [
     "Cold start reads only bounded runbook, canonical-doc, and decision sources.",
-    "Work-item sources remain intentionally omitted from bounded read entrypoints until dedicated planning reads are added.",
+    "Cold start still omits work-item sources; use planning-backlog reads for bounded planning context.",
   ];
   const seenRelativePaths = new Set<string>();
 
@@ -494,6 +575,84 @@ export const readColdStart = (
   }
 
   return createBoundedReadResult("cold-start", project, stages, documents, notes);
+};
+
+/**
+ * Reads a bounded planning backlog package for one project work-item backlog.
+ */
+export const readPlanningBacklog = (
+  input: PlanningBacklogInput,
+  context = createRepositoryContext(),
+): BoundedReadResult => {
+  const project = ensureKebabCaseProject(input.project);
+  const stages: BoundedReadStage[] = [];
+  const documents: ParsedDocument[] = [];
+  const notes = [
+    "Planning backlog reads only same-project active work-item documents and never falls back to decision backlog behavior.",
+    "Planning backlog stays bounded to ready, in-progress, and blocked work-item states only.",
+  ];
+  const seenRelativePaths = new Set<string>();
+  const planningEntries = listPlanningBacklogEntries(context, project);
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "ready-next",
+      documentType: "work-item",
+      strategy: "planning-ranked",
+      limit: planningBacklogLimits.ready,
+      description: "Read the highest-priority ready work items that can start immediately.",
+      candidatePaths: planningEntries
+        .filter((entry) => entry.planning.planningState === "ready")
+        .map((entry) => entry.document.relativePath),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "in-progress-current",
+      documentType: "work-item",
+      strategy: "planning-ranked",
+      limit: planningBacklogLimits.inProgress,
+      description: "Read bounded in-progress work items for current execution context.",
+      candidatePaths: planningEntries
+        .filter((entry) => entry.planning.planningState === "in_progress")
+        .map((entry) => entry.document.relativePath),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "blocked-follow-up",
+      documentType: "work-item",
+      strategy: "planning-ranked",
+      limit: planningBacklogLimits.blocked,
+      description: "Read bounded blocked work items that still need dependency follow-up.",
+      candidatePaths: planningEntries
+        .filter((entry) => entry.planning.planningState === "blocked")
+        .map((entry) => entry.document.relativePath),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
+
+  if (documents.length === 0) {
+    notes.push("No bounded planning backlog work items were found for this project.");
+  }
+
+  return createBoundedReadResult("planning-backlog", project, stages, documents, notes);
 };
 
 /**

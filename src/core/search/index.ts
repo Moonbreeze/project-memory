@@ -1,10 +1,6 @@
 import { createRepositoryContext } from "../config/index.ts";
 import { listAllActiveDocumentPaths, readDocument } from "../documents/index.ts";
-import {
-  deriveWorkItemPlanningState,
-  parseWorkItemDocument,
-  resolveWorkItemLocatorRelativePath,
-} from "../workItems/index.ts";
+import { buildWorkItemPlanningEntries } from "../workItems/index.ts";
 import type {
   AppliedListDocumentsQuery,
   DocumentStatus,
@@ -15,6 +11,7 @@ import type {
   SearchQuery,
   SearchResult,
 } from "../types/index.ts";
+import type { WorkItemPlanningMetadata } from "../workItems/index.ts";
 
 const backlogExcludedStatuses: DocumentStatus[] = ["superseded", "archived"];
 const workItemBacklogPlanningStatePriority: Record<string, number> = {
@@ -25,12 +22,6 @@ const workItemBacklogPlanningStatePriority: Record<string, number> = {
   done: 4,
   canceled: 5,
   archived: 6,
-};
-
-type WorkItemPlanningMetadata = {
-  planningState: string;
-  dependencyCount: number;
-  unresolvedDependencyCount: number;
 };
 
 /**
@@ -229,33 +220,9 @@ const buildExcerpt = (document: ParsedDocument, queryText?: string): string => {
 const buildWorkItemPlanningMetadata = (
   documents: ParsedDocument[],
 ): Map<string, WorkItemPlanningMetadata> => {
-  const workItemDefinitions = new Map(
-    documents
-      .filter((document) => document.type === "work-item")
-      .map((document) => [document.relativePath, parseWorkItemDocument(document)]),
-  );
   const planningMetadataByPath = new Map<string, WorkItemPlanningMetadata>();
-
-  for (const [relativePath, definition] of workItemDefinitions) {
-    const unresolvedDependencyCount = definition.dependencies.reduce((count, dependency) => {
-      const dependencyRelativePath = resolveWorkItemLocatorRelativePath(dependency);
-      const dependencyDefinition = workItemDefinitions.get(dependencyRelativePath);
-      if (!dependencyDefinition || dependencyDefinition.metadata.workItemState !== "done") {
-        return count + 1;
-      }
-
-      return count;
-    }, 0);
-
-    planningMetadataByPath.set(relativePath, {
-      planningState: deriveWorkItemPlanningState({
-        documentStatus: definition.metadata.status,
-        workItemState: definition.metadata.workItemState,
-        unresolvedDependencyCount,
-      }),
-      dependencyCount: definition.dependencies.length,
-      unresolvedDependencyCount,
-    });
+  for (const entry of buildWorkItemPlanningEntries(documents)) {
+    planningMetadataByPath.set(entry.document.relativePath, entry.planning);
   }
 
   return planningMetadataByPath;

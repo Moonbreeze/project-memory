@@ -1,6 +1,7 @@
 import { listDocumentsTool } from "../listDocuments.ts";
 import { readColdStartTool } from "../readColdStart.ts";
 import { readDocumentTool } from "../readDocument.ts";
+import { readPlanningBacklogTool } from "../readPlanningBacklog.ts";
 import { readRationaleEntryTool } from "../readRationaleEntry.ts";
 import { readTopicEntryTool } from "../readTopicEntry.ts";
 import { searchDocumentsTool } from "../searchDocuments.ts";
@@ -124,6 +125,21 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
       ["project"],
     ),
     handler: readColdStartTool,
+  },
+  read_planning_backlog: {
+    name: "read_planning_backlog",
+    description:
+      "Read a bounded project planning backlog using only same-project active work-item documents, without decision fallback.",
+    inputSchema: createObjectSchema(
+      {
+        project: {
+          type: "string",
+          description: "Target project slug.",
+        },
+      },
+      ["project"],
+    ),
+    handler: readPlanningBacklogTool,
   },
   read_topic_entry: {
     name: "read_topic_entry",

@@ -17,6 +17,7 @@ import {
   type WorkItemDocumentStatus,
   type WorkItemEvidenceLocator,
   type WorkItemOrigin,
+  type WorkItemPlanningEntry,
   type WorkItemRecordLocator,
   type WorkItemState,
 } from "./types.ts";
@@ -283,6 +284,52 @@ export const validateStoredWorkItemDocument = (
   if (!validation.ok) {
     throw new Error(validation.errors.join("; "));
   }
+};
+
+/**
+ * Builds derived planning entries for the provided active work-item documents.
+ */
+export const buildWorkItemPlanningEntries = (
+  documents: ParsedDocument[],
+): WorkItemPlanningEntry[] => {
+  const workItemDefinitions = new Map(
+    documents
+      .filter((document) => document.type === "work-item")
+      .map((document) => [document.relativePath, parseWorkItemDocument(document)]),
+  );
+
+  return documents
+    .filter((document) => document.type === "work-item")
+    .map((document) => {
+      const definition = workItemDefinitions.get(document.relativePath);
+      if (!definition) {
+        throw new Error(`Missing parsed work-item definition for ${document.relativePath}`);
+      }
+
+      const unresolvedDependencyCount = definition.dependencies.reduce((count, dependency) => {
+        const dependencyRelativePath = resolveWorkItemLocatorRelativePath(dependency);
+        const dependencyDefinition = workItemDefinitions.get(dependencyRelativePath);
+        if (!dependencyDefinition || dependencyDefinition.metadata.workItemState !== "done") {
+          return count + 1;
+        }
+
+        return count;
+      }, 0);
+
+      return {
+        document,
+        definition,
+        planning: {
+          planningState: deriveWorkItemPlanningState({
+            documentStatus: definition.metadata.status,
+            workItemState: definition.metadata.workItemState,
+            unresolvedDependencyCount,
+          }),
+          dependencyCount: definition.dependencies.length,
+          unresolvedDependencyCount,
+        },
+      };
+    });
 };
 
 export {

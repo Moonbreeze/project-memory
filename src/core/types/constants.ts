@@ -31,6 +31,7 @@ export const ListDocumentsPreset = ["backlog"] as const;
  */
 export const BoundedReadEntrypoint = [
   "cold-start",
+  "planning-backlog",
   "topic-entry",
   "rationale-entry",
 ] as const;
@@ -40,6 +41,7 @@ export const BoundedReadEntrypoint = [
  */
 export const BoundedReadStrategy = [
   "path-ordered",
+  "planning-ranked",
   "topic-exact",
   "topic-contains",
   "reference-follow",

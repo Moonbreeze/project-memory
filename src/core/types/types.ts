@@ -237,6 +237,14 @@ export type ColdStartInput = {
 };
 
 /**
+ * Input required to read one bounded planning backlog snapshot.
+ */
+export type PlanningBacklogInput = {
+  /** Target project slug. */
+  project: string;
+};
+
+/**
  * Input required to read one bounded topic entry.
  */
 export type TopicEntryInput = {

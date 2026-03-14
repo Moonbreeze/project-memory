@@ -38,6 +38,8 @@ export type {
   WorkItemMetadata,
   WorkItemOrigin,
   WorkItemOriginKind,
+  WorkItemPlanningEntry,
+  WorkItemPlanningMetadata,
   WorkItemPlanningState,
   WorkItemPlanningStateInput,
   WorkItemRecordLocator,
@@ -64,6 +66,7 @@ export {
  * Work-item spec helpers.
  */
 export {
+  buildWorkItemPlanningEntries,
   deriveWorkItemPlanningState,
   parseWorkItemDocument,
   parseWorkItemLocatorString,

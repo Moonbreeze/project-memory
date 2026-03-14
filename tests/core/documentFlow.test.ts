@@ -14,6 +14,7 @@ import {
   listDocuments,
   readDocument,
   readColdStart,
+  readPlanningBacklog,
   readRationaleEntry,
   readTopicEntry,
   recordVerificationResult,
@@ -699,6 +700,105 @@ test("listDocuments backlog preset uses project work items for planning and keep
   );
 });
 
+test("readPlanningBacklog returns a bounded work-item planning slice without decision fallback", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "legacy planning fallback",
+      date: "2026-03-09",
+      context: "Legacy backlog data still exists.",
+      decision: "Dedicated planning reads must not fall back to decisions.",
+      consequences: ["Planning reads stay work-item-only"],
+    },
+    context,
+  );
+
+  const createWorkItem = (
+    topic: string,
+    date: string,
+    overrides: Partial<Parameters<typeof upsertWorkItem>[0]> = {},
+  ) => {
+    upsertWorkItem(
+      {
+        project: "acme-app",
+        topic,
+        date,
+        summary: `Planning slice for ${topic}.`,
+        outcome: `Bounded planning can reason about ${topic}.`,
+        origin: {
+          kind: "ad-hoc",
+          note: "Planning backlog coverage.",
+        },
+        dependencies: [],
+        context: [],
+        verification: [`Confirm ${topic} appears in the bounded planning read.`],
+        evidence: [],
+        ...overrides,
+      },
+      context,
+    );
+  };
+
+  createWorkItem("ready alpha", "2026-03-11");
+  createWorkItem("ready beta", "2026-03-12");
+  createWorkItem("ready gamma", "2026-03-13");
+  createWorkItem("ready delta", "2026-03-14");
+  createWorkItem("ready epsilon", "2026-03-15");
+
+  createWorkItem("in progress alpha", "2026-03-13", { workItemState: "in_progress" });
+  createWorkItem("in progress beta", "2026-03-14", { workItemState: "in_progress" });
+  createWorkItem("in progress gamma", "2026-03-15", { workItemState: "in_progress" });
+
+  createWorkItem("blocked alpha", "2026-03-12", {
+    dependencies: [
+      {
+        type: "work-item",
+        project: "acme-app",
+        date: "2026-03-15",
+        topic: "ready-epsilon",
+      },
+    ],
+  });
+  createWorkItem("blocked beta", "2026-03-13", { workItemState: "blocked" });
+  createWorkItem("blocked gamma", "2026-03-14", { workItemState: "blocked" });
+
+  createWorkItem("done hidden", "2026-03-16", { workItemState: "done" });
+  createWorkItem("draft hidden", "2026-03-17", { status: "draft" });
+
+  const result = readPlanningBacklog({ project: "acme-app" }, context);
+
+  assert.equal(result.entrypoint, "planning-backlog");
+  assert.deepEqual(
+    result.stages.map((stage) => [stage.name, stage.relativePaths.length]),
+    [
+      ["ready-next", 4],
+      ["in-progress-current", 2],
+      ["blocked-follow-up", 2],
+    ],
+  );
+  assert.deepEqual(
+    result.documents.map((document) => document.metadata.topic),
+    [
+      "ready-epsilon",
+      "ready-delta",
+      "ready-gamma",
+      "ready-beta",
+      "in-progress-gamma",
+      "in-progress-beta",
+      "blocked-gamma",
+      "blocked-beta",
+    ],
+  );
+  assert(
+    result.notes.includes(
+      "Planning backlog reads only same-project active work-item documents and never falls back to decision backlog behavior.",
+    ),
+  );
+});
+
 test("readDocument rejects canonical docs without registry_scope metadata", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
@@ -1128,7 +1228,7 @@ test("readColdStart returns a bounded project snapshot with fixed source orderin
   );
   assert(
     result.notes.includes(
-      "Work-item sources remain intentionally omitted from bounded read entrypoints until dedicated planning reads are added.",
+      "Cold start still omits work-item sources; use planning-backlog reads for bounded planning context.",
     ),
   );
 });

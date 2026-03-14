@@ -288,6 +288,7 @@ test("MCP server completes initialize and tools/list handshake", () => {
 
   assert(toolNames.includes("list_documents"));
   assert(toolNames.includes("read_cold_start"));
+  assert(toolNames.includes("read_planning_backlog"));
   assert(toolNames.includes("read_topic_entry"));
   assert(toolNames.includes("read_rationale_entry"));
   assert(toolNames.includes("append_session_note"));
@@ -803,6 +804,16 @@ test("MCP server exposes bounded read entrypoints", () => {
     decision: "Keep resume architecture explicit.",
     consequences: ["Bounded reads can follow the rationale source"],
   });
+  callTool("bounded-work-item", "upsert_work_item", {
+    project: "acme-app",
+    topic: "resume slice",
+    date: "2026-03-13",
+    summary: "Implement the planning slice.",
+    outcome: "Dedicated planning reads can return work-item-only context.",
+    originKind: "ad-hoc",
+    originNote: "MCP bounded planning coverage.",
+    verification: ["Run planning backlog coverage."],
+  });
 
   const coldStartResponse = callTool("bounded-cold", "read_cold_start", {
     project: "acme-app",
@@ -814,6 +825,26 @@ test("MCP server exposes bounded read entrypoints", () => {
 
   assert.equal(coldStartResult.structuredContent.entrypoint, "cold-start");
   assert.equal(coldStartResult.structuredContent.documents.length, 3);
+
+  const planningResponse = callTool("bounded-planning", "read_planning_backlog", {
+    project: "acme-app",
+  });
+  const planningResult = readToolResult(planningResponse);
+  if (!isRecord(planningResult.structuredContent) || !Array.isArray(planningResult.structuredContent.documents)) {
+    throw new Error("Expected read_planning_backlog payload");
+  }
+
+  assert.equal(planningResult.structuredContent.entrypoint, "planning-backlog");
+  assert.deepEqual(
+    planningResult.structuredContent.documents.map((document) => {
+      if (!isRecord(document) || !isRecord(document.metadata) || typeof document.metadata.topic !== "string") {
+        throw new Error("Expected read_planning_backlog document metadata");
+      }
+
+      return document.metadata.topic;
+    }),
+    ["resume-slice"],
+  );
 
   const topicResponse = callTool("bounded-topic", "read_topic_entry", {
     project: "acme-app",
