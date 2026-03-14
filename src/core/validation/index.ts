@@ -1,5 +1,7 @@
 import { RequiredFrontmatterKey, isDocumentSource, isDocumentStatus, isFrontmatterKey } from "../types/index.ts";
 import type { DocumentType, RepositoryContext, ValidationResult } from "../types/index.ts";
+import { WorkItemSectionHeading as WorkItemSectionHeadingValues } from "../workItems/constants.ts";
+import { isWorkItemState } from "../workItems/types.ts";
 
 const requiredSectionsByType: Record<DocumentType, string[]> = {
   "session-note": ["## Summary", "## Actions", "## Follow-up"],
@@ -8,6 +10,7 @@ const requiredSectionsByType: Record<DocumentType, string[]> = {
   decision: ["## Context", "## Decision", "## Consequences"],
   runbook: ["## Purpose", "## Procedure", "## Verification"],
   "canonical-doc": ["## Summary", "## Guidance", "## References"],
+  "work-item": [...WorkItemSectionHeadingValues],
 };
 
 const secretPatterns = [
@@ -84,6 +87,18 @@ export const validateFrontmatter = (
     errors.push("Missing required metadata field: registry_scope");
   }
 
+  if (type === "work-item" && !metadata.work_item_state) {
+    errors.push("Missing required metadata field: work_item_state");
+  }
+
+  if (type !== "work-item" && metadata.work_item_state) {
+    errors.push("work_item_state is only supported for work-item documents");
+  }
+
+  if (metadata.work_item_state && !isWorkItemState(metadata.work_item_state)) {
+    errors.push(`Unsupported work_item_state: ${metadata.work_item_state}`);
+  }
+
   const source = metadata.source;
   if (source && !isDocumentSource(source)) {
     errors.push(`Unsupported source: ${source}`);
@@ -96,6 +111,14 @@ export const validateFrontmatter = (
     errors.push(`Unsupported status: ${status}`);
   } else if (status && isDocumentStatus(status) && !context.allowedStatuses.includes(status)) {
     errors.push(`Unsupported status: ${status}`);
+  }
+
+  if (type === "work-item" && metadata.status === "superseded") {
+    errors.push("Work-item documents do not support superseded status");
+  }
+
+  if (type === "work-item" && metadata.registry_scope) {
+    errors.push("registry_scope is not supported for work-item documents");
   }
 
   return errors.length === 0 ? { ok: true } : { ok: false, errors };

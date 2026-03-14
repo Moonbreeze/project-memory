@@ -8,6 +8,7 @@ export const DocumentType = [
   "decision",
   "runbook",
   "canonical-doc",
+  "work-item",
 ] as const;
 
 /**
@@ -64,6 +65,7 @@ export const FrontmatterKey = [
   "registry_scope",
   "source",
   "status",
+  "work_item_state",
 ] as const;
 
 /**

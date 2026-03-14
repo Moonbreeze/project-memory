@@ -1,5 +1,10 @@
 import { createRepositoryContext } from "../config/index.ts";
 import { listAllActiveDocumentPaths, readDocument } from "../documents/index.ts";
+import {
+  deriveWorkItemPlanningState,
+  parseWorkItemDocument,
+  resolveWorkItemLocatorRelativePath,
+} from "../workItems/index.ts";
 import type {
   AppliedListDocumentsQuery,
   DocumentStatus,
@@ -12,6 +17,21 @@ import type {
 } from "../types/index.ts";
 
 const backlogExcludedStatuses: DocumentStatus[] = ["superseded", "archived"];
+const workItemBacklogPlanningStatePriority: Record<string, number> = {
+  ready: 0,
+  in_progress: 1,
+  blocked: 2,
+  draft: 3,
+  done: 4,
+  canceled: 5,
+  archived: 6,
+};
+
+type WorkItemPlanningMetadata = {
+  planningState: string;
+  dependencyCount: number;
+  unresolvedDependencyCount: number;
+};
 
 /**
  * Returns `true` when a parsed document satisfies the query filters.
@@ -61,20 +81,42 @@ const matchesListDocumentsQuery = (
   return true;
 };
 
+const hasProjectWorkItems = (
+  documents: ParsedDocument[],
+  project: string | undefined,
+): boolean => {
+  if (!project) {
+    return false;
+  }
+
+  return documents.some((document) => {
+    return document.type === "work-item" && document.metadata.project === project;
+  });
+};
+
 /**
  * Expands presets and defaults into one normalized list-documents query.
  */
 const normalizeListDocumentsQuery = (
   query: ListDocumentsQuery,
+  documents: ParsedDocument[],
 ): AppliedListDocumentsQuery => {
+  const useWorkItemBacklog = query.preset === "backlog" && hasProjectWorkItems(documents, query.project);
   const presetDefaults: Partial<AppliedListDocumentsQuery> =
     query.preset === "backlog"
-      ? {
-          type: "decision",
-          excludeStatuses: backlogExcludedStatuses,
-          sort: "date",
-          order: "desc",
-        }
+      ? useWorkItemBacklog
+        ? {
+            type: "work-item",
+            status: "active",
+            sort: "date",
+            order: "desc",
+          }
+        : {
+            type: "decision",
+            excludeStatuses: backlogExcludedStatuses,
+            sort: "date",
+            order: "desc",
+          }
       : {};
 
   const statusOverridesPreset = query.status !== undefined || query.excludeStatuses !== undefined;
@@ -93,8 +135,8 @@ const normalizeListDocumentsQuery = (
     normalizedQuery.type = query.type ?? presetDefaults.type;
   }
 
-  if (query.status) {
-    normalizedQuery.status = query.status;
+  if (query.status ?? presetDefaults.status) {
+    normalizedQuery.status = query.status ?? presetDefaults.status;
   }
 
   const excludeStatuses = statusOverridesPreset
@@ -118,7 +160,19 @@ const compareDocuments = (
   left: ParsedDocument,
   right: ParsedDocument,
   query: AppliedListDocumentsQuery,
+  planningMetadataByPath: Map<string, WorkItemPlanningMetadata>,
 ): number => {
+  if (query.preset === "backlog" && query.type === "work-item") {
+    const leftPlanningState = planningMetadataByPath.get(left.relativePath)?.planningState;
+    const rightPlanningState = planningMetadataByPath.get(right.relativePath)?.planningState;
+    const leftPriority = leftPlanningState ? workItemBacklogPlanningStatePriority[leftPlanningState] : undefined;
+    const rightPriority = rightPlanningState ? workItemBacklogPlanningStatePriority[rightPlanningState] : undefined;
+
+    if (leftPriority !== undefined && rightPriority !== undefined && leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+  }
+
   const ascendingFactor = query.order === "asc" ? 1 : -1;
 
   if (query.sort === "date") {
@@ -137,12 +191,21 @@ const compareDocuments = (
 const toListedDocument = (
   document: ParsedDocument,
   includeBody: boolean,
+  planningMetadata?: WorkItemPlanningMetadata,
 ): ListedDocument => {
-  if (includeBody) {
-    return document;
+  const listedDocument: ListedDocument = includeBody
+    ? { ...document }
+    : (() => {
+        const { body: _body, ...withoutBody } = document;
+        return withoutBody;
+      })();
+
+  if (planningMetadata) {
+    listedDocument.planningState = planningMetadata.planningState;
+    listedDocument.dependencyCount = planningMetadata.dependencyCount;
+    listedDocument.unresolvedDependencyCount = planningMetadata.unresolvedDependencyCount;
   }
 
-  const { body: _body, ...listedDocument } = document;
   return listedDocument;
 };
 
@@ -163,6 +226,51 @@ const buildExcerpt = (document: ParsedDocument, queryText?: string): string => {
   return body.slice(start, end);
 };
 
+const buildWorkItemPlanningMetadata = (
+  documents: ParsedDocument[],
+): Map<string, WorkItemPlanningMetadata> => {
+  const workItemDefinitions = new Map(
+    documents
+      .filter((document) => document.type === "work-item")
+      .map((document) => [document.relativePath, parseWorkItemDocument(document)]),
+  );
+  const planningMetadataByPath = new Map<string, WorkItemPlanningMetadata>();
+
+  for (const [relativePath, definition] of workItemDefinitions) {
+    const unresolvedDependencyCount = definition.dependencies.reduce((count, dependency) => {
+      const dependencyRelativePath = resolveWorkItemLocatorRelativePath(dependency);
+      const dependencyDefinition = workItemDefinitions.get(dependencyRelativePath);
+      if (!dependencyDefinition || dependencyDefinition.metadata.workItemState !== "done") {
+        return count + 1;
+      }
+
+      return count;
+    }, 0);
+
+    planningMetadataByPath.set(relativePath, {
+      planningState: deriveWorkItemPlanningState({
+        documentStatus: definition.metadata.status,
+        workItemState: definition.metadata.workItemState,
+        unresolvedDependencyCount,
+      }),
+      dependencyCount: definition.dependencies.length,
+      unresolvedDependencyCount,
+    });
+  }
+
+  return planningMetadataByPath;
+};
+
+const matchesWorkItemBacklogPlanningState = (
+  planningMetadata: WorkItemPlanningMetadata | undefined,
+): boolean => {
+  return (
+    planningMetadata?.planningState === "ready"
+    || planningMetadata?.planningState === "in_progress"
+    || planningMetadata?.planningState === "blocked"
+  );
+};
+
 /**
  * Lists active documents filtered by project, status, type, and sort options.
  */
@@ -170,15 +278,31 @@ export const listDocuments = (
   query: ListDocumentsQuery = {},
   context = createRepositoryContext(),
 ): ListDocumentsResult => {
-  const appliedQuery = normalizeListDocumentsQuery(query);
   const documents = listAllActiveDocumentPaths(context).map((relativePath) => readDocument(context, relativePath));
+  const planningMetadataByPath = buildWorkItemPlanningMetadata(documents);
+  const appliedQuery = normalizeListDocumentsQuery(query, documents);
 
   return {
     documents: documents
       .filter((document) => matchesListDocumentsQuery(document, appliedQuery))
-      .sort((left, right) => compareDocuments(left, right, appliedQuery))
+      .filter((document) => {
+        if (appliedQuery.preset !== "backlog" || appliedQuery.type !== "work-item") {
+          return true;
+        }
+
+        return matchesWorkItemBacklogPlanningState(
+          planningMetadataByPath.get(document.relativePath),
+        );
+      })
+      .sort((left, right) => compareDocuments(left, right, appliedQuery, planningMetadataByPath))
       .slice(0, appliedQuery.limit)
-      .map((document) => toListedDocument(document, appliedQuery.includeBody)),
+      .map((document) => {
+        return toListedDocument(
+          document,
+          appliedQuery.includeBody,
+          planningMetadataByPath.get(document.relativePath),
+        );
+      }),
     appliedQuery,
   };
 };

@@ -585,6 +585,65 @@ test("CLI upserts canonical docs and exposes them through read-document", async 
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("CLI upserts work items and exposes planning metadata through list-documents", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const workItemCapture = createCapturedIo();
+  await runCli(
+    [
+      "upsert-work-item",
+      "--project",
+      "acme-app",
+      "--topic",
+      "resume slice",
+      "--summary",
+      "Implement the first resumable work slice.",
+      "--outcome",
+      "Backlog planning can read a real work-item document.",
+      "--origin-kind",
+      "ad-hoc",
+      "--origin-note",
+      "CLI coverage.",
+      "--verification",
+      "Run CLI integration coverage",
+      "--date",
+      "2026-03-11",
+    ],
+    workItemCapture.io,
+  );
+
+  const workItemResult = parseLastJson(workItemCapture.captured.stdout);
+  if (!isRecord(workItemResult) || typeof workItemResult.relativePath !== "string") {
+    throw new Error("Unexpected upsert-work-item result shape");
+  }
+
+  assert.match(
+    workItemResult.relativePath,
+    /projects\/acme-app\/work-items\/2026\/2026-03-11-resume-slice\.md/,
+  );
+
+  const listCapture = createCapturedIo();
+  await runCli(
+    ["list-documents", "--project", "acme-app", "--preset", "backlog"],
+    listCapture.io,
+  );
+  const listResult = parseLastJson(listCapture.captured.stdout);
+  if (!isRecord(listResult) || !Array.isArray(listResult.documents)) {
+    throw new Error("Unexpected list-documents result shape");
+  }
+
+  const [listedDocument] = listResult.documents;
+  if (!isRecord(listedDocument)) {
+    throw new Error("Expected one listed work-item document");
+  }
+
+  assert.equal(listedDocument.planningState, "ready");
+  assert.equal(listedDocument.unresolvedDependencyCount, 0);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("CLI rejects reading unmanaged document paths", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;

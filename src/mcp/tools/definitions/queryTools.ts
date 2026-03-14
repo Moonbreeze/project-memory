@@ -31,7 +31,7 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
       },
       preset: {
         type: "string",
-        description: "Optional list preset, such as a current decision backlog view.",
+        description: "Optional list preset, such as a project work-item backlog view with legacy decision fallback.",
         enum: [...ListDocumentsPresetValues],
       },
       type: {

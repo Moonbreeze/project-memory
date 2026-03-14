@@ -72,6 +72,8 @@ export type Frontmatter = {
   source: DocumentSource;
   /** Current document lifecycle status. */
   status: DocumentStatus;
+  /** Optional work-item lifecycle state stored only on work-item documents. */
+  work_item_state?: string;
 };
 
 /**
@@ -322,6 +324,12 @@ export type AppliedListDocumentsQuery = {
 export type ListedDocument = Omit<ParsedDocument, "body"> & {
   /** Optional Markdown body, included only when explicitly requested. */
   body?: string;
+  /** Optional derived planning state for listed work-item documents. */
+  planningState?: string;
+  /** Optional total dependency count for listed work-item documents. */
+  dependencyCount?: number;
+  /** Optional unresolved dependency count for listed work-item documents. */
+  unresolvedDependencyCount?: number;
 };
 
 /**

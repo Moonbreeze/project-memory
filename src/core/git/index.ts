@@ -13,6 +13,7 @@ type CommitScope =
   | "decision"
   | "runbook"
   | "canonical"
+  | "work-item"
   | "archive"
   | "mixed";
 
@@ -29,7 +30,7 @@ type CommitTarget = {
 };
 
 const commitMessagePattern =
-  /^docs\(([a-z0-9]+(?:-[a-z0-9]+)*)\/(session|verification|provider|decision|runbook|canonical|archive|mixed)\): (\S(?:.*\S)?)$/;
+  /^docs\(([a-z0-9]+(?:-[a-z0-9]+)*)\/(session|verification|provider|decision|runbook|canonical|work-item|archive|mixed)\): (\S(?:.*\S)?)$/;
 
 /**
  * Executes a git command and returns trimmed stdout.
@@ -114,6 +115,8 @@ const inferCommitScope = (approvedPaths: EligibleManagedPath[]): CommitScope => 
       return "runbook";
     case "canonical-doc":
       return "canonical";
+    case "work-item":
+      return "work-item";
   }
 };
 
@@ -159,7 +162,7 @@ const validateCommitMessage = (message: string, expectedTarget: CommitTarget): v
   const match = commitMessagePattern.exec(message);
   if (!match) {
     throw new Error(
-      "Commit message must use the format docs(<project>/<scope>): <summary> with scope in session|verification|provider|decision|runbook|canonical|archive|mixed",
+      "Commit message must use the format docs(<project>/<scope>): <summary> with scope in session|verification|provider|decision|runbook|canonical|work-item|archive|mixed",
     );
   }
 

@@ -292,6 +292,7 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert(toolNames.includes("read_rationale_entry"));
   assert(toolNames.includes("append_session_note"));
   assert(toolNames.includes("commit_pending_changes"));
+  assert(toolNames.includes("upsert_work_item"));
 });
 
 test("MCP stdio framing carries one initialize exchange", () => {
@@ -443,6 +444,50 @@ test("MCP list_documents backlog preset returns newest current decisions first",
   assert.deepEqual(toolResult.structuredContent.appliedQuery.excludeStatuses, ["superseded", "archived"]);
   assert.equal(toolResult.structuredContent.appliedQuery.sort, "date");
   assert.equal(toolResult.structuredContent.appliedQuery.order, "desc");
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP upsert_work_item feeds the project backlog planning view", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const createResponse = callTool("work-1", "upsert_work_item", {
+    project: "acme-app",
+    topic: "resume slice",
+    summary: "Implement the first resumable work slice.",
+    outcome: "Backlog planning can read a real work-item document.",
+    originKind: "ad-hoc",
+    originNote: "MCP coverage.",
+    verification: ["Run MCP integration coverage."],
+    date: "2026-03-11",
+  });
+  const createResult = readToolResult(createResponse);
+  assert.equal(createResult.isError, false);
+
+  const backlogResponse = callTool("work-2", "list_documents", {
+    project: "acme-app",
+    preset: "backlog",
+  });
+  const backlogResult = readToolResult(backlogResponse);
+  if (
+    !isRecord(backlogResult.structuredContent)
+    || !Array.isArray(backlogResult.structuredContent.documents)
+    || !isRecord(backlogResult.structuredContent.appliedQuery)
+  ) {
+    throw new Error("Expected structured work-item backlog result");
+  }
+
+  const [document] = backlogResult.structuredContent.documents;
+  if (!isRecord(document) || !isRecord(document.metadata)) {
+    throw new Error("Expected one listed work-item payload");
+  }
+
+  assert.equal(document.metadata.topic, "resume-slice");
+  assert.equal(document.metadata.work_item_state, "open");
+  assert.equal(document.planningState, "ready");
+  assert.equal(document.unresolvedDependencyCount, 0);
+  assert.equal(backlogResult.structuredContent.appliedQuery.type, "work-item");
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

@@ -346,6 +346,7 @@ const installMemoryRepository = (
       path.join(context.projectsDir, projectSlug, "runbooks"),
       path.join(context.projectsDir, projectSlug, "session-log"),
       path.join(context.projectsDir, projectSlug, "verification"),
+      path.join(context.projectsDir, projectSlug, "work-items", year),
       path.join(context.archivesDir, projectSlug, "session-log"),
       path.join(context.archivesDir, projectSlug, "verification"),
     ];

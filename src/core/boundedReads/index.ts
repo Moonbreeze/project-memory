@@ -416,7 +416,7 @@ export const readColdStart = (
   const documents: ParsedDocument[] = [];
   const notes = [
     "Cold start reads only bounded runbook, canonical-doc, and decision sources.",
-    "Work-item sources are intentionally omitted until work-item support exists.",
+    "Work-item sources remain intentionally omitted from bounded read entrypoints until dedicated planning reads are added.",
   ];
   const seenRelativePaths = new Set<string>();
 

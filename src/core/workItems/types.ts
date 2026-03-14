@@ -8,6 +8,7 @@ import {
   WorkItemSectionHeading as WorkItemSectionHeadingValues,
   WorkItemState as WorkItemStateValues,
 } from "./constants.ts";
+import type { DocumentSource } from "../types/index.ts";
 import { isLiteralMember } from "../shared/index.ts";
 
 /**
@@ -197,6 +198,38 @@ export type WorkItemMetadata = {
 export type WorkItemDefinition = {
   /** Shared metadata for the future work-item document. */
   metadata: WorkItemMetadata;
+  /** Short description of the work slice. */
+  summary: string;
+  /** Expected outcome when the work slice is complete. */
+  outcome: string;
+  /** Required provenance explaining why the work item exists. */
+  origin: WorkItemOrigin;
+  /** Explicit prerequisite work items that must complete first. */
+  dependencies: WorkItemRecordLocator[];
+  /** Same-project documents that govern or explain execution. */
+  context: WorkItemContextLocator[];
+  /** Verification targets promised by the work item. */
+  verification: string[];
+  /** Same-project evidence documents recorded during or after execution. */
+  evidence: WorkItemEvidenceLocator[];
+};
+
+/**
+ * Input required to create or update one work-item document.
+ */
+export type WorkItemInput = {
+  /** Target project slug. */
+  project: string;
+  /** Work-item topic slug or label. */
+  topic: string;
+  /** Optional explicit work-item date in `YYYY-MM-DD` format. */
+  date?: string;
+  /** Optional explicit document source. */
+  source?: DocumentSource;
+  /** Optional explicit document status. */
+  status?: WorkItemDocumentStatus;
+  /** Optional explicit execution state. Defaults to `open`. */
+  workItemState?: WorkItemState;
   /** Short description of the work slice. */
   summary: string;
   /** Expected outcome when the work slice is complete. */

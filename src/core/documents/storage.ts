@@ -4,6 +4,7 @@ import path from "node:path";
 import { createRepositoryContext } from "../config/index.ts";
 import { isDocumentSource, isDocumentStatus } from "../types/index.ts";
 import { validateBody, validateFrontmatter } from "../validation/index.ts";
+import { validateStoredWorkItemDocument } from "../workItems/index.ts";
 import type { Frontmatter, ParsedDocument, RepositoryContext } from "../types/index.ts";
 
 import { buildFrontmatter, parseFrontmatter } from "./content.ts";
@@ -45,6 +46,10 @@ const normalizeFrontmatter = (metadata: Record<string, string>): Frontmatter => 
     normalized.registry_scope = metadata.registry_scope;
   }
 
+  if (metadata.work_item_state) {
+    normalized.work_item_state = metadata.work_item_state;
+  }
+
   return normalized;
 };
 
@@ -68,6 +73,16 @@ export const writeDocument = (
   const bodyValidation = validateBody(context, type, body);
   if (!bodyValidation.ok) {
     throw new Error(bodyValidation.errors.join("; "));
+  }
+
+  if (type === "work-item") {
+    validateStoredWorkItemDocument({
+      path: "",
+      relativePath,
+      type,
+      metadata,
+      body: body.trimEnd(),
+    });
   }
 
   const absolutePath = path.join(context.memoryRootDir, relativePath);
@@ -104,13 +119,19 @@ export const readDocument = (
     throw new Error(frontmatterValidation.errors.join("; "));
   }
 
-  return {
+  const parsedDocument = {
     path: absolutePath,
     relativePath,
     type,
     metadata: normalizeFrontmatter(metadata),
     body,
   };
+
+  if (type === "work-item") {
+    validateStoredWorkItemDocument(parsedDocument);
+  }
+
+  return parsedDocument;
 };
 
 /**

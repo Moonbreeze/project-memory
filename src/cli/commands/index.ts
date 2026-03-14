@@ -14,6 +14,7 @@ import { recordVerificationResultCommand } from "./recordVerificationResult.ts";
 import { searchDocumentsCommand } from "./searchDocuments.ts";
 import { upsertCanonicalDocCommand } from "./upsertCanonicalDoc.ts";
 import { upsertProviderNoteCommand } from "./upsertProviderNote.ts";
+import { upsertWorkItemCommand } from "./upsertWorkItem.ts";
 
 import type { CliCommandHandler } from "../types.ts";
 
@@ -27,6 +28,7 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "record-verification-result": recordVerificationResultCommand,
   "upsert-provider-note": upsertProviderNoteCommand,
   "upsert-canonical-doc": upsertCanonicalDocCommand,
+  "upsert-work-item": upsertWorkItemCommand,
   "create-decision": createDecisionCommand,
   "create-runbook": createRunbookCommand,
   "list-documents": listDocumentsCommand,

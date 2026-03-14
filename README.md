@@ -66,12 +66,13 @@ Examples:
 
 ```bash
 ./scripts/run-cli.sh append-session-note --project project-memory --topic setup --summary "Validated install flow." --actions "created memory repo" --follow-up "document MCP config"
+./scripts/run-cli.sh upsert-work-item --project project-memory --topic session-6-work-item-rollout --summary "Implement the first work-item document flow." --outcome "Project backlog can move off decisions." --origin-kind ad-hoc --origin-note "Session 6 implementation work." --verification "Run npm test"
 ./scripts/run-cli.sh list-documents --project project-memory --preset backlog
 ./scripts/run-cli.sh commit-pending-changes --message "docs(project-memory/session): record install validation"
 ```
 
 `list-documents` returns metadata only by default. Use `--include-body true` only when the full Markdown body is actually needed.
-The `backlog` preset expands to the current decision backlog view: `type=decision`, excludes `superseded` and `archived`, and sorts by date descending.
+For project-scoped queries, the `backlog` preset now uses work-item planning when the project has managed work items. That view keeps only active ready, in-progress, and blocked work items, sorts them by planning state before date, and includes dependency counts in the result. When no project is supplied or the project has no work items yet, the preset falls back to the legacy decision backlog view: `type=decision`, excludes `superseded` and `archived`, and sorts by date descending.
 
 ## Install Command
 
@@ -128,6 +129,7 @@ External memory repository contents:
 
 - `projects/`: active project-scoped documents
 - `archives/`: archived session notes and verification records
+- `projects/<project>/work-items/<year>/`: active work-item records used for backlog planning
 
 ## Current MVP Scope
 
@@ -137,20 +139,22 @@ External memory repository contents:
 - create decisions
 - create runbooks
 - upsert canonical docs bound to declared taxonomy-registry scopes
+- upsert work items with explicit provenance, dependencies, context, verification, and evidence sections
 - list, read, and search active documents
 - commit pending document changes
 - archive session and verification documents manually
+- update work-item lifecycle through `upsert-work-item` or `upsert_work_item`, including close and archive semantics via `work_item_state` and document `status`
 
-## Future Work-Item Spec
+## Work-Item Support
 
-`src/core/workItems/` now exports the Session 5 spec surface only. It defines the future `work_item_state` lifecycle, derived planning-state rules, same-project typed locators for provenance, dependencies, context, and evidence, and the planned Markdown section layout for work-item documents.
+`src/core/workItems/` now provides both the Session 5 schema contract and the first Session 6 implementation surface. Work-item documents live under `projects/<project>/work-items/<year>/`, use the `work_item_state` frontmatter field, and serialize provenance, dependency, context, and evidence locators in a deterministic body format.
 
-This module is not wired into the current managed-document pipeline yet. `list-documents`, bounded read entrypoints, CLI and MCP write tools, and the `backlog` preset remain unchanged until Session 6 implements the first work-item document type.
+`list-documents --preset backlog` and `list_documents` now switch to project-scoped work-item planning when work items exist for the requested project. The bounded read entrypoints still intentionally omit work-item sources until a dedicated planning read entrypoint is added.
 
 ## Commit Rules
 
 `commit-pending-changes` enforces the commit message format `docs(<project>/<scope>): <summary>`.
-Supported scopes are `session`, `verification`, `provider`, `decision`, `runbook`, `canonical`, `archive`, and `mixed`.
+Supported scopes are `session`, `verification`, `provider`, `decision`, `runbook`, `canonical`, `work-item`, `archive`, and `mixed`.
 
 The project slug is inferred from the pending managed-document paths, and the default flow only allows one project per commit.
 Use `archive` only when the pending changes are strictly archive moves for session notes and verification results.

@@ -3,10 +3,8 @@ import path from "node:path";
 import type { ValidationResult } from "../types/index.ts";
 
 import type {
-  WorkItemContextLocator,
   WorkItemDefinition,
   WorkItemDocumentLocator,
-  WorkItemEvidenceLocator,
   WorkItemOrigin,
   WorkItemPlanningState,
   WorkItemPlanningStateInput,

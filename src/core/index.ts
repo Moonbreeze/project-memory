@@ -19,6 +19,7 @@ export {
   resolveDocumentRelativePath,
   recordVerificationResult,
   upsertCanonicalDoc,
+  upsertWorkItem,
   upsertProviderNote,
 } from "./documents/index.ts";
 

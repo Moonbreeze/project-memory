@@ -9,6 +9,16 @@ import type {
   SessionNoteInput,
   VerificationResultInput,
 } from "../types/index.ts";
+import type {
+  WorkItemDefinition,
+  WorkItemDocumentStatus,
+  WorkItemInput,
+  WorkItemState,
+} from "../workItems/index.ts";
+import {
+  renderWorkItemBody,
+  validateWorkItemDefinition,
+} from "../workItems/index.ts";
 
 import { loadTemplate, renderList, renderTemplate } from "./content.ts";
 import {
@@ -184,6 +194,54 @@ export const createRunbook = (
   const relativePath = resolveDocumentRelativePath(
     metadata.project,
     "runbook",
+    metadata.topic,
+    metadata.date,
+  );
+  return writeDocument(context, relativePath, metadata, body);
+};
+
+/**
+ * Creates or updates one managed work-item document.
+ */
+export const upsertWorkItem = (
+  input: WorkItemInput,
+  context = createRepositoryContext(),
+): ParsedDocument => {
+  const workItemStatus: WorkItemDocumentStatus = input.status ?? "active";
+  const workItemState: WorkItemState = input.workItemState ?? "open";
+  const baseMetadata = defaultFrontmatter({
+    ...input,
+    status: workItemStatus,
+  });
+  const metadata: Frontmatter = {
+    ...baseMetadata,
+    work_item_state: workItemState,
+  };
+  const definition: WorkItemDefinition = {
+    metadata: {
+      project: metadata.project,
+      topic: metadata.topic,
+      date: metadata.date,
+      status: workItemStatus,
+      workItemState,
+    },
+    summary: input.summary.trim(),
+    outcome: input.outcome.trim(),
+    origin: input.origin,
+    dependencies: input.dependencies,
+    context: input.context,
+    verification: input.verification,
+    evidence: input.evidence,
+  };
+  const validation = validateWorkItemDefinition(definition);
+  if (!validation.ok) {
+    throw new Error(validation.errors.join("; "));
+  }
+
+  const body = renderWorkItemBody(loadTemplate(context, "work-item.md"), definition);
+  const relativePath = resolveDocumentRelativePath(
+    metadata.project,
+    "work-item",
     metadata.topic,
     metadata.date,
   );

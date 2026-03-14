@@ -52,6 +52,10 @@ export const buildFrontmatter = (frontmatter: Frontmatter): string => {
 
   lines.push(`source: ${frontmatter.source}`, `status: ${frontmatter.status}`);
 
+  if (frontmatter.work_item_state) {
+    lines.push(`work_item_state: ${frontmatter.work_item_state}`);
+  }
+
   lines.push("---", "");
   return lines.join("\n");
 };

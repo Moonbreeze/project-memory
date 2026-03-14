@@ -2,14 +2,14 @@
  * Work-item spec constants for the future Session 6 implementation.
  */
 export {
-  WorkItemContextLocatorType,
-  WorkItemDocumentStatus,
-  WorkItemEvidenceLocatorType,
-  WorkItemLocatorType,
-  WorkItemOriginKind,
-  WorkItemPlanningState,
-  WorkItemSectionHeading,
-  WorkItemState,
+  WorkItemContextLocatorType as WorkItemContextLocatorTypeValues,
+  WorkItemDocumentStatus as WorkItemDocumentStatusValues,
+  WorkItemEvidenceLocatorType as WorkItemEvidenceLocatorTypeValues,
+  WorkItemLocatorType as WorkItemLocatorTypeValues,
+  WorkItemOriginKind as WorkItemOriginKindValues,
+  WorkItemPlanningState as WorkItemPlanningStateValues,
+  WorkItemSectionHeading as WorkItemSectionHeadingValues,
+  WorkItemState as WorkItemStateValues,
 } from "./constants.ts";
 
 /**
@@ -24,6 +24,7 @@ export type {
   WorkItemContextLocator,
   WorkItemContextLocatorType,
   WorkItemDefinition,
+  WorkItemInput,
   WorkItemDocumentLocator,
   WorkItemDocumentOrigin,
   WorkItemDocumentStatus,
@@ -59,6 +60,11 @@ export {
  */
 export {
   deriveWorkItemPlanningState,
+  parseWorkItemDocument,
+  parseWorkItemLocatorString,
+  renderWorkItemBody,
   resolveWorkItemLocatorRelativePath,
+  serializeWorkItemLocator,
+  validateStoredWorkItemDocument,
   validateWorkItemDefinition,
-} from "./spec.ts";
+} from "./document.ts";

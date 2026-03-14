@@ -53,6 +53,11 @@ const documentPathPatterns: DocumentPathPattern[] = [
     pattern: docPattern("projects", `canonical-docs\\/${slugPattern}\\/${slugPattern}`),
   },
   {
+    type: "work-item",
+    archived: false,
+    pattern: docPattern("projects", `work-items\\/${yearPattern}\\/${datePattern}-${slugPattern}`),
+  },
+  {
     type: "session-note",
     archived: true,
     pattern: docPattern("archives", `session-log\\/${yearPattern}\\/${monthPattern}\\/${datePattern}-${slugPattern}`),
@@ -131,6 +136,8 @@ const relativePathForType = (
         ensureSlug(options.registryScope ?? "", "registryScope"),
         `${topicSlug}.md`,
       );
+    case "work-item":
+      return path.join("projects", project, "work-items", year, `${date}-${topicSlug}.md`);
   }
 };
 

@@ -19,6 +19,7 @@ import {
   resolveDocumentRelativePath,
   searchDocuments,
   upsertCanonicalDoc,
+  upsertWorkItem,
 } from "../../src/core/index.ts";
 import { createTestRepositoryContext, setupTestRepo } from "../fixtures/setupTestRepo.ts";
 
@@ -330,6 +331,234 @@ test("upsertCanonicalDoc writes a scoped document and keeps it visible to list, 
   assert.doesNotMatch(reread.body, /Store only finalized guidance here/);
 });
 
+test("upsertWorkItem writes a managed work item and exposes planning metadata through list, read, and search", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  const initial = upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "resume backlog slice",
+      date: "2026-03-11",
+      summary: "Implement the first resumable backlog slice.",
+      outcome: "Agents can track implementation work separately from decisions.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Session 6 implementation seed.",
+      },
+      dependencies: [],
+      context: [
+        {
+          type: "decision",
+          project: "acme-app",
+          date: "2026-03-10",
+          topic: "decision-and-work-item-separation",
+        },
+      ],
+      verification: ["Run the work-item integration test suite."],
+      evidence: [],
+    },
+    context,
+  );
+
+  assert.equal(
+    initial.relativePath,
+    resolveDocumentRelativePath("acme-app", "work-item", "resume backlog slice", "2026-03-11"),
+  );
+  assert.match(fs.readFileSync(initial.path, "utf8"), /work_item_state: open/);
+
+  const listed = listDocuments({ project: "acme-app", type: "work-item", includeBody: true }, context);
+  assert.equal(listed.documents.length, 1);
+  assert.equal(listed.documents[0]?.metadata.work_item_state, "open");
+  assert.equal(listed.documents[0]?.planningState, "ready");
+  assert.equal(listed.documents[0]?.unresolvedDependencyCount, 0);
+  assert.match(listed.documents[0]?.body ?? "", /Implement the first resumable backlog slice/);
+
+  const searched = searchDocuments({ project: "acme-app", type: "work-item", text: "implementation work separately" }, context);
+  assert.equal(searched.length, 1);
+
+  const reread = readDocument(context, initial.relativePath);
+  assert.equal(reread.metadata.work_item_state, "open");
+  assert.match(reread.body, /Session 6 implementation seed/);
+});
+
+test("readDocument rejects work-item documents without work_item_state metadata", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  const relativePath = "projects/acme-app/work-items/2026/2026-03-11-missing-state.md";
+
+  fs.mkdirSync(`${rootDir}/projects/acme-app/work-items/2026`, { recursive: true });
+  fs.writeFileSync(
+    `${rootDir}/${relativePath}`,
+    [
+      "---",
+      "date: 2026-03-11",
+      "project: acme-app",
+      "topic: missing-state",
+      "source: manual",
+      "status: active",
+      "---",
+      "",
+      "# Work Item",
+      "",
+      "## Summary",
+      "",
+      "Missing lifecycle metadata.",
+      "",
+      "## Outcome",
+      "",
+      "This document should fail validation.",
+      "",
+      "## Provenance",
+      "",
+      "- ad-hoc: Missing state coverage",
+      "",
+      "## Dependencies",
+      "",
+      "- none",
+      "",
+      "## Context",
+      "",
+      "- none",
+      "",
+      "## Verification",
+      "",
+      "- Confirm validation failure",
+      "",
+      "## Evidence",
+      "",
+      "- none",
+    ].join("\n"),
+    "utf8",
+  );
+
+  assert.throws(() => readDocument(context, relativePath), /work_item_state/);
+});
+
+test("listDocuments backlog preset uses project work items for planning and keeps decision fallback elsewhere", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "legacy backlog fallback",
+      date: "2026-03-09",
+      context: "Legacy decision-backed backlog.",
+      decision: "Keep the fallback readable outside project-scoped work planning.",
+      consequences: ["No-project backlog stays compatible"],
+    },
+    context,
+  );
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "ready slice",
+      date: "2026-03-13",
+      summary: "One immediately executable slice.",
+      outcome: "The backlog can surface ready work first.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Planning coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Confirm ready work appears first."],
+      evidence: [],
+    },
+    context,
+  );
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "in-progress slice",
+      date: "2026-03-12",
+      summary: "One slice already in progress.",
+      outcome: "The backlog still surfaces current execution work.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Planning coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Confirm in-progress work stays visible."],
+      evidence: [],
+      workItemState: "in_progress",
+    },
+    context,
+  );
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "blocked slice",
+      date: "2026-03-14",
+      summary: "One blocked downstream slice.",
+      outcome: "The backlog distinguishes blocked work from ready work.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Planning coverage.",
+      },
+      dependencies: [
+        {
+          type: "work-item",
+          project: "acme-app",
+          date: "2026-03-15",
+          topic: "missing-prerequisite",
+        },
+      ],
+      context: [],
+      verification: ["Confirm blocked work shows one unresolved dependency."],
+      evidence: [],
+    },
+    context,
+  );
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "done slice",
+      date: "2026-03-11",
+      summary: "One completed slice.",
+      outcome: "Completed work should not drive the active backlog.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Planning coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Confirm completed work is filtered out."],
+      evidence: [],
+      workItemState: "done",
+    },
+    context,
+  );
+
+  const projectBacklog = listDocuments({ project: "acme-app", preset: "backlog" }, context);
+  assert.deepEqual(
+    projectBacklog.documents.map((document) => {
+      return [document.metadata.topic, document.planningState, document.unresolvedDependencyCount];
+    }),
+    [
+      ["ready-slice", "ready", 0],
+      ["in-progress-slice", "in_progress", 0],
+      ["blocked-slice", "blocked", 1],
+    ],
+  );
+  assert.equal(projectBacklog.appliedQuery.type, "work-item");
+  assert.equal(projectBacklog.appliedQuery.status, "active");
+  assert.equal(projectBacklog.appliedQuery.order, "desc");
+
+  const fallbackBacklog = listDocuments({ preset: "backlog" }, context);
+  assert.equal(fallbackBacklog.appliedQuery.type, "decision");
+  assert.deepEqual(
+    fallbackBacklog.documents.map((document) => document.metadata.topic),
+    ["legacy-backlog-fallback"],
+  );
+});
+
 test("readDocument rejects canonical docs without registry_scope metadata", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
@@ -520,6 +749,44 @@ test("commitPendingChanges accepts canonical scope for canonical docs", () => {
   assert.equal(result.message, "docs(acme-app/canonical): resume policy baseline");
   assert.equal(result.committedPaths.length, 1);
   assert.match(log.stdout, /docs\(acme-app\/canonical\): resume policy baseline/);
+});
+
+test("commitPendingChanges accepts work-item scope for work-item docs", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "commit work item",
+      date: "2026-03-11",
+      summary: "Prepare work-item commit coverage.",
+      outcome: "Work-item docs get a dedicated commit scope.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Commit scope coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Create one managed work item."],
+      evidence: [],
+    },
+    context,
+  );
+
+  const result = commitPendingChanges(
+    { message: "docs(acme-app/work-item): work-item planning baseline" },
+    context,
+  );
+  const log = spawnSync("git", ["log", "--oneline", "-1"], { cwd: rootDir, encoding: "utf8" });
+
+  assert.equal(result.message, "docs(acme-app/work-item): work-item planning baseline");
+  assert.equal(result.committedPaths.length, 1);
+  assert.match(log.stdout, /docs\(acme-app\/work-item\): work-item planning baseline/);
 });
 
 test("commitPendingChanges rejects pending managed changes from multiple projects", () => {
@@ -719,7 +986,11 @@ test("readColdStart returns a bounded project snapshot with fixed source orderin
       "older-policy",
     ],
   );
-  assert(result.notes.includes("Work-item sources are intentionally omitted until work-item support exists."));
+  assert(
+    result.notes.includes(
+      "Work-item sources remain intentionally omitted from bounded read entrypoints until dedicated planning reads are added.",
+    ),
+  );
 });
 
 test("readTopicEntry prefers exact canonical and exact-topic supporting documents", () => {

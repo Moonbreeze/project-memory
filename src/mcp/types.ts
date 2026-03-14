@@ -5,6 +5,10 @@ import {
   isLiteralMember,
   isListDocumentsPreset,
   isListDocumentsSortField,
+  isWorkItemDocumentStatus,
+  isWorkItemOriginKind,
+  isWorkItemState,
+  parseWorkItemLocatorString,
   isSortOrder,
 } from "../core/index.ts";
 import type {
@@ -26,6 +30,11 @@ import type {
   SortOrder,
   TopicEntryInput,
   VerificationResultInput,
+  WorkItemContextLocator,
+  WorkItemEvidenceLocator,
+  WorkItemInput,
+  WorkItemOrigin,
+  WorkItemRecordLocator,
 } from "../core/index.ts";
 
 /**
@@ -349,6 +358,36 @@ const readOptionalDocumentType = (value: unknown): DocumentType | undefined => {
 };
 
 /**
+ * Reads an optional validated work-item document status from unknown input.
+ */
+const readOptionalWorkItemDocumentStatus = (value: unknown) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isWorkItemDocumentStatus(value)) {
+    throw new Error("Invalid work-item document status");
+  }
+
+  return value;
+};
+
+/**
+ * Reads an optional validated work-item lifecycle state from unknown input.
+ */
+const readOptionalWorkItemState = (value: unknown) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isWorkItemState(value)) {
+    throw new Error("Invalid work-item state");
+  }
+
+  return value;
+};
+
+/**
  * Reads an optional validated document-status array from unknown input.
  */
 const readOptionalDocumentStatusArray = (
@@ -437,6 +476,101 @@ const readParams = (value: unknown): Record<string, unknown> => {
   }
 
   return value;
+};
+
+/**
+ * Reads one optional string-array field or returns an empty array when omitted.
+ */
+const readOptionalStringArray = (value: unknown, fieldName: string): string[] => {
+  if (value === undefined) {
+    return [];
+  }
+
+  return readStringArray(value, fieldName);
+};
+
+/**
+ * Parses one typed origin payload for a work item.
+ */
+const readWorkItemOrigin = (params: Record<string, unknown>): WorkItemOrigin => {
+  const originKind = readRequiredString(params.originKind, "originKind");
+  if (!isWorkItemOriginKind(originKind)) {
+    throw new Error("Invalid work-item origin kind");
+  }
+
+  if (originKind === "ad-hoc") {
+    return {
+      kind: "ad-hoc" as const,
+      note: readRequiredString(params.originNote, "originNote"),
+    };
+  }
+
+  const originLocator = parseWorkItemLocatorString(
+    readRequiredString(params.originLocator, "originLocator"),
+  );
+  if (originLocator.type !== originKind) {
+    throw new Error(`originLocator must use locator type ${originKind}`);
+  }
+
+  if (originLocator.type === "decision") {
+    return {
+      kind: "decision",
+      locator: originLocator,
+    };
+  }
+
+  return {
+    kind: "session-note",
+    locator: originLocator,
+  };
+};
+
+/**
+ * Parses one locator-string array with allowed work-item locator kinds.
+ */
+const readWorkItemDependencyList = (
+  value: unknown,
+): WorkItemRecordLocator[] => {
+  return readOptionalStringArray(value, "dependencies").map((entry) => {
+    const locator = parseWorkItemLocatorString(entry);
+    if (locator.type !== "work-item") {
+      throw new Error(`Invalid dependencies locator: ${entry}`);
+    }
+
+    return locator;
+  });
+};
+
+/**
+ * Parses one context locator-string array for work-item documents.
+ */
+const readWorkItemContextList = (value: unknown): WorkItemContextLocator[] => {
+  return readOptionalStringArray(value, "context").map((entry) => {
+    const locator = parseWorkItemLocatorString(entry);
+    if (
+      locator.type !== "decision"
+      && locator.type !== "canonical-doc"
+      && locator.type !== "session-note"
+    ) {
+      throw new Error(`Invalid context locator: ${entry}`);
+    }
+
+    return locator;
+  });
+};
+
+/**
+ * Parses one evidence locator-string array for work-item documents.
+ */
+const readWorkItemEvidenceList = (value: unknown): WorkItemEvidenceLocator[] => {
+  return readOptionalStringArray(value, "evidence").map((entry) => {
+    const locator = parseWorkItemLocatorString(entry);
+    if (locator.type !== "verification-result" && locator.type !== "session-note") {
+      throw new Error(`Invalid evidence locator: ${entry}`);
+    }
+
+    return locator;
+  });
 };
 
 /**
@@ -676,6 +810,29 @@ export const parseCanonicalDocInput = (value: unknown): CanonicalDocInput => {
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),
+  };
+};
+
+/**
+ * Parses params for `upsert_work_item`.
+ */
+export const parseWorkItemInput = (value: unknown): WorkItemInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    topic: readRequiredString(params.topic, "topic"),
+    summary: readRequiredString(params.summary, "summary"),
+    outcome: readRequiredString(params.outcome, "outcome"),
+    origin: readWorkItemOrigin(params),
+    dependencies: readWorkItemDependencyList(params.dependencies),
+    context: readWorkItemContextList(params.context),
+    verification: readStringArray(params.verification, "verification"),
+    evidence: readWorkItemEvidenceList(params.evidence),
+    date: readOptionalString(params.date, "date"),
+    source: readOptionalDocumentSource(params.source),
+    status: readOptionalWorkItemDocumentStatus(params.status),
+    workItemState: readOptionalWorkItemState(params.workItemState),
   };
 };
 
