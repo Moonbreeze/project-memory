@@ -287,6 +287,9 @@ test("MCP server completes initialize and tools/list handshake", () => {
     .filter((name): name is string => typeof name === "string");
 
   assert(toolNames.includes("list_documents"));
+  assert(toolNames.includes("read_cold_start"));
+  assert(toolNames.includes("read_topic_entry"));
+  assert(toolNames.includes("read_rationale_entry"));
   assert(toolNames.includes("append_session_note"));
   assert(toolNames.includes("commit_pending_changes"));
 });
@@ -626,6 +629,74 @@ test("MCP server rejects raw dump content for create_runbook", () => {
 
   assert.equal(toolResult.isError, true);
   assert.match(toolResult.content[0]?.text ?? "", /raw command output or an unreviewed dump/);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP server exposes bounded read entrypoints", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  callTool("bounded-runbook", "create_runbook", {
+    project: "acme-app",
+    topic: "architecture overview",
+    date: "2026-03-11",
+    purpose: "Describe the current architecture.",
+    procedure: ["Read the overview"],
+    verification: ["Confirm the overview is current"],
+  });
+  callTool("bounded-canonical", "upsert_canonical_doc", {
+    project: "acme-app",
+    topic: "resume policy",
+    registryScope: "resume-flow",
+    date: "2026-03-11",
+    summary: "Canonical resume guidance.",
+    guidance: ["Prefer resumable jobs"],
+    references: ["decision: resume-architecture", "runbook: architecture-overview"],
+  });
+  callTool("bounded-decision", "create_decision", {
+    project: "acme-app",
+    topic: "resume-architecture",
+    date: "2026-03-12",
+    context: "Need rationale coverage.",
+    decision: "Keep resume architecture explicit.",
+    consequences: ["Bounded reads can follow the rationale source"],
+  });
+
+  const coldStartResponse = callTool("bounded-cold", "read_cold_start", {
+    project: "acme-app",
+  });
+  const coldStartResult = readToolResult(coldStartResponse);
+  if (!isRecord(coldStartResult.structuredContent) || !Array.isArray(coldStartResult.structuredContent.documents)) {
+    throw new Error("Expected read_cold_start payload");
+  }
+
+  assert.equal(coldStartResult.structuredContent.entrypoint, "cold-start");
+  assert.equal(coldStartResult.structuredContent.documents.length, 3);
+
+  const topicResponse = callTool("bounded-topic", "read_topic_entry", {
+    project: "acme-app",
+    topic: "resume policy",
+  });
+  const topicResult = readToolResult(topicResponse);
+  if (!isRecord(topicResult.structuredContent) || !Array.isArray(topicResult.structuredContent.documents)) {
+    throw new Error("Expected read_topic_entry payload");
+  }
+
+  assert.equal(topicResult.structuredContent.entrypoint, "topic-entry");
+  assert.equal(topicResult.structuredContent.topic, "resume-policy");
+
+  const rationaleResponse = callTool("bounded-rationale", "read_rationale_entry", {
+    project: "acme-app",
+    topic: "resume policy",
+  });
+  const rationaleResult = readToolResult(rationaleResponse);
+  if (!isRecord(rationaleResult.structuredContent) || !Array.isArray(rationaleResult.structuredContent.documents)) {
+    throw new Error("Expected read_rationale_entry payload");
+  }
+
+  assert.equal(rationaleResult.structuredContent.entrypoint, "rationale-entry");
+  assert.equal(rationaleResult.structuredContent.documents.length, 3);
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

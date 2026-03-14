@@ -3,6 +3,9 @@ import path from "node:path";
 import { isDocumentType } from "../types/index.ts";
 import type { DocumentType, ManagedDocumentPathInfo } from "../types/index.ts";
 
+/**
+ * One path-pattern rule used to classify managed document paths.
+ */
 type DocumentPathPattern = {
   type: DocumentType;
   archived: boolean;

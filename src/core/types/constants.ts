@@ -26,6 +26,25 @@ export const DocumentStatus = ["draft", "active", "superseded", "archived"] as c
 export const ListDocumentsPreset = ["backlog"] as const;
 
 /**
+ * Supported bounded-read entrypoints.
+ */
+export const BoundedReadEntrypoint = [
+  "cold-start",
+  "topic-entry",
+  "rationale-entry",
+] as const;
+
+/**
+ * Supported bounded-read selection strategies.
+ */
+export const BoundedReadStrategy = [
+  "path-ordered",
+  "topic-exact",
+  "topic-contains",
+  "reference-follow",
+] as const;
+
+/**
  * Supported list-documents sort fields.
  */
 export const ListDocumentsSortField = ["date", "path"] as const;

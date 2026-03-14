@@ -7,6 +7,9 @@ import { createRunbookCommand } from "./createRunbook.ts";
 import { installCommand } from "./install.ts";
 import { listDocumentsCommand } from "./listDocuments.ts";
 import { readDocumentCommand } from "./readDocument.ts";
+import { readColdStartCommand } from "./readColdStart.ts";
+import { readRationaleEntryCommand } from "./readRationaleEntry.ts";
+import { readTopicEntryCommand } from "./readTopicEntry.ts";
 import { recordVerificationResultCommand } from "./recordVerificationResult.ts";
 import { searchDocumentsCommand } from "./searchDocuments.ts";
 import { upsertCanonicalDocCommand } from "./upsertCanonicalDoc.ts";
@@ -29,6 +32,9 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "list-documents": listDocumentsCommand,
   "search-documents": searchDocumentsCommand,
   "read-document": readDocumentCommand,
+  "read-cold-start": readColdStartCommand,
+  "read-topic-entry": readTopicEntryCommand,
+  "read-rationale-entry": readRationaleEntryCommand,
   "commit-pending-changes": commitPendingChangesCommand,
   "archive-document": archiveDocumentCommand,
 };

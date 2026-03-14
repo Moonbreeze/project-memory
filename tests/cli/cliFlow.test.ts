@@ -604,6 +604,104 @@ test("CLI rejects reading unmanaged document paths", async () => {
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("CLI exposes bounded read entrypoints", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  await runCli(
+    [
+      "create-runbook",
+      "--project",
+      "acme-app",
+      "--topic",
+      "architecture overview",
+      "--purpose",
+      "Describe the current architecture.",
+      "--procedure",
+      "Read the overview",
+      "--verification",
+      "Confirm the overview is current",
+      "--date",
+      "2026-03-11",
+    ],
+  );
+  await runCli(
+    [
+      "upsert-canonical-doc",
+      "--project",
+      "acme-app",
+      "--topic",
+      "resume policy",
+      "--registry-scope",
+      "resume-flow",
+      "--summary",
+      "Canonical resume guidance.",
+      "--guidance",
+      "prefer resumable jobs",
+      "--references",
+      "decision: resume-architecture|runbook: architecture-overview",
+      "--date",
+      "2026-03-11",
+    ],
+  );
+  await runCli(
+    [
+      "create-decision",
+      "--project",
+      "acme-app",
+      "--topic",
+      "resume-architecture",
+      "--context",
+      "Need rationale coverage.",
+      "--decision",
+      "Keep resume architecture explicit.",
+      "--consequences",
+      "bounded reads can follow a direct rationale source",
+      "--date",
+      "2026-03-12",
+    ],
+  );
+
+  const coldStartCapture = createCapturedIo();
+  await runCli(["read-cold-start", "--project", "acme-app"], coldStartCapture.io);
+  const coldStartResult = parseLastJson(coldStartCapture.captured.stdout);
+  if (!isRecord(coldStartResult) || !Array.isArray(coldStartResult.documents)) {
+    throw new Error("Unexpected read-cold-start result shape");
+  }
+
+  assert.equal(coldStartResult.entrypoint, "cold-start");
+  assert.equal(coldStartResult.documents.length, 3);
+
+  const topicCapture = createCapturedIo();
+  await runCli(
+    ["read-topic-entry", "--project", "acme-app", "--topic", "resume policy"],
+    topicCapture.io,
+  );
+  const topicResult = parseLastJson(topicCapture.captured.stdout);
+  if (!isRecord(topicResult) || !Array.isArray(topicResult.documents)) {
+    throw new Error("Unexpected read-topic-entry result shape");
+  }
+
+  assert.equal(topicResult.entrypoint, "topic-entry");
+  assert.equal(topicResult.topic, "resume-policy");
+  assert.equal(topicResult.documents.length, 1);
+
+  const rationaleCapture = createCapturedIo();
+  await runCli(
+    ["read-rationale-entry", "--project", "acme-app", "--topic", "resume policy"],
+    rationaleCapture.io,
+  );
+  const rationaleResult = parseLastJson(rationaleCapture.captured.stdout);
+  if (!isRecord(rationaleResult) || !Array.isArray(rationaleResult.documents)) {
+    throw new Error("Unexpected read-rationale-entry result shape");
+  }
+
+  assert.equal(rationaleResult.entrypoint, "rationale-entry");
+  assert.equal(rationaleResult.documents.length, 3);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("CLI rejects commit messages that do not match the enforced format", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;

@@ -7,6 +7,7 @@ import {
   isSortOrder,
 } from "../core/index.ts";
 import type {
+  ColdStartInput,
   CanonicalDocInput,
   CommitPendingChangesInput,
   DecisionInput,
@@ -17,10 +18,12 @@ import type {
   ListDocumentsQuery,
   ListDocumentsSortField,
   ProviderNoteInput,
+  RationaleEntryInput,
   RunbookInput,
   SearchQuery,
   SessionNoteInput,
   SortOrder,
+  TopicEntryInput,
   VerificationResultInput,
 } from "../core/index.ts";
 
@@ -714,6 +717,41 @@ export const parseSearchDocumentsQuery = (value: unknown): SearchQuery => {
 export const parseReadDocumentPath = (value: unknown): string => {
   const params = readParams(value);
   return readRequiredString(params.path, "path");
+};
+
+/**
+ * Parses params for `read_cold_start`.
+ */
+export const parseColdStartInput = (value: unknown): ColdStartInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+  };
+};
+
+/**
+ * Parses params for `read_topic_entry`.
+ */
+export const parseTopicEntryInput = (value: unknown): TopicEntryInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    topic: readRequiredString(params.topic, "topic"),
+  };
+};
+
+/**
+ * Parses params for `read_rationale_entry`.
+ */
+export const parseRationaleEntryInput = (value: unknown): RationaleEntryInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    topic: readRequiredString(params.topic, "topic"),
+  };
 };
 
 /**

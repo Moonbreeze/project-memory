@@ -28,6 +28,15 @@ export {
 export { listDocuments, searchDocuments } from "./search/index.ts";
 
 /**
+ * Core bounded read entrypoints.
+ */
+export {
+  readColdStart,
+  readRationaleEntry,
+  readTopicEntry,
+} from "./boundedReads/index.ts";
+
+/**
  * Core archive operations.
  */
 export { archiveDocument, resolveArchiveRelativePath } from "./archive/index.ts";

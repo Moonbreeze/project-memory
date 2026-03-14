@@ -20,6 +20,9 @@ type EligibleManagedPath = ManagedDocumentPathInfo & {
   relativePath: string;
 };
 
+/**
+ * Inferred managed-doc commit target derived from the staged path set.
+ */
 type CommitTarget = {
   project: string;
   scope: CommitScope;

@@ -8,8 +8,12 @@ import {
   archiveDocument,
   commitPendingChanges,
   createDecision,
+  createRunbook,
   listDocuments,
   readDocument,
+  readColdStart,
+  readRationaleEntry,
+  readTopicEntry,
   recordVerificationResult,
   resolveArchiveRelativePath,
   resolveDocumentRelativePath,
@@ -553,5 +557,365 @@ test("commitPendingChanges rejects pending managed changes from multiple project
   assert.throws(
     () => commitPendingChanges({ message: "docs(acme-app/mixed): invalid multi-project batch" }, context),
     /multiple projects|one project at a time|special-case path/,
+  );
+});
+
+test("readColdStart returns a bounded project snapshot with fixed source ordering", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  createRunbook(
+    {
+      project: "acme-app",
+      topic: "architecture overview",
+      date: "2026-03-11",
+      purpose: "Describe the architecture surface.",
+      procedure: ["Read the architecture summary"],
+      verification: ["Confirm the summary is current"],
+    },
+    context,
+  );
+  createRunbook(
+    {
+      project: "acme-app",
+      topic: "deployment flow",
+      date: "2026-03-11",
+      purpose: "Describe deployment flow.",
+      procedure: ["Read the deployment steps"],
+      verification: ["Confirm the steps work"],
+    },
+    context,
+  );
+  createRunbook(
+    {
+      project: "acme-app",
+      topic: "ignored extra runbook",
+      date: "2026-03-11",
+      purpose: "Should fall outside the cold-start cap.",
+      procedure: ["Ignore this one"],
+      verification: ["Confirm the limit"],
+    },
+    context,
+  );
+
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "api policy",
+      registryScope: "api",
+      date: "2026-03-11",
+      summary: "API policy.",
+      guidance: ["Keep contracts stable"],
+      references: ["runbook: architecture-overview"],
+    },
+    context,
+  );
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "deploy policy",
+      registryScope: "delivery",
+      date: "2026-03-11",
+      summary: "Delivery policy.",
+      guidance: ["Keep releases predictable"],
+      references: ["runbook: deployment-flow"],
+    },
+    context,
+  );
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Resume policy.",
+      guidance: ["Prefer resumable flows"],
+      references: ["decision: resume-policy"],
+    },
+    context,
+  );
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "extra policy",
+      registryScope: "zzz-extra",
+      date: "2026-03-11",
+      summary: "Should fall outside the cold-start cap.",
+      guidance: ["Ignore this one"],
+      references: ["decision: older-policy"],
+    },
+    context,
+  );
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "older policy",
+      date: "2026-03-10",
+      context: "Need older coverage.",
+      decision: "Keep the older decision available.",
+      consequences: ["Older context remains readable"],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      date: "2026-03-11",
+      context: "Need mid-range coverage.",
+      decision: "Keep resume behavior explicit.",
+      consequences: ["Resume policy stays current"],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "cache policy",
+      date: "2026-03-12",
+      context: "Need newer coverage.",
+      decision: "Keep caches bounded.",
+      consequences: ["Current decision stays visible"],
+      status: "draft",
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "ignored extra decision",
+      date: "2026-03-13",
+      context: "Should not appear because of the hard cap.",
+      decision: "This decision exceeds the cold-start limit.",
+      consequences: ["Ignored for cold start"],
+      status: "superseded",
+    },
+    context,
+  );
+
+  const result = readColdStart({ project: "acme-app" }, context);
+
+  assert.equal(result.entrypoint, "cold-start");
+  assert.equal(result.documents.length, 8);
+  assert.deepEqual(
+    result.stages.map((stage) => [stage.name, stage.relativePaths.length]),
+    [
+      ["runbook-bootstrap", 2],
+      ["canonical-current-truth", 3],
+      ["decision-recent", 3],
+    ],
+  );
+  assert.deepEqual(
+    result.documents.map((document) => document.metadata.topic),
+    [
+      "architecture-overview",
+      "deployment-flow",
+      "api-policy",
+      "deploy-policy",
+      "resume-policy",
+      "cache-policy",
+      "resume-policy",
+      "older-policy",
+    ],
+  );
+  assert(result.notes.includes("Work-item sources are intentionally omitted until work-item support exists."));
+});
+
+test("readTopicEntry prefers exact canonical and exact-topic supporting documents", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Canonical resume guidance.",
+      guidance: ["Prefer resumable jobs"],
+      references: ["decision: resume-architecture"],
+    },
+    context,
+  );
+  createRunbook(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      date: "2026-03-11",
+      purpose: "Explain the resume process.",
+      procedure: ["Review the process"],
+      verification: ["Check the process"],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      date: "2026-03-12",
+      context: "Need current topic context.",
+      decision: "Keep resume policy explicit.",
+      consequences: ["Agents can read one bounded topic packet"],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      date: "2026-03-13",
+      summary: "Executed the resume flow update.",
+      actions: ["Updated the resume handler"],
+      followUp: ["Add more verification"],
+    },
+    context,
+  );
+  recordVerificationResult(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      date: "2026-03-13",
+      scope: "Resume policy",
+      steps: ["Run resume scenario"],
+      result: "Pass",
+    },
+    context,
+  );
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy fallback",
+      registryScope: "fallback-scope",
+      date: "2026-03-11",
+      summary: "Should not be used because exact matches exist.",
+      guidance: ["Ignore fallback matches"],
+      references: [],
+    },
+    context,
+  );
+
+  const result = readTopicEntry({ project: "acme-app", topic: "resume policy" }, context);
+
+  assert.equal(result.entrypoint, "topic-entry");
+  assert.equal(result.topic, "resume-policy");
+  assert.equal(result.documents.length, 5);
+  assert.deepEqual(
+    result.stages.map((stage) => stage.name),
+    [
+      "canonical-exact",
+      "runbook-exact",
+      "provider-exact",
+      "decision-exact",
+      "session-exact",
+      "verification-exact",
+    ],
+  );
+  assert.deepEqual(
+    result.documents.map((document) => document.metadata.topic),
+    [
+      "resume-policy",
+      "resume-policy",
+      "resume-policy",
+      "resume-policy",
+      "resume-policy",
+    ],
+  );
+  assert.equal(result.stages.some((stage) => stage.name === "canonical-fallback"), false);
+});
+
+test("readTopicEntry falls back to bounded contains matches when exact matches are absent", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy fallback",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Fallback canonical guidance.",
+      guidance: ["Use bounded fallback"],
+      references: [],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "resume policy rollout",
+      date: "2026-03-12",
+      context: "Need a fallback decision.",
+      decision: "Use filename contains fallback.",
+      consequences: ["Topic reads stay bounded"],
+    },
+    context,
+  );
+
+  const result = readTopicEntry({ project: "acme-app", topic: "resume policy" }, context);
+
+  assert.equal(result.documents.length, 2);
+  assert(result.notes.some((note) => note.includes("No exact topic matches were found")));
+  assert.deepEqual(
+    result.stages
+      .filter((stage) => stage.relativePaths.length > 0)
+      .map((stage) => stage.name),
+    ["canonical-fallback", "decision-fallback"],
+  );
+});
+
+test("readRationaleEntry follows canonical references before generic fallback", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Canonical resume rationale.",
+      guidance: ["Keep authority bounded"],
+      references: ["decision: resume-architecture", "runbook: resume-ops"],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "resume-architecture",
+      date: "2026-03-12",
+      context: "Need the governing architecture decision.",
+      decision: "Use explicit resume boundaries.",
+      consequences: ["Current rationale stays explicit"],
+      status: "superseded",
+    },
+    context,
+  );
+  createRunbook(
+    {
+      project: "acme-app",
+      topic: "resume-ops",
+      date: "2026-03-11",
+      purpose: "Explain resume operations.",
+      procedure: ["Read the operational steps"],
+      verification: ["Run the checks"],
+    },
+    context,
+  );
+
+  const result = readRationaleEntry({ project: "acme-app", topic: "resume policy" }, context);
+
+  assert.equal(result.entrypoint, "rationale-entry");
+  assert.equal(result.documents.length, 3);
+  assert.deepEqual(
+    result.stages
+      .filter((stage) => stage.relativePaths.length > 0)
+      .map((stage) => stage.name),
+    ["canonical-exact", "decision-reference", "runbook-reference"],
+  );
+  assert.deepEqual(
+    result.documents.map((document) => document.metadata.topic),
+    ["resume-policy", "resume-architecture", "resume-ops"],
   );
 });

@@ -19,6 +19,9 @@ import {
 } from "./pathLayout.ts";
 import { writeDocument } from "./storage.ts";
 
+/**
+ * Shared frontmatter inputs accepted by document creation helpers.
+ */
 type DefaultFrontmatterInput = {
   project: string;
   topic: string;

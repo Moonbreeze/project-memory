@@ -2,6 +2,8 @@
  * Core domain constants.
  */
 export {
+  BoundedReadEntrypoint as BoundedReadEntrypointValues,
+  BoundedReadStrategy as BoundedReadStrategyValues,
   DocumentSource as DocumentSourceValues,
   DocumentStatus as DocumentStatusValues,
   DocumentType as DocumentTypeValues,
@@ -16,9 +18,14 @@ export {
  * Core domain types and type guards.
  */
 export type {
+  BoundedReadEntrypoint,
+  BoundedReadResult,
+  BoundedReadStage,
+  BoundedReadStrategy,
   AppliedListDocumentsQuery,
   ArchiveDocumentInput,
   CanonicalDocInput,
+  ColdStartInput,
   CommitPendingChangesInput,
   CreateDocumentInput,
   DecisionInput,
@@ -35,6 +42,7 @@ export type {
   ManagedDocumentPathInfo,
   ParsedDocument,
   ProviderNoteInput,
+  RationaleEntryInput,
   RepositoryContext,
   RepositoryContextOptions,
   RunbookInput,
@@ -42,6 +50,7 @@ export type {
   SearchResult,
   SessionNoteInput,
   SortOrder,
+  TopicEntryInput,
   ValidationResult,
   VerificationResultInput,
 } from "./types.ts";
@@ -50,6 +59,8 @@ export type {
  * Core type guards.
  */
 export {
+  isBoundedReadEntrypoint,
+  isBoundedReadStrategy,
   isDocumentSource,
   isDocumentStatus,
   isDocumentType,

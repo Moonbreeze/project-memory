@@ -1,5 +1,8 @@
 import { listDocumentsTool } from "../listDocuments.ts";
+import { readColdStartTool } from "../readColdStart.ts";
 import { readDocumentTool } from "../readDocument.ts";
+import { readRationaleEntryTool } from "../readRationaleEntry.ts";
+import { readTopicEntryTool } from "../readTopicEntry.ts";
 import { searchDocumentsTool } from "../searchDocuments.ts";
 
 import {
@@ -106,5 +109,58 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
       ["path"],
     ),
     handler: readDocumentTool,
+  },
+  read_cold_start: {
+    name: "read_cold_start",
+    description:
+      "Read a bounded cold-start snapshot for one project using only a fixed runbook, canonical-doc, and decision source set.",
+    inputSchema: createObjectSchema(
+      {
+        project: {
+          type: "string",
+          description: "Target project slug.",
+        },
+      },
+      ["project"],
+    ),
+    handler: readColdStartTool,
+  },
+  read_topic_entry: {
+    name: "read_topic_entry",
+    description:
+      "Read a bounded topic-centered package for one project/topic, prioritizing canonical docs and exact topic matches before filename fallback.",
+    inputSchema: createObjectSchema(
+      {
+        project: {
+          type: "string",
+          description: "Target project slug.",
+        },
+        topic: {
+          type: "string",
+          description: "Requested topic label or slug.",
+        },
+      },
+      ["project", "topic"],
+    ),
+    handler: readTopicEntryTool,
+  },
+  read_rationale_entry: {
+    name: "read_rationale_entry",
+    description:
+      "Read a bounded rationale package for one project/topic using canonical docs, referenced or exact decisions, runbooks, and fresh supporting records.",
+    inputSchema: createObjectSchema(
+      {
+        project: {
+          type: "string",
+          description: "Target project slug.",
+        },
+        topic: {
+          type: "string",
+          description: "Requested topic label or slug.",
+        },
+      },
+      ["project", "topic"],
+    ),
+    handler: readRationaleEntryTool,
   },
 };

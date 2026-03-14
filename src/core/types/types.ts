@@ -1,4 +1,6 @@
 import {
+  BoundedReadEntrypoint as BoundedReadEntrypointValues,
+  BoundedReadStrategy as BoundedReadStrategyValues,
   DocumentSource as DocumentSourceValues,
   DocumentStatus as DocumentStatusValues,
   DocumentType as DocumentTypeValues,
@@ -12,6 +14,16 @@ import {
  * A supported project-memory document kind.
  */
 export type DocumentType = typeof DocumentTypeValues[number];
+
+/**
+ * A supported bounded-read entrypoint.
+ */
+export type BoundedReadEntrypoint = typeof BoundedReadEntrypointValues[number];
+
+/**
+ * A supported bounded-read selection strategy.
+ */
+export type BoundedReadStrategy = typeof BoundedReadStrategyValues[number];
 
 /**
  * A supported project-memory document source.
@@ -214,6 +226,34 @@ export type CanonicalDocInput = CreateDocumentInput & {
 };
 
 /**
+ * Input required to read one bounded cold-start snapshot.
+ */
+export type ColdStartInput = {
+  /** Target project slug. */
+  project: string;
+};
+
+/**
+ * Input required to read one bounded topic entry.
+ */
+export type TopicEntryInput = {
+  /** Target project slug. */
+  project: string;
+  /** Requested topic label or slug. */
+  topic: string;
+};
+
+/**
+ * Input required to read one bounded rationale entry.
+ */
+export type RationaleEntryInput = {
+  /** Target project slug. */
+  project: string;
+  /** Requested topic label or slug. */
+  topic: string;
+};
+
+/**
  * Query used for listing or searching active documents.
  */
 export type SearchQuery = {
@@ -302,6 +342,47 @@ export type SearchResult = ParsedDocument & {
 };
 
 /**
+ * One bounded-read selection stage and the documents it returned.
+ */
+export type BoundedReadStage = {
+  /** Stable stage label describing the selection step. */
+  name: string;
+  /** Document kind targeted by this stage. */
+  documentType: DocumentType;
+  /**
+   * Reporting-only selection label for explainability.
+   *
+   * The actual stage behavior is determined upstream by how candidate paths are
+   * constructed before the stage is read.
+   */
+  strategy: BoundedReadStrategy;
+  /** Hard document limit for this stage. */
+  limit: number;
+  /** Short human-readable explanation of the stage purpose. */
+  description: string;
+  /** Repository-relative paths returned by this stage in read order. */
+  relativePaths: string[];
+};
+
+/**
+ * Structured result for one bounded read entrypoint.
+ */
+export type BoundedReadResult = {
+  /** Entrypoint that produced this bounded read package. */
+  entrypoint: BoundedReadEntrypoint;
+  /** Target project slug. */
+  project: string;
+  /** Optional requested topic slug. */
+  topic?: string;
+  /** Bounded documents returned in the final read order. */
+  documents: ParsedDocument[];
+  /** Selection stages attempted by the entrypoint. */
+  stages: BoundedReadStage[];
+  /** Notes describing fallbacks or intentional omissions. */
+  notes: string[];
+};
+
+/**
  * Input used to commit staged project-memory changes.
  */
 export type CommitPendingChangesInput = {
@@ -347,6 +428,24 @@ const isLiteralMember = <T extends readonly string[]>(
  */
 export const isDocumentType = (value: unknown): value is DocumentType => {
   return isLiteralMember(DocumentTypeValues, value);
+};
+
+/**
+ * Returns `true` when `value` is a supported bounded-read entrypoint.
+ */
+export const isBoundedReadEntrypoint = (
+  value: unknown,
+): value is BoundedReadEntrypoint => {
+  return isLiteralMember(BoundedReadEntrypointValues, value);
+};
+
+/**
+ * Returns `true` when `value` is a supported bounded-read selection strategy.
+ */
+export const isBoundedReadStrategy = (
+  value: unknown,
+): value is BoundedReadStrategy => {
+  return isLiteralMember(BoundedReadStrategyValues, value);
 };
 
 /**

@@ -7,6 +7,9 @@ import { createRepositoryContext } from "../../core/index.ts";
 import { printJson, requireFlag } from "../commandSupport.ts";
 import type { CliCommandHandler } from "../types.ts";
 
+/**
+ * Structured result returned by the install command.
+ */
 type InstallResult = {
   /** Absolute external memory repository root. */
   memoryRootDir: string;
@@ -39,6 +42,9 @@ type InstallResult = {
 const codexServerSectionHeader = "[mcp_servers.project-memory]";
 const codexEnvSectionHeader = "[mcp_servers.project-memory.env]";
 
+/**
+ * Minimal Claude MCP server configuration block stored in `.claude.json`.
+ */
 type ClaudeMcpServerConfig = {
   type: "stdio";
   command: string;
