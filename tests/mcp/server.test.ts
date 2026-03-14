@@ -805,6 +805,22 @@ test("MCP server exposes bounded read entrypoints", () => {
     decision: "Keep resume architecture explicit.",
     consequences: ["Bounded reads can follow the rationale source"],
   });
+  callTool("bounded-evidence-session", "append_session_note", {
+    project: "acme-app",
+    topic: "resume evidence",
+    date: "2026-03-13",
+    summary: "Captured planning evidence in a session note.",
+    actions: ["Saved explicit evidence note"],
+    followUp: ["Read it through planning topic entry"],
+  });
+  callTool("bounded-evidence-verification", "record_verification_result", {
+    project: "acme-app",
+    topic: "resume check",
+    date: "2026-03-13",
+    scope: "Planning topic entry",
+    steps: ["Run explicit evidence coverage"],
+    result: "Pass",
+  });
   callTool("bounded-work-item", "upsert_work_item", {
     project: "acme-app",
     topic: "resume slice",
@@ -816,6 +832,10 @@ test("MCP server exposes bounded read entrypoints", () => {
     context: [
       "canonical-doc:acme-app:resume-flow:resume-policy",
       "decision:acme-app:2026-03-12:resume-architecture",
+    ],
+    evidence: [
+      "verification-result:acme-app:2026-03-13:resume-check",
+      "session-note:acme-app:2026-03-13:resume-evidence",
     ],
     verification: ["Run planning backlog coverage."],
   });
@@ -879,7 +899,7 @@ test("MCP server exposes bounded read entrypoints", () => {
 
       return document.metadata.topic;
     }),
-    ["resume-slice", "resume-policy", "resume-architecture"],
+    ["resume-slice", "resume-policy", "resume-architecture", "resume-check", "resume-evidence"],
   );
   if (
     !Array.isArray(planningTopicResult.structuredContent.planningExplainability)

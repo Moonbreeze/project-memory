@@ -853,6 +853,40 @@ test("CLI exposes bounded read entrypoints", async () => {
   );
   await runCli(
     [
+      "append-session-note",
+      "--project",
+      "acme-app",
+      "--topic",
+      "resume evidence",
+      "--summary",
+      "Captured planning evidence in a session note.",
+      "--actions",
+      "saved explicit evidence note",
+      "--follow-up",
+      "read it through planning topic entry",
+      "--date",
+      "2026-03-13",
+    ],
+  );
+  await runCli(
+    [
+      "record-verification-result",
+      "--project",
+      "acme-app",
+      "--topic",
+      "resume check",
+      "--scope",
+      "Planning topic entry",
+      "--steps",
+      "run explicit evidence coverage",
+      "--result",
+      "Pass",
+      "--date",
+      "2026-03-13",
+    ],
+  );
+  await runCli(
+    [
       "upsert-work-item",
       "--project",
       "acme-app",
@@ -868,6 +902,8 @@ test("CLI exposes bounded read entrypoints", async () => {
       "CLI bounded planning coverage.",
       "--context",
       "canonical-doc:acme-app:resume-flow:resume-policy|decision:acme-app:2026-03-12:resume-architecture",
+      "--evidence",
+      "verification-result:acme-app:2026-03-13:resume-check|session-note:acme-app:2026-03-13:resume-evidence",
       "--verification",
       "Run planning backlog coverage",
       "--date",
@@ -927,7 +963,7 @@ test("CLI exposes bounded read entrypoints", async () => {
 
       return document.metadata.topic;
     }),
-    ["resume-slice", "resume-policy", "resume-architecture"],
+    ["resume-slice", "resume-policy", "resume-architecture", "resume-check", "resume-evidence"],
   );
   if (
     !Array.isArray(planningTopicResult.planningExplainability)

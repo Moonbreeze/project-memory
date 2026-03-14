@@ -80,6 +80,8 @@ const planningTopicEntryLimits = {
   canonicalDocs: 2,
   decisions: 2,
   sessionNotes: 1,
+  verificationResults: 2,
+  evidenceSessionNotes: 1,
 } as const;
 
 const topicEntryLimits = {
@@ -527,17 +529,20 @@ const listPlanningBacklogEntries = (
   });
 };
 
-const collectPlanningContextCandidatePaths = (
+const collectPlanningLocatorCandidatePaths = (
   context: RepositoryContext,
   project: string,
   entries: WorkItemPlanningEntry[],
-  locatorType: "canonical-doc" | "decision" | "session-note",
+  relationship: "context" | "evidence",
+  locatorType: "canonical-doc" | "decision" | "session-note" | "verification-result",
 ): string[] => {
   const seenRelativePaths = new Set<string>();
   const relativePaths: string[] = [];
 
   for (const entry of entries) {
-    for (const locator of entry.definition.context) {
+    const locators =
+      relationship === "context" ? entry.definition.context : entry.definition.evidence;
+    for (const locator of locators) {
       if (locator.type !== locatorType || locator.project !== project) {
         continue;
       }
@@ -790,6 +795,7 @@ export const readPlanningTopicEntry = (
     "Planning topic entry reads only same-project active work-item documents whose topic exactly matches the requested topic.",
     "Planning topic entry stays bounded and ordered by derived planning state before date/path tie-breaks.",
     "Planning topic entry follows only explicit same-project context locators from the selected work items, with fixed per-type limits and no fallback expansion.",
+    "Planning topic entry follows only explicit same-project evidence locators from the selected work items, with fixed per-type limits and no fallback expansion.",
   ];
   const seenRelativePaths = new Set<string>();
   const allPlanningEntries = listProjectWorkItemPlanningEntries(context, project);
@@ -835,10 +841,11 @@ export const readPlanningTopicEntry = (
       strategy: "reference-follow",
       limit: planningTopicEntryLimits.canonicalDocs,
       description: "Read bounded explicit canonical-doc context from the selected work items.",
-      candidatePaths: collectPlanningContextCandidatePaths(
+      candidatePaths: collectPlanningLocatorCandidatePaths(
         context,
         project,
         selectedPlanningEntries,
+        "context",
         "canonical-doc",
       ),
       allowedStatuses: activeStatuses,
@@ -856,10 +863,11 @@ export const readPlanningTopicEntry = (
       strategy: "reference-follow",
       limit: planningTopicEntryLimits.decisions,
       description: "Read bounded explicit decision context from the selected work items.",
-      candidatePaths: collectPlanningContextCandidatePaths(
+      candidatePaths: collectPlanningLocatorCandidatePaths(
         context,
         project,
         selectedPlanningEntries,
+        "context",
         "decision",
       ),
       allowedStatuses: currentStatuses,
@@ -877,10 +885,55 @@ export const readPlanningTopicEntry = (
       strategy: "reference-follow",
       limit: planningTopicEntryLimits.sessionNotes,
       description: "Read bounded explicit session-note context from the selected work items.",
-      candidatePaths: collectPlanningContextCandidatePaths(
+      candidatePaths: collectPlanningLocatorCandidatePaths(
         context,
         project,
         selectedPlanningEntries,
+        "context",
+        "session-note",
+      ),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "evidence-verification-explicit",
+      documentType: "verification-result",
+      strategy: "reference-follow",
+      limit: planningTopicEntryLimits.verificationResults,
+      description: "Read bounded explicit verification-result evidence from the selected work items.",
+      candidatePaths: collectPlanningLocatorCandidatePaths(
+        context,
+        project,
+        selectedPlanningEntries,
+        "evidence",
+        "verification-result",
+      ),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "evidence-session-note-explicit",
+      documentType: "session-note",
+      strategy: "reference-follow",
+      limit: planningTopicEntryLimits.evidenceSessionNotes,
+      description: "Read bounded explicit session-note evidence from the selected work items.",
+      candidatePaths: collectPlanningLocatorCandidatePaths(
+        context,
+        project,
+        selectedPlanningEntries,
+        "evidence",
         "session-note",
       ),
       allowedStatuses: activeStatuses,

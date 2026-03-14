@@ -913,6 +913,61 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
     },
     context,
   );
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "resume-evidence-session",
+      date: "2026-03-13",
+      summary: "Captured evidence while testing resume execution.",
+      actions: ["Saved the first explicit evidence note."],
+      followUp: ["Keep bounded evidence ordering deterministic."],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "resume-evidence-follow-up",
+      date: "2026-03-14",
+      summary: "Captured a later evidence note.",
+      actions: ["Saved the second explicit evidence note."],
+      followUp: ["Confirm bounded evidence limits."],
+    },
+    context,
+  );
+  recordVerificationResult(
+    {
+      project: "acme-app",
+      topic: "resume-evidence-alpha",
+      date: "2026-03-13",
+      scope: "Resume slice alpha evidence",
+      steps: ["Run alpha resume scenario"],
+      result: "Pass",
+    },
+    context,
+  );
+  recordVerificationResult(
+    {
+      project: "acme-app",
+      topic: "resume-evidence-beta",
+      date: "2026-03-14",
+      scope: "Resume slice beta evidence",
+      steps: ["Run beta resume scenario"],
+      result: "Pass",
+    },
+    context,
+  );
+  recordVerificationResult(
+    {
+      project: "acme-app",
+      topic: "resume-evidence-gamma",
+      date: "2026-03-15",
+      scope: "Resume slice gamma evidence",
+      steps: ["Run gamma resume scenario"],
+      result: "Pass",
+    },
+    context,
+  );
 
   createWorkItem("acme-app", "resume slice", "2026-03-11", { workItemState: "canceled" });
   createWorkItem("acme-app", "resume slice", "2026-03-12", { workItemState: "done" });
@@ -933,6 +988,14 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
         topic: "resume-policy",
       },
     ],
+    evidence: [
+      {
+        type: "verification-result",
+        project: "acme-app",
+        date: "2026-03-13",
+        topic: "resume-evidence-alpha",
+      },
+    ],
   });
   createWorkItem("acme-app", "resume slice", "2026-03-14", {
     workItemState: "in_progress",
@@ -948,6 +1011,20 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
         project: "acme-app",
         date: "2026-03-11",
         topic: "resume-architecture",
+      },
+    ],
+    evidence: [
+      {
+        type: "session-note",
+        project: "acme-app",
+        date: "2026-03-13",
+        topic: "resume-evidence-session",
+      },
+      {
+        type: "verification-result",
+        project: "acme-app",
+        date: "2026-03-14",
+        topic: "resume-evidence-beta",
       },
     ],
   });
@@ -974,8 +1051,32 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
         topic: "resume-policy",
       },
     ],
+    evidence: [
+      {
+        type: "verification-result",
+        project: "acme-app",
+        date: "2026-03-13",
+        topic: "resume-evidence-alpha",
+      },
+    ],
   });
-  createWorkItem("acme-app", "resume slice", "2026-03-16", { status: "draft" });
+  createWorkItem("acme-app", "resume slice", "2026-03-16", {
+    status: "draft",
+    evidence: [
+      {
+        type: "verification-result",
+        project: "acme-app",
+        date: "2026-03-15",
+        topic: "resume-evidence-gamma",
+      },
+      {
+        type: "session-note",
+        project: "acme-app",
+        date: "2026-03-14",
+        topic: "resume-evidence-follow-up",
+      },
+    ],
+  });
   createWorkItem("acme-app", "resume slice follow-up", "2026-03-17");
   createWorkItem("beta-app", "resume slice", "2026-03-18");
 
@@ -993,6 +1094,8 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
       ["context-canonical-explicit", 1],
       ["context-decision-explicit", 1],
       ["context-session-note-explicit", 1],
+      ["evidence-verification-explicit", 2],
+      ["evidence-session-note-explicit", 1],
     ],
   );
   assert.deepEqual(
@@ -1005,6 +1108,9 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
       "projects/acme-app/canonical-docs/resume-flow/resume-policy.md",
       "projects/acme-app/decisions/2026/2026-03-11-resume-architecture.md",
       "projects/acme-app/session-log/2026/03/2026-03-12-resume-investigation.md",
+      "projects/acme-app/verification/2026/2026-03-13-resume-evidence-alpha.md",
+      "projects/acme-app/verification/2026/2026-03-14-resume-evidence-beta.md",
+      "projects/acme-app/session-log/2026/03/2026-03-13-resume-evidence-session.md",
     ],
   );
   assert.deepEqual(
@@ -1039,6 +1145,11 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
   assert(
     result.notes.includes(
       "Planning topic entry follows only explicit same-project context locators from the selected work items, with fixed per-type limits and no fallback expansion.",
+    ),
+  );
+  assert(
+    result.notes.includes(
+      "Planning topic entry follows only explicit same-project evidence locators from the selected work items, with fixed per-type limits and no fallback expansion.",
     ),
   );
 });
