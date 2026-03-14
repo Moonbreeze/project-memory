@@ -37,6 +37,16 @@ export {
 } from "./boundedReads/index.ts";
 
 /**
+ * Future work-item spec helpers.
+ */
+export * from "./workItems/index.ts";
+
+/**
+ * Shared primitive helpers.
+ */
+export * from "./shared/index.ts";
+
+/**
  * Core archive operations.
  */
 export { archiveDocument, resolveArchiveRelativePath } from "./archive/index.ts";

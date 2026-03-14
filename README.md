@@ -141,6 +141,12 @@ External memory repository contents:
 - commit pending document changes
 - archive session and verification documents manually
 
+## Future Work-Item Spec
+
+`src/core/workItems/` now exports the Session 5 spec surface only. It defines the future `work_item_state` lifecycle, derived planning-state rules, same-project typed locators for provenance, dependencies, context, and evidence, and the planned Markdown section layout for work-item documents.
+
+This module is not wired into the current managed-document pipeline yet. `list-documents`, bounded read entrypoints, CLI and MCP write tools, and the `backlog` preset remain unchanged until Session 6 implements the first work-item document type.
+
 ## Commit Rules
 
 `commit-pending-changes` enforces the commit message format `docs(<project>/<scope>): <summary>`.

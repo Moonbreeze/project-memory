@@ -9,6 +9,7 @@ import {
   ListDocumentsSortField as ListDocumentsSortFieldValues,
   SortOrder as SortOrderValues,
 } from "./constants.ts";
+import { isLiteralMember } from "../shared/index.ts";
 
 /**
  * A supported project-memory document kind.
@@ -412,16 +413,6 @@ export type ValidationResult =
       /** Human-readable validation failures. */
       errors: string[];
     };
-
-/**
- * Checks whether an unknown value belongs to a literal string set.
- */
-const isLiteralMember = <T extends readonly string[]>(
-  values: T,
-  value: unknown,
-): value is T[number] => {
-  return typeof value === "string" && values.includes(value);
-};
 
 /**
  * Returns `true` when `value` is a supported document kind.

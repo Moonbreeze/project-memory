@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { createRepositoryContext } from "../../core/index.ts";
+import { createRepositoryContext, parseBooleanString } from "../../core/index.ts";
 import { printJson, requireFlag } from "../commandSupport.ts";
 import type { CliCommandHandler } from "../types.ts";
 
@@ -259,19 +259,12 @@ const slugifyProject = (project: string): string => {
  * Parses one optional boolean CLI flag.
  */
 const parseBooleanFlag = (value: string | undefined, fallback: boolean): boolean => {
-  if (value === undefined) {
+  const parsedValue = parseBooleanString(value);
+  if (parsedValue === undefined) {
     return fallback;
   }
 
-  if (value === "true") {
-    return true;
-  }
-
-  if (value === "false") {
-    return false;
-  }
-
-  throw new Error(`Boolean flags must use true or false, received: ${value}`);
+  return parsedValue;
 };
 
 /**

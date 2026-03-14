@@ -4,6 +4,7 @@ import {
   isDocumentType,
   isListDocumentsPreset,
   isListDocumentsSortField,
+  parseBooleanString,
   isSortOrder,
 } from "../core/index.ts";
 import type {
@@ -143,19 +144,11 @@ export const parseOptionalBoolean = (
   value: string | undefined,
   key: string,
 ): boolean | undefined => {
-  if (value === undefined) {
-    return undefined;
+  try {
+    return parseBooleanString(value);
+  } catch {
+    throw new Error(`Invalid --${key} value: ${value}`);
   }
-
-  if (value === "true") {
-    return true;
-  }
-
-  if (value === "false") {
-    return false;
-  }
-
-  throw new Error(`Invalid --${key} value: ${value}`);
 };
 
 /**

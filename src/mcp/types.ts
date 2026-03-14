@@ -2,6 +2,7 @@ import {
   isDocumentSource,
   isDocumentStatus,
   isDocumentType,
+  isLiteralMember,
   isListDocumentsPreset,
   isListDocumentsSortField,
   isSortOrder,
@@ -65,7 +66,7 @@ const SupportedProtocolVersion = [
 type SupportedProtocolVersion = typeof SupportedProtocolVersion[number];
 
 const isSupportedProtocolVersion = (value: unknown): value is SupportedProtocolVersion => {
-  return typeof value === "string" && SupportedProtocolVersion.some((version) => version === value);
+  return isLiteralMember(SupportedProtocolVersion, value);
 };
 
 /**
