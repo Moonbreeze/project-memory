@@ -14,6 +14,7 @@ export {
   isManagedDocumentRelativePath,
   listAllActiveDocumentPaths,
   readDocument,
+  resolveManagedDocumentPathInfo,
   resolveDocumentTypeFromRelativePath,
   resolveDocumentRelativePath,
   recordVerificationResult,

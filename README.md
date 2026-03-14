@@ -67,7 +67,7 @@ Examples:
 ```bash
 ./scripts/run-cli.sh append-session-note --project project-memory --topic setup --summary "Validated install flow." --actions "created memory repo" --follow-up "document MCP config"
 ./scripts/run-cli.sh list-documents --project project-memory --preset backlog
-./scripts/run-cli.sh commit-pending-changes --message "docs(session): record install validation"
+./scripts/run-cli.sh commit-pending-changes --message "docs(project-memory/session): record install validation"
 ```
 
 `list-documents` returns metadata only by default. Use `--include-body true` only when the full Markdown body is actually needed.
@@ -143,16 +143,18 @@ External memory repository contents:
 
 ## Commit Rules
 
-`commit-pending-changes` enforces the commit message format `docs(<scope>): <summary>`.
+`commit-pending-changes` enforces the commit message format `docs(<project>/<scope>): <summary>`.
 Supported scopes are `session`, `verification`, `provider`, `decision`, `runbook`, `canonical`, `archive`, and `mixed`.
 
+The project slug is inferred from the pending managed-document paths, and the default flow only allows one project per commit.
 Use `archive` only when the pending changes are strictly archive moves for session notes and verification results.
-If archived documents and active `projects/` documents are committed together, the required scope is `mixed`.
+If archived documents and active `projects/` documents are committed together for the same project, the required scope is `mixed`.
+If pending managed documents span multiple projects, commit them separately.
 
 Examples:
 
-- `docs(session): resume verification notes`
-- `docs(provider): claude working agreement`
-- `docs(canonical): resume policy baseline`
-- `docs(archive): archive stale acme-app notes`
-- `docs(mixed): archive notes and add follow-up decision`
+- `docs(acme-app/session): resume verification notes`
+- `docs(acme-app/provider): claude working agreement`
+- `docs(acme-app/canonical): resume policy baseline`
+- `docs(acme-app/archive): archive stale notes`
+- `docs(acme-app/mixed): archive notes and add follow-up decision`

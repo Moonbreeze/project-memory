@@ -78,6 +78,18 @@ export type ParsedDocument = {
 };
 
 /**
+ * Parsed layout details for one managed document path.
+ */
+export type ManagedDocumentPathInfo = {
+  /** Project slug inferred from the managed path. */
+  project: string;
+  /** Inferred managed document kind. */
+  type: DocumentType;
+  /** Indicates whether the path lives under `archives/`. */
+  archived: boolean;
+};
+
+/**
  * Optional root overrides used to build one repository context.
  */
 export type RepositoryContextOptions = {

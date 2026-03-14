@@ -32,6 +32,7 @@ export type {
   ListDocumentsResult,
   ListDocumentsSortField,
   ListedDocument,
+  ManagedDocumentPathInfo,
   ParsedDocument,
   ProviderNoteInput,
   RepositoryContext,

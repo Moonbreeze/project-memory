@@ -489,7 +489,44 @@ test("MCP server rejects commit messages that do not match the enforced format",
   const toolResult = readToolResult(response);
 
   assert.equal(toolResult.isError, true);
-  assert.match(toolResult.content[0]?.text ?? "", /docs\(<scope>\): <summary>/);
+  assert.match(toolResult.content[0]?.text ?? "", /docs\(<project>\/<scope>\): <summary>/);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP server rejects pending managed changes from multiple projects", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  callTool("multi-project-1", "append_session_note", {
+    project: "acme-app",
+    topic: "cross project one",
+    date: "2026-03-11",
+    summary: "Prepared the first project change.",
+    actions: ["Created acme note"],
+    followUp: ["Commit separately"],
+  });
+
+  callTool("multi-project-2", "create_decision", {
+    project: "beta-app",
+    topic: "cross project two",
+    date: "2026-03-11",
+    context: "Prepared a second project change in the same worktree.",
+    decision: "Reject multi-project commits by default.",
+    consequences: ["Commit per project"],
+  });
+
+  const response = callTool("multi-project-3", "commit_pending_changes", {
+    message: "docs(acme-app/mixed): invalid cross-project batch",
+  });
+  const toolResult = readToolResult(response);
+
+  assert.equal(toolResult.isError, true);
+  assert.match(toolResult.content[0]?.text ?? "", /multiple projects|one project at a time|special-case path/);
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

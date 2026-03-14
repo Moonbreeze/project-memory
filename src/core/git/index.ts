@@ -3,8 +3,8 @@ import path from "node:path";
 
 import { resolveArchiveRelativePath } from "../archive/index.ts";
 import { createRepositoryContext } from "../config/index.ts";
-import { isManagedDocumentRelativePath, resolveDocumentTypeFromRelativePath } from "../documents/index.ts";
-import type { CommitPendingChangesInput } from "../types/index.ts";
+import { isManagedDocumentRelativePath, resolveManagedDocumentPathInfo } from "../documents/index.ts";
+import type { CommitPendingChangesInput, ManagedDocumentPathInfo } from "../types/index.ts";
 
 type CommitScope =
   | "session"
@@ -16,8 +16,17 @@ type CommitScope =
   | "archive"
   | "mixed";
 
+type EligibleManagedPath = ManagedDocumentPathInfo & {
+  relativePath: string;
+};
+
+type CommitTarget = {
+  project: string;
+  scope: CommitScope;
+};
+
 const commitMessagePattern =
-  /^docs\((session|verification|provider|decision|runbook|canonical|archive|mixed)\): (\S(?:.*\S)?)$/;
+  /^docs\(([a-z0-9]+(?:-[a-z0-9]+)*)\/(session|verification|provider|decision|runbook|canonical|archive|mixed)\): (\S(?:.*\S)?)$/;
 
 /**
  * Executes a git command and returns trimmed stdout.
@@ -66,22 +75,14 @@ const collectChangedPaths = (cwd: string): string[] => {
   return [...changedPaths];
 };
 
-const isArchiveRelativePath = (relativePath: string): boolean => {
-  return relativePath.startsWith(`archives${path.sep}`) || relativePath.startsWith("archives/");
-};
-
-const isProjectRelativePath = (relativePath: string): boolean => {
-  return relativePath.startsWith(`projects${path.sep}`) || relativePath.startsWith("projects/");
-};
-
-const inferCommitScope = (approvedPaths: string[]): CommitScope => {
-  const archivePaths = approvedPaths.filter(isArchiveRelativePath);
+const inferCommitScope = (approvedPaths: EligibleManagedPath[]): CommitScope => {
+  const archivePaths = approvedPaths.filter((approvedPath) => approvedPath.archived);
   if (archivePaths.length > 0) {
-    const archivePathSet = new Set(archivePaths);
-    const projectPaths = approvedPaths.filter(isProjectRelativePath);
+    const archivePathSet = new Set(archivePaths.map((approvedPath) => approvedPath.relativePath));
+    const projectPaths = approvedPaths.filter((approvedPath) => !approvedPath.archived);
     const hasOnlyArchiveSourcePaths = projectPaths.every((projectPath) => {
       try {
-        return archivePathSet.has(path.normalize(resolveArchiveRelativePath(projectPath)));
+        return archivePathSet.has(path.normalize(resolveArchiveRelativePath(projectPath.relativePath)));
       } catch {
         return false;
       }
@@ -90,9 +91,7 @@ const inferCommitScope = (approvedPaths: string[]): CommitScope => {
     return hasOnlyArchiveSourcePaths ? "archive" : "mixed";
   }
 
-  const documentTypes = new Set(
-    approvedPaths.map((approvedPath) => resolveDocumentTypeFromRelativePath(approvedPath)),
-  );
+  const documentTypes = new Set(approvedPaths.map((approvedPath) => approvedPath.type));
 
   if (documentTypes.size !== 1) {
     return "mixed";
@@ -115,17 +114,58 @@ const inferCommitScope = (approvedPaths: string[]): CommitScope => {
   }
 };
 
-const validateCommitMessage = (message: string, expectedScope: CommitScope): void => {
-  const match = commitMessagePattern.exec(message);
-  if (!match) {
+/**
+ * Collects managed document paths eligible for one project-aware commit.
+ */
+const collectApprovedManagedPaths = (cwd: string): EligibleManagedPath[] => {
+  return collectChangedPaths(cwd)
+    .filter((changedPath) => {
+      return isManagedDocumentRelativePath(changedPath);
+    })
+    .map((relativePath) => {
+      return {
+        relativePath,
+        ...resolveManagedDocumentPathInfo(relativePath),
+      };
+    });
+};
+
+/**
+ * Infers the required project and scope for one managed-document commit batch.
+ */
+const inferCommitTarget = (approvedPaths: EligibleManagedPath[]): CommitTarget => {
+  const projects = [...new Set(approvedPaths.map((approvedPath) => approvedPath.project))].sort();
+  if (projects.length !== 1) {
     throw new Error(
-      "Commit message must use the format docs(<scope>): <summary> with scope in session|verification|provider|decision|runbook|canonical|archive|mixed",
+      `Pending managed document changes span multiple projects (${projects.join(", ")}). Commit one project at a time; cross-project commits require an explicit special-case path.`,
     );
   }
 
-  const actualScope = match[1] as CommitScope;
-  if (actualScope !== expectedScope) {
-    throw new Error(`Commit message scope must be docs(${expectedScope}): for the current changes`);
+  const [project] = projects;
+  if (!project) {
+    throw new Error("Pending managed document changes are missing a project slug");
+  }
+
+  return {
+    project,
+    scope: inferCommitScope(approvedPaths),
+  };
+};
+
+const validateCommitMessage = (message: string, expectedTarget: CommitTarget): void => {
+  const match = commitMessagePattern.exec(message);
+  if (!match) {
+    throw new Error(
+      "Commit message must use the format docs(<project>/<scope>): <summary> with scope in session|verification|provider|decision|runbook|canonical|archive|mixed",
+    );
+  }
+
+  const actualProject = match[1];
+  const actualScope = match[2] as CommitScope;
+  if (actualProject !== expectedTarget.project || actualScope !== expectedTarget.scope) {
+    throw new Error(
+      `Commit message must be docs(${expectedTarget.project}/${expectedTarget.scope}): for the current changes`,
+    );
   }
 };
 
@@ -136,20 +176,20 @@ export const commitPendingChanges = (
   input: CommitPendingChangesInput,
   context = createRepositoryContext(),
 ): { message: string; committedPaths: string[] } => {
-  const approvedPaths = collectChangedPaths(context.memoryRootDir).filter((changedPath) => {
-    return isManagedDocumentRelativePath(changedPath);
-  });
+  const approvedPaths = collectApprovedManagedPaths(context.memoryRootDir);
 
   if (approvedPaths.length === 0) {
     throw new Error("No approved document changes are available for commit");
   }
 
-  validateCommitMessage(input.message, inferCommitScope(approvedPaths));
+  const commitTarget = inferCommitTarget(approvedPaths);
+  const approvedRelativePaths = approvedPaths.map((approvedPath) => approvedPath.relativePath);
+  validateCommitMessage(input.message, commitTarget);
 
-  runGit(["add", "--", ...approvedPaths], context.memoryRootDir);
+  runGit(["add", "--", ...approvedRelativePaths], context.memoryRootDir);
 
   const staged = readGitPathList(
-    ["diff", "--cached", "--name-only", "--", ...approvedPaths],
+    ["diff", "--cached", "--name-only", "--", ...approvedRelativePaths],
     context.memoryRootDir,
   );
 
@@ -157,7 +197,10 @@ export const commitPendingChanges = (
     throw new Error("No approved document changes are staged for commit");
   }
 
-  runGit(["commit", "-m", input.message, "--only", "--", ...approvedPaths], context.memoryRootDir);
+  runGit(
+    ["commit", "-m", input.message, "--only", "--", ...approvedRelativePaths],
+    context.memoryRootDir,
+  );
 
   return {
     message: input.message,
