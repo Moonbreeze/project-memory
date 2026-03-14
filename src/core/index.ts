@@ -17,6 +17,7 @@ export {
   resolveDocumentTypeFromRelativePath,
   resolveDocumentRelativePath,
   recordVerificationResult,
+  upsertCanonicalDoc,
   upsertProviderNote,
 } from "./documents/index.ts";
 

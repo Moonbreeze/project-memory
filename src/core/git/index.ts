@@ -6,10 +6,18 @@ import { createRepositoryContext } from "../config/index.ts";
 import { isManagedDocumentRelativePath, resolveDocumentTypeFromRelativePath } from "../documents/index.ts";
 import type { CommitPendingChangesInput } from "../types/index.ts";
 
-type CommitScope = "session" | "verification" | "provider" | "decision" | "runbook" | "archive" | "mixed";
+type CommitScope =
+  | "session"
+  | "verification"
+  | "provider"
+  | "decision"
+  | "runbook"
+  | "canonical"
+  | "archive"
+  | "mixed";
 
 const commitMessagePattern =
-  /^docs\((session|verification|provider|decision|runbook|archive|mixed)\): (\S(?:.*\S)?)$/;
+  /^docs\((session|verification|provider|decision|runbook|canonical|archive|mixed)\): (\S(?:.*\S)?)$/;
 
 /**
  * Executes a git command and returns trimmed stdout.
@@ -102,6 +110,8 @@ const inferCommitScope = (approvedPaths: string[]): CommitScope => {
       return "decision";
     case "runbook":
       return "runbook";
+    case "canonical-doc":
+      return "canonical";
   }
 };
 
@@ -109,7 +119,7 @@ const validateCommitMessage = (message: string, expectedScope: CommitScope): voi
   const match = commitMessagePattern.exec(message);
   if (!match) {
     throw new Error(
-      "Commit message must use the format docs(<scope>): <summary> with scope in session|verification|provider|decision|runbook|archive|mixed",
+      "Commit message must use the format docs(<scope>): <summary> with scope in session|verification|provider|decision|runbook|canonical|archive|mixed",
     );
   }
 

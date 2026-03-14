@@ -9,10 +9,12 @@ import {
   commitPendingChanges,
   createDecision,
   listDocuments,
+  readDocument,
   recordVerificationResult,
   resolveArchiveRelativePath,
   resolveDocumentRelativePath,
   searchDocuments,
+  upsertCanonicalDoc,
 } from "../../src/core/index.ts";
 import { createTestRepositoryContext, setupTestRepo } from "../fixtures/setupTestRepo.ts";
 
@@ -233,6 +235,95 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
   );
 });
 
+test("upsertCanonicalDoc writes a scoped document and keeps it visible to list, read, and search", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  const initial = upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Canonical guidance for the resume flow scope.",
+      guidance: ["Prefer the declared resume-flow scope", "Store only finalized guidance here"],
+      references: ["decision: taxonomy-registry-baseline"],
+    },
+    context,
+  );
+
+  assert.equal(
+    initial.relativePath,
+    resolveDocumentRelativePath("acme-app", "canonical-doc", "resume policy", "2026-03-11", {
+      registryScope: "resume-flow",
+    }),
+  );
+  assert.match(fs.readFileSync(initial.path, "utf8"), /registry_scope: resume-flow/);
+
+  const listed = listDocuments({ project: "acme-app", type: "canonical-doc", includeBody: true }, context);
+  assert.equal(listed.documents.length, 1);
+  assert.equal(listed.documents[0]?.metadata.registry_scope, "resume-flow");
+  assert.match(listed.documents[0]?.body ?? "", /Canonical guidance for the resume flow scope/);
+
+  const searched = searchDocuments({ project: "acme-app", type: "canonical-doc", text: "finalized guidance" }, context);
+  assert.equal(searched.length, 1);
+
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Updated canonical guidance for the resume flow scope.",
+      guidance: ["Keep the same scoped path on rewrite"],
+      references: ["runbook: taxonomy-registry-baseline"],
+    },
+    context,
+  );
+
+  const reread = readDocument(context, initial.relativePath);
+  assert.equal(reread.metadata.registry_scope, "resume-flow");
+  assert.match(reread.body, /Updated canonical guidance/);
+  assert.doesNotMatch(reread.body, /Store only finalized guidance here/);
+});
+
+test("readDocument rejects canonical docs without registry_scope metadata", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  const relativePath = "projects/acme-app/canonical-docs/resume-flow/resume-policy.md";
+
+  fs.mkdirSync(`${rootDir}/projects/acme-app/canonical-docs/resume-flow`, { recursive: true });
+  fs.writeFileSync(
+    `${rootDir}/${relativePath}`,
+    [
+      "---",
+      "date: 2026-03-11",
+      "project: acme-app",
+      "topic: resume-policy",
+      "source: manual",
+      "status: active",
+      "---",
+      "",
+      "# Canonical Doc",
+      "",
+      "## Summary",
+      "",
+      "Scoped canonical guidance.",
+      "",
+      "## Guidance",
+      "",
+      "- Keep registry linkage explicit",
+      "",
+      "## References",
+      "",
+      "- taxonomy-registry-baseline",
+    ].join("\n"),
+    "utf8",
+  );
+
+  assert.throws(() => readDocument(context, relativePath), /registry_scope/);
+});
+
 test("commitPendingChanges stages and commits approved document paths", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
@@ -325,4 +416,33 @@ test("commitPendingChanges rejects a commit message with the wrong scope", () =>
     () => commitPendingChanges({ message: "docs(provider): invalid scope" }, context),
     /docs\(session\)/,
   );
+});
+
+test("commitPendingChanges accepts canonical scope for canonical docs", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Prepared canonical commit-scope coverage.",
+      guidance: ["Create one canonical doc"],
+      references: ["taxonomy-registry-baseline"],
+    },
+    context,
+  );
+
+  const result = commitPendingChanges({ message: "docs(canonical): resume policy baseline" }, context);
+  const log = spawnSync("git", ["log", "--oneline", "-1"], { cwd: rootDir, encoding: "utf8" });
+
+  assert.equal(result.message, "docs(canonical): resume policy baseline");
+  assert.equal(result.committedPaths.length, 1);
+  assert.match(log.stdout, /docs\(canonical\): resume policy baseline/);
 });

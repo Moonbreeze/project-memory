@@ -18,6 +18,7 @@ export {
 export type {
   AppliedListDocumentsQuery,
   ArchiveDocumentInput,
+  CanonicalDocInput,
   CommitPendingChangesInput,
   CreateDocumentInput,
   DecisionInput,

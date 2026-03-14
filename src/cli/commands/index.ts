@@ -9,6 +9,7 @@ import { listDocumentsCommand } from "./listDocuments.ts";
 import { readDocumentCommand } from "./readDocument.ts";
 import { recordVerificationResultCommand } from "./recordVerificationResult.ts";
 import { searchDocumentsCommand } from "./searchDocuments.ts";
+import { upsertCanonicalDocCommand } from "./upsertCanonicalDoc.ts";
 import { upsertProviderNoteCommand } from "./upsertProviderNote.ts";
 
 import type { CliCommandHandler } from "../types.ts";
@@ -22,6 +23,7 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "append-session-note": appendSessionNoteCommand,
   "record-verification-result": recordVerificationResultCommand,
   "upsert-provider-note": upsertProviderNoteCommand,
+  "upsert-canonical-doc": upsertCanonicalDocCommand,
   "create-decision": createDecisionCommand,
   "create-runbook": createRunbookCommand,
   "list-documents": listDocumentsCommand,

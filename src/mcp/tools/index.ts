@@ -6,6 +6,7 @@ import { listDocumentsTool } from "./listDocuments.ts";
 import { readDocumentTool } from "./readDocument.ts";
 import { recordVerificationResultTool } from "./recordVerificationResult.ts";
 import { searchDocumentsTool } from "./searchDocuments.ts";
+import { upsertCanonicalDocTool } from "./upsertCanonicalDoc.ts";
 import { upsertProviderNoteTool } from "./upsertProviderNote.ts";
 
 import {
@@ -301,6 +302,64 @@ const registeredMcpTools: Record<string, RegisteredMcpTool> = {
       ["project", "provider", "overview", "constraints", "guidance"],
     ),
     handler: upsertProviderNoteTool,
+  },
+  upsert_canonical_doc: {
+    name: "upsert_canonical_doc",
+    description: "Create or replace one managed canonical doc tied to a taxonomy-registry scope.",
+    inputSchema: createObjectSchema(
+      {
+        project: {
+          type: "string",
+          description: "Target project slug.",
+        },
+        topic: {
+          type: "string",
+          description: "Canonical-doc topic slug or label.",
+        },
+        registryScope: {
+          type: "string",
+          description: "Declared taxonomy-registry scope slug for this canonical doc.",
+        },
+        summary: {
+          type: "string",
+          description: "High-level summary of the canonical guidance.",
+        },
+        guidance: {
+          type: "array",
+          description: "Canonical guidance points for the scoped topic.",
+          items: {
+            type: "string",
+          },
+        },
+        references: {
+          type: "array",
+          description: "Supporting references or follow-on links.",
+          items: {
+            type: "string",
+          },
+        },
+        date: {
+          type: "string",
+          description: "Optional explicit date in YYYY-MM-DD format.",
+        },
+        source: {
+          type: "string",
+          description: "Optional document source.",
+          enum: [...DocumentSourceValues],
+        },
+        status: {
+          type: "string",
+          description: "Optional document status.",
+          enum: [...DocumentStatusValues],
+        },
+        projectCommit: {
+          type: "string",
+          description: "Optional project commit SHA.",
+        },
+      },
+      ["project", "topic", "registryScope", "summary", "guidance", "references"],
+    ),
+    handler: upsertCanonicalDocTool,
   },
   create_decision: {
     name: "create_decision",

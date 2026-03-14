@@ -136,6 +136,7 @@ External memory repository contents:
 - upsert provider notes
 - create decisions
 - create runbooks
+- upsert canonical docs bound to declared taxonomy-registry scopes
 - list, read, and search active documents
 - commit pending document changes
 - archive session and verification documents manually
@@ -143,7 +144,7 @@ External memory repository contents:
 ## Commit Rules
 
 `commit-pending-changes` enforces the commit message format `docs(<scope>): <summary>`.
-Supported scopes are `session`, `verification`, `provider`, `decision`, `runbook`, `archive`, and `mixed`.
+Supported scopes are `session`, `verification`, `provider`, `decision`, `runbook`, `canonical`, `archive`, and `mixed`.
 
 Use `archive` only when the pending changes are strictly archive moves for session notes and verification results.
 If archived documents and active `projects/` documents are committed together, the required scope is `mixed`.
@@ -152,5 +153,6 @@ Examples:
 
 - `docs(session): resume verification notes`
 - `docs(provider): claude working agreement`
+- `docs(canonical): resume policy baseline`
 - `docs(archive): archive stale acme-app notes`
 - `docs(mixed): archive notes and add follow-up decision`

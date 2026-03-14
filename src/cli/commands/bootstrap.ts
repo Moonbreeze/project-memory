@@ -17,6 +17,7 @@ const bootstrapProject = (project: string): { project: string; created: string[]
     .replace(/^-+|-+$/g, "");
 
   const directories = [
+    path.join(context.projectsDir, projectSlug, "canonical-docs"),
     path.join(context.projectsDir, projectSlug, "decisions", new Date().toISOString().slice(0, 4)),
     path.join(context.projectsDir, projectSlug, "provider-notes"),
     path.join(context.projectsDir, projectSlug, "runbooks"),

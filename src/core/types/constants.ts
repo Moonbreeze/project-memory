@@ -7,6 +7,7 @@ export const DocumentType = [
   "provider-note",
   "decision",
   "runbook",
+  "canonical-doc",
 ] as const;
 
 /**
@@ -41,6 +42,7 @@ export const FrontmatterKey = [
   "date",
   "project",
   "topic",
+  "registry_scope",
   "source",
   "status",
   "project_commit",

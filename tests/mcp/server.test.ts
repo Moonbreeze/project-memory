@@ -514,6 +514,45 @@ test("MCP server rejects secret-like content for upsert_provider_note", () => {
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("MCP server upserts canonical docs and returns them through list_documents", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const writeResponse = callTool("canonical-write", "upsert_canonical_doc", {
+    project: "acme-app",
+    topic: "resume policy",
+    registryScope: "resume-flow",
+    date: "2026-03-11",
+    summary: "Canonical guidance for the resume scope.",
+    guidance: ["Prefer registry-backed scope names"],
+    references: ["taxonomy-registry-baseline"],
+  });
+  const writeResult = readToolResult(writeResponse);
+
+  assert.notEqual(writeResult.isError, true);
+
+  const listResponse = callTool("canonical-list", "list_documents", {
+    project: "acme-app",
+    type: "canonical-doc",
+    includeBody: true,
+  });
+  const listResult = readToolResult(listResponse);
+
+  if (
+    !isRecord(listResult.structuredContent) ||
+    !Array.isArray(listResult.structuredContent.documents) ||
+    !isRecord(listResult.structuredContent.documents[0]) ||
+    !isRecord(listResult.structuredContent.documents[0].metadata)
+  ) {
+    throw new Error("Expected canonical-doc list payload");
+  }
+
+  assert.equal(listResult.structuredContent.documents.length, 1);
+  assert.equal(listResult.structuredContent.documents[0].metadata.registry_scope, "resume-flow");
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("MCP server rejects env-style content for create_decision", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;

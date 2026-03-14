@@ -5,6 +5,7 @@ import { createRepositoryContext } from "../config/index.ts";
 import { isDocumentSource, isDocumentStatus, isDocumentType } from "../types/index.ts";
 import { validateBody, validateFrontmatter } from "../validation/index.ts";
 import type {
+  CanonicalDocInput,
   DecisionInput,
   DocumentType,
   Frontmatter,
@@ -27,6 +28,7 @@ type DefaultFrontmatterInput = {
   project: string;
   topic: string;
   date?: string;
+  registryScope?: string;
   source?: Frontmatter["source"];
   status?: Frontmatter["status"];
   projectCommit?: string;
@@ -38,48 +40,54 @@ type DocumentPathPattern = {
   pattern: RegExp;
 };
 
+const slug = '[a-z0-9]+(?:-[a-z0-9]+)*';
+const year = '\\d{4}';
+const month = '\\d{2}';
+const date = '\\d{4}-\\d{2}-\\d{2}';
+
+const docPattern = (root: string, rest: string): RegExp =>
+  new RegExp(`^${root}\\/${slug}\\/${rest}\\.md$`);
+
 const documentPathPatterns: DocumentPathPattern[] = [
   {
     type: "session-note",
     archived: false,
-    pattern:
-      /^projects\/[a-z0-9]+(?:-[a-z0-9]+)*\/session-log\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/,
+    pattern: docPattern("projects", `session-log\\/${year}\\/${month}\\/${date}-${slug}`),
   },
   {
     type: "verification-result",
     archived: false,
-    pattern:
-      /^projects\/[a-z0-9]+(?:-[a-z0-9]+)*\/verification\/\d{4}\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/,
+    pattern: docPattern("projects", `verification\\/${year}\\/${date}-${slug}`),
   },
   {
     type: "provider-note",
     archived: false,
-    pattern:
-      /^projects\/[a-z0-9]+(?:-[a-z0-9]+)*\/provider-notes\/[a-z0-9]+(?:-[a-z0-9]+)*\.md$/,
+    pattern: docPattern("projects", `provider-notes\\/${slug}`),
   },
   {
     type: "decision",
     archived: false,
-    pattern:
-      /^projects\/[a-z0-9]+(?:-[a-z0-9]+)*\/decisions\/\d{4}\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/,
+    pattern: docPattern("projects", `decisions\\/${year}\\/${date}-${slug}`),
   },
   {
     type: "runbook",
     archived: false,
-    pattern:
-      /^projects\/[a-z0-9]+(?:-[a-z0-9]+)*\/runbooks\/[a-z0-9]+(?:-[a-z0-9]+)*\.md$/,
+    pattern: docPattern("projects", `runbooks\\/${slug}`),
+  },
+  {
+    type: "canonical-doc",
+    archived: false,
+    pattern: docPattern("projects", `canonical-docs\\/${slug}\\/${slug}`),
   },
   {
     type: "session-note",
     archived: true,
-    pattern:
-      /^archives\/[a-z0-9]+(?:-[a-z0-9]+)*\/session-log\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/,
+    pattern: docPattern("archives", `session-log\\/${year}\\/${month}\\/${date}-${slug}`),
   },
   {
     type: "verification-result",
     archived: true,
-    pattern:
-      /^archives\/[a-z0-9]+(?:-[a-z0-9]+)*\/verification\/\d{4}\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/,
+    pattern: docPattern("archives", `verification\\/${year}\\/${date}-${slug}`),
   },
 ];
 
@@ -167,9 +175,13 @@ const buildFrontmatter = (frontmatter: Frontmatter): string => {
     `date: ${frontmatter.date}`,
     `project: ${frontmatter.project}`,
     `topic: ${frontmatter.topic}`,
-    `source: ${frontmatter.source}`,
-    `status: ${frontmatter.status}`,
   ];
+
+  if (frontmatter.registry_scope) {
+    lines.push(`registry_scope: ${frontmatter.registry_scope}`);
+  }
+
+  lines.push(`source: ${frontmatter.source}`, `status: ${frontmatter.status}`);
 
   if (frontmatter.project_commit) {
     lines.push(`project_commit: ${frontmatter.project_commit}`);
@@ -218,7 +230,10 @@ const relativePathForType = (
   type: DocumentType,
   topic: string,
   date: string,
-  provider?: string,
+  options: {
+    provider?: string;
+    registryScope?: string;
+  } = {},
 ): string => {
   const [year, month] = date.split("-");
   const topicSlug = ensureSlug(topic, "Topic");
@@ -229,11 +244,24 @@ const relativePathForType = (
     case "verification-result":
       return path.join("projects", project, "verification", year, `${date}-${topicSlug}.md`);
     case "provider-note":
-      return path.join("projects", project, "provider-notes", `${ensureSlug(provider ?? topic, "Provider")}.md`);
+      return path.join(
+        "projects",
+        project,
+        "provider-notes",
+        `${ensureSlug(options.provider ?? topic, "Provider")}.md`,
+      );
     case "decision":
       return path.join("projects", project, "decisions", year, `${date}-${topicSlug}.md`);
     case "runbook":
       return path.join("projects", project, "runbooks", `${topicSlug}.md`);
+    case "canonical-doc":
+      return path.join(
+        "projects",
+        project,
+        "canonical-docs",
+        ensureSlug(options.registryScope ?? "", "registryScope"),
+        `${topicSlug}.md`,
+      );
   }
 };
 
@@ -292,6 +320,10 @@ const normalizeFrontmatter = (metadata: Record<string, string>): Frontmatter => 
   normalized.source = metadata.source;
   normalized.status = metadata.status;
 
+  if (metadata.registry_scope) {
+    normalized.registry_scope = metadata.registry_scope;
+  }
+
   if (metadata.project_commit) {
     normalized.project_commit = metadata.project_commit;
   }
@@ -309,13 +341,13 @@ const writeDocument = (
   body: string,
 ): ParsedDocument => {
   assertManagedDocumentRelativePath(relativePath);
+  const type = resolveDocumentTypeFromRelativePath(relativePath);
 
-  const frontmatterValidation = validateFrontmatter(context, metadata);
+  const frontmatterValidation = validateFrontmatter(context, metadata, type);
   if (!frontmatterValidation.ok) {
     throw new Error(frontmatterValidation.errors.join("; "));
   }
 
-  const type = resolveDocumentTypeFromRelativePath(relativePath);
   const bodyValidation = validateBody(context, type, body);
   if (!bodyValidation.ok) {
     throw new Error(bodyValidation.errors.join("; "));
@@ -340,7 +372,7 @@ const writeDocument = (
  * Applies shared frontmatter defaults for document creation commands.
  */
 const defaultFrontmatter = (input: DefaultFrontmatterInput): Frontmatter => {
-  return {
+  const metadata: Frontmatter = {
     date: input.date ?? currentDate(),
     project: ensureKebabCaseProject(input.project),
     topic: ensureSlug(input.topic, "Topic"),
@@ -348,6 +380,12 @@ const defaultFrontmatter = (input: DefaultFrontmatterInput): Frontmatter => {
     status: input.status ?? "active",
     project_commit: input.projectCommit,
   };
+
+  if (input.registryScope) {
+    metadata.registry_scope = ensureSlug(input.registryScope, "registryScope");
+  }
+
+  return metadata;
 };
 
 /**
@@ -362,7 +400,8 @@ export const readDocument = (
   const absolutePath = path.join(context.memoryRootDir, relativePath);
   const raw = fs.readFileSync(absolutePath, "utf8");
   const { metadata, body } = parseFrontmatter(raw);
-  const frontmatterValidation = validateFrontmatter(context, metadata);
+  const type = resolveDocumentTypeFromRelativePath(relativePath);
+  const frontmatterValidation = validateFrontmatter(context, metadata, type);
 
   if (!frontmatterValidation.ok) {
     throw new Error(frontmatterValidation.errors.join("; "));
@@ -371,7 +410,7 @@ export const readDocument = (
   return {
     path: absolutePath,
     relativePath,
-    type: resolveDocumentTypeFromRelativePath(relativePath),
+    type,
     metadata: normalizeFrontmatter(metadata),
     body,
   };
@@ -432,8 +471,30 @@ export const upsertProviderNote = (
     "provider-note",
     metadata.topic,
     metadata.date,
-    input.provider,
+    { provider: input.provider },
   );
+  return writeDocument(context, relativePath, metadata, body);
+};
+
+/**
+ * Creates or replaces one canonical doc tied to a declared taxonomy-registry scope.
+ */
+export const upsertCanonicalDoc = (
+  input: CanonicalDocInput,
+  context = createRepositoryContext(),
+): ParsedDocument => {
+  const metadata = defaultFrontmatter({
+    ...input,
+    registryScope: input.registryScope,
+  });
+  const body = renderTemplate(loadTemplate(context, "canonical-doc.md"), {
+    summary: input.summary.trim(),
+    guidance: renderList(input.guidance),
+    references: renderList(input.references),
+  });
+  const relativePath = relativePathForType(metadata.project, "canonical-doc", metadata.topic, metadata.date, {
+    registryScope: input.registryScope,
+  });
   return writeDocument(context, relativePath, metadata, body);
 };
 
@@ -516,11 +577,14 @@ export const resolveDocumentRelativePath = (
   type: DocumentType,
   topic: string,
   date = currentDate(),
-  provider?: string,
+  options: {
+    provider?: string;
+    registryScope?: string;
+  } = {},
 ): string => {
   if (!isDocumentType(type)) {
     throw new Error(`Unsupported document type: ${String(type)}`);
   }
 
-  return relativePathForType(ensureKebabCaseProject(project), type, topic, date, provider);
+  return relativePathForType(ensureKebabCaseProject(project), type, topic, date, options);
 };

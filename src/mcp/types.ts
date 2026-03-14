@@ -7,6 +7,7 @@ import {
   isSortOrder,
 } from "../core/index.ts";
 import type {
+  CanonicalDocInput,
   CommitPendingChangesInput,
   DecisionInput,
   DocumentSource,
@@ -653,6 +654,26 @@ export const parseRunbookInput = (value: unknown): RunbookInput => {
     purpose: readRequiredString(params.purpose, "purpose"),
     procedure: readStringArray(params.procedure, "procedure"),
     verification: readStringArray(params.verification, "verification"),
+    date: readOptionalString(params.date, "date"),
+    source: readOptionalDocumentSource(params.source),
+    status: readOptionalDocumentStatus(params.status),
+    projectCommit: readOptionalString(params.projectCommit, "projectCommit"),
+  };
+};
+
+/**
+ * Parses params for `upsert_canonical_doc`.
+ */
+export const parseCanonicalDocInput = (value: unknown): CanonicalDocInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    topic: readRequiredString(params.topic, "topic"),
+    registryScope: readRequiredString(params.registryScope, "registryScope"),
+    summary: readRequiredString(params.summary, "summary"),
+    guidance: readStringArray(params.guidance, "guidance"),
+    references: readStringArray(params.references, "references"),
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),

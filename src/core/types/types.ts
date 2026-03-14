@@ -53,6 +53,8 @@ export type Frontmatter = {
   project: string;
   /** Document topic slug. */
   topic: string;
+  /** Optional taxonomy-registry scope slug for canonical docs. */
+  registry_scope?: string;
   /** Source that produced the document. */
   source: DocumentSource;
   /** Current document lifecycle status. */
@@ -187,6 +189,20 @@ export type RunbookInput = CreateDocumentInput & {
   procedure: string[];
   /** Verification steps for the runbook. */
   verification: string[];
+};
+
+/**
+ * Input required to upsert one canonical document.
+ */
+export type CanonicalDocInput = CreateDocumentInput & {
+  /** Declared taxonomy-registry scope slug owning this canonical doc. */
+  registryScope: string;
+  /** High-level summary of the canonical guidance. */
+  summary: string;
+  /** Canonical guidance points for the scoped topic. */
+  guidance: string[];
+  /** Supporting references or follow-on links. */
+  references: string[];
 };
 
 /**

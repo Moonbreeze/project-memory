@@ -7,6 +7,7 @@ const requiredSectionsByType: Record<DocumentType, string[]> = {
   "provider-note": ["## Overview", "## Constraints", "## Guidance"],
   decision: ["## Context", "## Decision", "## Consequences"],
   runbook: ["## Purpose", "## Procedure", "## Verification"],
+  "canonical-doc": ["## Summary", "## Guidance", "## References"],
 };
 
 const secretPatterns = [
@@ -51,6 +52,7 @@ const looksLikeRawDump = (body: string): boolean => {
 export const validateFrontmatter = (
   context: RepositoryContext,
   metadata: Record<string, string>,
+  type?: DocumentType,
 ): ValidationResult => {
   const errors: string[] = [];
 
@@ -72,6 +74,14 @@ export const validateFrontmatter = (
 
   if (metadata.date && !/^\d{4}-\d{2}-\d{2}$/.test(metadata.date)) {
     errors.push("Date must use YYYY-MM-DD format");
+  }
+
+  if (metadata.registry_scope && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(metadata.registry_scope)) {
+    errors.push("registry_scope must use kebab-case");
+  }
+
+  if (type === "canonical-doc" && !metadata.registry_scope) {
+    errors.push("Missing required metadata field: registry_scope");
   }
 
   const source = metadata.source;

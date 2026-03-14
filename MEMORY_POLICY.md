@@ -12,6 +12,7 @@ It is not a general dump for logs, credentials, or copied artifacts.
 - provider notes documenting constraints and guidance
 - decisions with context and consequences
 - runbooks for repeatable operational tasks
+- canonical docs bound to declared taxonomy-registry scopes
 
 ## Prohibited Content
 

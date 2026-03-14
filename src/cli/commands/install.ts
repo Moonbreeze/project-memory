@@ -341,6 +341,7 @@ const installMemoryRepository = (
     projectSlug = slugifyProject(project);
     const year = new Date().toISOString().slice(0, 4);
     const projectDirectories = [
+      path.join(context.projectsDir, projectSlug, "canonical-docs"),
       path.join(context.projectsDir, projectSlug, "decisions", year),
       path.join(context.projectsDir, projectSlug, "provider-notes"),
       path.join(context.projectsDir, projectSlug, "runbooks"),

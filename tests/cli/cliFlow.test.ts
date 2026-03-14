@@ -537,6 +537,54 @@ test("CLI upserts provider notes and commits pending document changes", async ()
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("CLI upserts canonical docs and exposes them through read-document", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const canonicalCapture = createCapturedIo();
+  await runCli(
+    [
+      "upsert-canonical-doc",
+      "--project",
+      "acme-app",
+      "--topic",
+      "resume policy",
+      "--registry-scope",
+      "resume-flow",
+      "--summary",
+      "Canonical guidance for resume flow.",
+      "--guidance",
+      "prefer declared scope|keep canonical notes concise",
+      "--references",
+      "taxonomy-registry-baseline|near-term-implementation-sessions",
+      "--date",
+      "2026-03-11",
+    ],
+    canonicalCapture.io,
+  );
+
+  const canonicalResult = parseLastJson(canonicalCapture.captured.stdout);
+  if (!isRecord(canonicalResult) || typeof canonicalResult.relativePath !== "string") {
+    throw new Error("Unexpected upsert-canonical-doc result shape");
+  }
+
+  assert.match(
+    canonicalResult.relativePath,
+    /projects\/acme-app\/canonical-docs\/resume-flow\/resume-policy\.md/,
+  );
+
+  const readCapture = createCapturedIo();
+  await runCli(["read-document", "--path", canonicalResult.relativePath], readCapture.io);
+  const readResult = parseLastJson(readCapture.captured.stdout);
+  if (!isRecord(readResult) || !isRecord(readResult.metadata)) {
+    throw new Error("Unexpected read-document result shape");
+  }
+
+  assert.equal(readResult.metadata.registry_scope, "resume-flow");
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("CLI rejects reading unmanaged document paths", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
