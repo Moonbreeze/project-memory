@@ -813,6 +813,10 @@ test("MCP server exposes bounded read entrypoints", () => {
     outcome: "Dedicated planning reads can return work-item-only context.",
     originKind: "ad-hoc",
     originNote: "MCP bounded planning coverage.",
+    context: [
+      "canonical-doc:acme-app:resume-flow:resume-policy",
+      "decision:acme-app:2026-03-12:resume-architecture",
+    ],
     verification: ["Run planning backlog coverage."],
   });
 
@@ -867,6 +871,16 @@ test("MCP server exposes bounded read entrypoints", () => {
 
   assert.equal(planningTopicResult.structuredContent.entrypoint, "planning-topic-entry");
   assert.equal(planningTopicResult.structuredContent.topic, "resume-slice");
+  assert.deepEqual(
+    planningTopicResult.structuredContent.documents.map((document) => {
+      if (!isRecord(document) || !isRecord(document.metadata) || typeof document.metadata.topic !== "string") {
+        throw new Error("Expected read_planning_topic_entry document metadata");
+      }
+
+      return document.metadata.topic;
+    }),
+    ["resume-slice", "resume-policy", "resume-architecture"],
+  );
   if (
     !Array.isArray(planningTopicResult.structuredContent.planningExplainability)
     || planningTopicResult.structuredContent.planningExplainability.length !== 1

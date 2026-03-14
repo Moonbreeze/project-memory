@@ -77,6 +77,9 @@ const planningBacklogLimits = {
 
 const planningTopicEntryLimits = {
   workItems: 4,
+  canonicalDocs: 2,
+  decisions: 2,
+  sessionNotes: 1,
 } as const;
 
 const topicEntryLimits = {
@@ -524,6 +527,37 @@ const listPlanningBacklogEntries = (
   });
 };
 
+const collectPlanningContextCandidatePaths = (
+  context: RepositoryContext,
+  project: string,
+  entries: WorkItemPlanningEntry[],
+  locatorType: "canonical-doc" | "decision" | "session-note",
+): string[] => {
+  const seenRelativePaths = new Set<string>();
+  const relativePaths: string[] = [];
+
+  for (const entry of entries) {
+    for (const locator of entry.definition.context) {
+      if (locator.type !== locatorType || locator.project !== project) {
+        continue;
+      }
+
+      const relativePath = resolveWorkItemLocatorRelativePath(locator);
+      if (
+        seenRelativePaths.has(relativePath)
+        || !hasFile(path.join(context.memoryRootDir, relativePath))
+      ) {
+        continue;
+      }
+
+      seenRelativePaths.add(relativePath);
+      relativePaths.push(relativePath);
+    }
+  }
+
+  return relativePaths;
+};
+
 /**
  * Builds bounded planning explainability for the selected planning documents.
  */
@@ -741,7 +775,8 @@ export const readPlanningBacklog = (
 };
 
 /**
- * Reads a bounded exact-topic planning package for one project/topic.
+ * Reads a bounded exact-topic planning package for one project/topic and its
+ * explicit same-project context locators.
  */
 export const readPlanningTopicEntry = (
   input: PlanningTopicEntryInput,
@@ -754,14 +789,18 @@ export const readPlanningTopicEntry = (
   const notes = [
     "Planning topic entry reads only same-project active work-item documents whose topic exactly matches the requested topic.",
     "Planning topic entry stays bounded and ordered by derived planning state before date/path tie-breaks.",
+    "Planning topic entry follows only explicit same-project context locators from the selected work items, with fixed per-type limits and no fallback expansion.",
   ];
   const seenRelativePaths = new Set<string>();
   const allPlanningEntries = listProjectWorkItemPlanningEntries(context, project);
+  const planningEntryByPath = new Map(
+    allPlanningEntries.map((entry) => [entry.document.relativePath, entry] as const),
+  );
   const planningEntries = sortPlanningEntries(allPlanningEntries).filter((entry) => {
     return entry.definition.metadata.topic === topic;
   });
 
-  appendStage(
+  const selectedWorkItemDocuments = appendStage(
     stages,
     documents,
     seenRelativePaths,
@@ -772,6 +811,78 @@ export const readPlanningTopicEntry = (
       limit: planningTopicEntryLimits.workItems,
       description: "Read bounded exact-topic active work items in planning-ranked order.",
       candidatePaths: planningEntries.map((entry) => entry.document.relativePath),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
+
+  const selectedPlanningEntries = selectedWorkItemDocuments.map((document) => {
+    const planningEntry = planningEntryByPath.get(document.relativePath);
+    if (!planningEntry) {
+      throw new Error(`Missing planning entry for ${document.relativePath}`);
+    }
+
+    return planningEntry;
+  });
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "context-canonical-explicit",
+      documentType: "canonical-doc",
+      strategy: "reference-follow",
+      limit: planningTopicEntryLimits.canonicalDocs,
+      description: "Read bounded explicit canonical-doc context from the selected work items.",
+      candidatePaths: collectPlanningContextCandidatePaths(
+        context,
+        project,
+        selectedPlanningEntries,
+        "canonical-doc",
+      ),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "context-decision-explicit",
+      documentType: "decision",
+      strategy: "reference-follow",
+      limit: planningTopicEntryLimits.decisions,
+      description: "Read bounded explicit decision context from the selected work items.",
+      candidatePaths: collectPlanningContextCandidatePaths(
+        context,
+        project,
+        selectedPlanningEntries,
+        "decision",
+      ),
+      allowedStatuses: currentStatuses,
+    },
+    context,
+  );
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "context-session-note-explicit",
+      documentType: "session-note",
+      strategy: "reference-follow",
+      limit: planningTopicEntryLimits.sessionNotes,
+      description: "Read bounded explicit session-note context from the selected work items.",
+      candidatePaths: collectPlanningContextCandidatePaths(
+        context,
+        project,
+        selectedPlanningEntries,
+        "session-note",
+      ),
       allowedStatuses: activeStatuses,
     },
     context,
@@ -788,7 +899,7 @@ export const readPlanningTopicEntry = (
     documents,
     notes,
     topic,
-    buildPlanningExplainability(allPlanningEntries, documents),
+    buildPlanningExplainability(allPlanningEntries, selectedWorkItemDocuments),
   );
 };
 

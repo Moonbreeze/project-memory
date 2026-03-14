@@ -145,7 +145,7 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
   read_planning_topic_entry: {
     name: "read_planning_topic_entry",
     description:
-      "Read a bounded exact-topic planning package for one project/topic using only same-project active work-item documents.",
+      "Read a bounded exact-topic planning package for one project/topic using same-project active work-item documents plus explicit same-project context locators from the selected work items.",
     inputSchema: createObjectSchema(
       {
         project: {

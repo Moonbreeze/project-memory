@@ -878,6 +878,42 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
     );
   };
 
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-flow",
+      date: "2026-03-10",
+      summary: "Canonical resume policy.",
+      guidance: ["Prefer resumable execution."],
+      references: ["decision: resume-architecture"],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "resume-architecture",
+      date: "2026-03-11",
+      status: "draft",
+      context: "Need explicit planning context coverage.",
+      decision: "Keep resume execution stateful.",
+      consequences: ["Planning readers can follow direct decision context."],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "resume-investigation",
+      date: "2026-03-12",
+      summary: "Checked resume edge cases.",
+      actions: ["Reviewed work-item context ordering."],
+      followUp: ["Add bounded read coverage."],
+    },
+    context,
+  );
+
   createWorkItem("acme-app", "resume slice", "2026-03-11", { workItemState: "canceled" });
   createWorkItem("acme-app", "resume slice", "2026-03-12", { workItemState: "done" });
   createWorkItem("acme-app", "resume slice", "2026-03-13", {
@@ -889,8 +925,32 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
         topic: "resume-slice",
       },
     ],
+    context: [
+      {
+        type: "canonical-doc",
+        project: "acme-app",
+        registryScope: "resume-flow",
+        topic: "resume-policy",
+      },
+    ],
   });
-  createWorkItem("acme-app", "resume slice", "2026-03-14", { workItemState: "in_progress" });
+  createWorkItem("acme-app", "resume slice", "2026-03-14", {
+    workItemState: "in_progress",
+    context: [
+      {
+        type: "session-note",
+        project: "acme-app",
+        date: "2026-03-12",
+        topic: "resume-investigation",
+      },
+      {
+        type: "decision",
+        project: "acme-app",
+        date: "2026-03-11",
+        topic: "resume-architecture",
+      },
+    ],
+  });
   createWorkItem("acme-app", "resume slice", "2026-03-15", {
     dependencies: [
       {
@@ -898,6 +958,20 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
         project: "acme-app",
         date: "2026-03-12",
         topic: "resume-slice",
+      },
+    ],
+    context: [
+      {
+        type: "decision",
+        project: "acme-app",
+        date: "2026-03-11",
+        topic: "resume-architecture",
+      },
+      {
+        type: "canonical-doc",
+        project: "acme-app",
+        registryScope: "resume-flow",
+        topic: "resume-policy",
       },
     ],
   });
@@ -914,7 +988,12 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
   assert.equal(result.topic, "resume-slice");
   assert.deepEqual(
     result.stages.map((stage) => [stage.name, stage.relativePaths.length]),
-    [["work-item-exact", 4]],
+    [
+      ["work-item-exact", 4],
+      ["context-canonical-explicit", 1],
+      ["context-decision-explicit", 1],
+      ["context-session-note-explicit", 1],
+    ],
   );
   assert.deepEqual(
     result.documents.map((document) => document.relativePath),
@@ -923,6 +1002,9 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
       "projects/acme-app/work-items/2026/2026-03-14-resume-slice.md",
       "projects/acme-app/work-items/2026/2026-03-13-resume-slice.md",
       "projects/acme-app/work-items/2026/2026-03-12-resume-slice.md",
+      "projects/acme-app/canonical-docs/resume-flow/resume-policy.md",
+      "projects/acme-app/decisions/2026/2026-03-11-resume-architecture.md",
+      "projects/acme-app/session-log/2026/03/2026-03-12-resume-investigation.md",
     ],
   );
   assert.deepEqual(
@@ -952,6 +1034,11 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
   assert(
     result.notes.includes(
       "Planning topic entry reads only same-project active work-item documents whose topic exactly matches the requested topic.",
+    ),
+  );
+  assert(
+    result.notes.includes(
+      "Planning topic entry follows only explicit same-project context locators from the selected work items, with fixed per-type limits and no fallback expansion.",
     ),
   );
 });

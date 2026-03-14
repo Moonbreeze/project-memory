@@ -866,6 +866,8 @@ test("CLI exposes bounded read entrypoints", async () => {
       "ad-hoc",
       "--origin-note",
       "CLI bounded planning coverage.",
+      "--context",
+      "canonical-doc:acme-app:resume-flow:resume-policy|decision:acme-app:2026-03-12:resume-architecture",
       "--verification",
       "Run planning backlog coverage",
       "--date",
@@ -925,7 +927,7 @@ test("CLI exposes bounded read entrypoints", async () => {
 
       return document.metadata.topic;
     }),
-    ["resume-slice"],
+    ["resume-slice", "resume-policy", "resume-architecture"],
   );
   if (
     !Array.isArray(planningTopicResult.planningExplainability)
