@@ -1,5 +1,8 @@
 import { parseChooseWorkflowInput } from "../types.ts";
 
+/**
+ * One recommended MCP tool with the reason it fits the situation.
+ */
 type WorkflowToolRecommendation = {
   /** MCP tool name to call. */
   name: string;
@@ -7,6 +10,9 @@ type WorkflowToolRecommendation = {
   reason: string;
 };
 
+/**
+ * Structured chooser response returned by the `choose_workflow` tool.
+ */
 type WorkflowChoiceResult = {
   /** Echoed user goal. */
   goal: string;
@@ -42,14 +48,23 @@ const lifecycleGuide = [
   "9. Commit memory-repo changes separately from code-repo changes.",
 ] as const;
 
+/**
+ * Normalizes free-form chooser text for keyword matching.
+ */
 const normalizeText = (value: string): string => {
   return value.trim().toLowerCase();
 };
 
+/**
+ * Returns `true` when the normalized text includes any of the provided patterns.
+ */
 const includesAny = (value: string, patterns: readonly string[]): boolean => {
   return patterns.some((pattern) => value.includes(pattern));
 };
 
+/**
+ * Creates one tool recommendation entry for the chooser response.
+ */
 const createRecommendation = (
   name: string,
   reason: string,
@@ -60,6 +75,9 @@ const createRecommendation = (
   };
 };
 
+/**
+ * Chooses the stable-guidance write tool that best matches the user request.
+ */
 const chooseStableGuidanceTool = (value: string): WorkflowToolRecommendation => {
   if (includesAny(value, ["provider", "vendor", "api provider", "model provider"])) {
     return createRecommendation(
@@ -81,6 +99,9 @@ const chooseStableGuidanceTool = (value: string): WorkflowToolRecommendation => 
   );
 };
 
+/**
+ * Chooses the next lifecycle action when the request already implies lifecycle state.
+ */
 const chooseLifecycleRecommendation = (
   goal: string,
   currentStep: string | undefined,
@@ -238,6 +259,9 @@ const chooseLifecycleRecommendation = (
   return undefined;
 };
 
+/**
+ * Chooses the bounded-read or maintenance tool that best matches the user goal.
+ */
 const chooseReadRecommendation = (goal: string): WorkflowChoiceResult => {
   const normalizedGoal = normalizeText(goal);
 

@@ -1,12 +1,10 @@
-import {
-  createMcpResponse,
-} from "./dispatch.ts";
 import { once } from "node:events";
 
+import { createMcpResponse } from "./dispatch.ts";
 import { formatResponsePayload, readMessage } from "./stdio.ts";
 import { createJsonRpcErrorResponse } from "./types.ts";
-import type { JsonRpcResponse } from "./types.ts";
 import type { ResponseFormat } from "./stdio.ts";
+import type { JsonRpcResponse } from "./types.ts";
 
 /**
  * Writes one JSON-RPC response to stdout using the selected transport format.
@@ -44,7 +42,8 @@ const processMessage = async (
 };
 
 let inputBuffer: Buffer = Buffer.alloc(0);
-let readPipeline: Promise<void> = Promise.resolve();
+let queuedReads: Array<() => Promise<void>> = [];
+let isDrainingReadQueue = false;
 let stdinClosedHandled = false;
 
 /**
@@ -75,9 +74,59 @@ const drainInputBuffer = async (): Promise<void> => {
   }
 };
 
+/**
+ * Reports one unexpected queued-read failure and marks the process as failed.
+ */
+const reportQueueError = (error: unknown): void => {
+  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  process.stderr.write(`${message}\n`);
+  process.exitCode = 1;
+};
+
+/**
+ * Drains queued stdin work in arrival order using `async`/`await`.
+ */
+const drainReadQueue = async (): Promise<void> => {
+  if (isDrainingReadQueue) {
+    return;
+  }
+
+  isDrainingReadQueue = true;
+
+  try {
+    while (queuedReads.length > 0) {
+      const nextRead = queuedReads.shift();
+      if (!nextRead) {
+        continue;
+      }
+
+      try {
+        await nextRead();
+      } catch (error) {
+        reportQueueError(error);
+      }
+    }
+  } finally {
+    isDrainingReadQueue = false;
+
+    if (queuedReads.length > 0) {
+      void drainReadQueue();
+    }
+  }
+};
+
+/**
+ * Appends one stdin processing task to the serialized read queue.
+ */
+const enqueueRead = (readTask: () => Promise<void>): void => {
+  queuedReads.push(readTask);
+  void drainReadQueue();
+};
+
 process.stdin.on("data", (chunk: string | Buffer) => {
   const nextChunk = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : Buffer.from(chunk);
-  readPipeline = readPipeline.then(async () => {
+
+  enqueueRead(async () => {
     inputBuffer = Buffer.concat([inputBuffer, nextChunk]);
     await drainInputBuffer();
   });
@@ -95,7 +144,8 @@ const handleStdinClosed = (): void => {
   }
 
   stdinClosedHandled = true;
-  readPipeline = readPipeline.then(async () => {
+
+  enqueueRead(async () => {
     if (inputBuffer.byteLength > 0) {
       await writeResponse(
         createJsonRpcErrorResponse(undefined, -32700, "Incomplete MCP message at end of input"),

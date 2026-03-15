@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isoDatePattern,
+  isoDatePatternSource,
   isLiteralMember,
+  kebabCaseSlugPattern,
+  kebabCaseSlugPatternSource,
   parseBooleanString,
 } from "../../src/core/index.ts";
 
@@ -22,4 +26,16 @@ test("parseBooleanString parses true and false while preserving undefined", () =
     () => parseBooleanString("yes"),
     /Boolean values must use true or false, received: yes/,
   );
+});
+
+test("shared regex pattern sources stay aligned with compiled slug and date validators", () => {
+  assert.match("alpha-1", new RegExp(`^${kebabCaseSlugPatternSource}$`));
+  assert.doesNotMatch("Alpha 1", new RegExp(`^${kebabCaseSlugPatternSource}$`));
+  assert.equal(kebabCaseSlugPattern.test("alpha-1"), true);
+  assert.equal(kebabCaseSlugPattern.test("Alpha 1"), false);
+
+  assert.match("2026-03-15", new RegExp(`^${isoDatePatternSource}$`));
+  assert.doesNotMatch("2026/03/15", new RegExp(`^${isoDatePatternSource}$`));
+  assert.equal(isoDatePattern.test("2026-03-15"), true);
+  assert.equal(isoDatePattern.test("2026/03/15"), false);
 });

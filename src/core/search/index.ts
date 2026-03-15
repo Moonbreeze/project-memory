@@ -72,6 +72,9 @@ const matchesListDocumentsQuery = (
   return true;
 };
 
+/**
+ * Returns `true` when the selected project already has active work-item documents.
+ */
 const hasProjectWorkItems = (
   documents: ParsedDocument[],
   project: string | undefined,
@@ -200,6 +203,9 @@ const toListedDocument = (
   return listedDocument;
 };
 
+/**
+ * Builds one short search excerpt, optionally centered around the query text.
+ */
 const buildExcerpt = (document: ParsedDocument, queryText?: string): string => {
   const body = document.body.replace(/\s+/g, " ").trim();
   if (!queryText) {
@@ -217,6 +223,9 @@ const buildExcerpt = (document: ParsedDocument, queryText?: string): string => {
   return body.slice(start, end);
 };
 
+/**
+ * Builds planning metadata lookup for active work-item documents by relative path.
+ */
 const buildWorkItemPlanningMetadata = (
   documents: ParsedDocument[],
 ): Map<string, WorkItemPlanningMetadata> => {
@@ -228,6 +237,9 @@ const buildWorkItemPlanningMetadata = (
   return planningMetadataByPath;
 };
 
+/**
+ * Returns `true` when planning metadata belongs to the backlog-facing active states.
+ */
 const matchesWorkItemBacklogPlanningState = (
   planningMetadata: WorkItemPlanningMetadata | undefined,
 ): boolean => {

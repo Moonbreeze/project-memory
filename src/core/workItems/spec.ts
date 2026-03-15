@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { isoDatePattern, kebabCaseSlugPattern } from "../shared/index.ts";
 import type { ValidationResult } from "../types/index.ts";
 
 import type {
@@ -11,21 +12,18 @@ import type {
   WorkItemRecordLocator,
 } from "./types.ts";
 
-const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * Returns `true` when the value is a valid `YYYY-MM-DD` date string.
  */
 const isDateString = (value: string): boolean => {
-  return datePattern.test(value);
+  return isoDatePattern.test(value);
 };
 
 /**
  * Returns `true` when the value is a non-empty kebab-case slug.
  */
 const isSlug = (value: string): boolean => {
-  return slugPattern.test(value);
+  return kebabCaseSlugPattern.test(value);
 };
 
 /**

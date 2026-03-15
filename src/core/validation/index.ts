@@ -1,4 +1,13 @@
-import { RequiredFrontmatterKey, isDocumentSource, isDocumentStatus, isFrontmatterKey } from "../types/index.ts";
+import {
+  isoDatePattern,
+  kebabCaseSlugPattern,
+} from "../shared/index.ts";
+import {
+  RequiredFrontmatterKey,
+  isDocumentSource,
+  isDocumentStatus,
+  isFrontmatterKey,
+} from "../types/index.ts";
 import type { DocumentType, RepositoryContext, ValidationResult } from "../types/index.ts";
 import { WorkItemSectionHeading as WorkItemSectionHeadingValues } from "../workItems/constants.ts";
 import { isWorkItemState } from "../workItems/types.ts";
@@ -71,15 +80,15 @@ export const validateFrontmatter = (
     }
   }
 
-  if (metadata.project && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(metadata.project)) {
+  if (metadata.project && !kebabCaseSlugPattern.test(metadata.project)) {
     errors.push("Project must use kebab-case");
   }
 
-  if (metadata.date && !/^\d{4}-\d{2}-\d{2}$/.test(metadata.date)) {
+  if (metadata.date && !isoDatePattern.test(metadata.date)) {
     errors.push("Date must use YYYY-MM-DD format");
   }
 
-  if (metadata.registry_scope && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(metadata.registry_scope)) {
+  if (metadata.registry_scope && !kebabCaseSlugPattern.test(metadata.registry_scope)) {
     errors.push("registry_scope must use kebab-case");
   }
 

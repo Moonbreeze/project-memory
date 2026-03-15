@@ -1,11 +1,11 @@
 import { CloseWorkItemStateValues } from "../../../core/workItems/index.ts";
+
 import { archiveWorkItemTool } from "../archiveWorkItem.ts";
 import { closeWorkItemTool } from "../closeWorkItem.ts";
 import { commitPendingChangesTool } from "../commitPendingChanges.ts";
+import { createObjectSchema } from "../schema.ts";
 
 import type { RegisteredMcpTool } from "../toolTypes.ts";
-
-import { createObjectSchema } from "../schema.ts";
 
 /**
  * MCP lifecycle-oriented tool definitions.

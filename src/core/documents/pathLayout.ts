@@ -1,5 +1,9 @@
 import path from "node:path";
 
+import {
+  isoDatePatternSource,
+  kebabCaseSlugPatternSource,
+} from "../shared/index.ts";
 import { isDocumentType } from "../types/index.ts";
 import type { DocumentType, ManagedDocumentPathInfo } from "../types/index.ts";
 
@@ -12,60 +16,82 @@ type DocumentPathPattern = {
   pattern: RegExp;
 };
 
-const slugPattern = "[a-z0-9]+(?:-[a-z0-9]+)*";
 const yearPattern = "\\d{4}";
 const monthPattern = "\\d{2}";
-const datePattern = "\\d{4}-\\d{2}-\\d{2}";
 
+/**
+ * Builds the document-classification regex for one repository subtree.
+ */
 const docPattern = (root: string, rest: string): RegExp => {
-  return new RegExp(`^${root}\\/${slugPattern}\\/${rest}\\.md$`);
+  return new RegExp(`^${root}\\/${kebabCaseSlugPatternSource}\\/${rest}\\.md$`);
 };
 
 const documentPathPatterns: DocumentPathPattern[] = [
   {
     type: "session-note",
     archived: false,
-    pattern: docPattern("projects", `session-log\\/${yearPattern}\\/${monthPattern}\\/${datePattern}-${slugPattern}`),
+    pattern: docPattern(
+      "projects",
+      `session-log\\/${yearPattern}\\/${monthPattern}\\/${isoDatePatternSource}-${kebabCaseSlugPatternSource}`,
+    ),
   },
   {
     type: "verification-result",
     archived: false,
-    pattern: docPattern("projects", `verification\\/${yearPattern}\\/${datePattern}-${slugPattern}`),
+    pattern: docPattern(
+      "projects",
+      `verification\\/${yearPattern}\\/${isoDatePatternSource}-${kebabCaseSlugPatternSource}`,
+    ),
   },
   {
     type: "provider-note",
     archived: false,
-    pattern: docPattern("projects", `provider-notes\\/${slugPattern}`),
+    pattern: docPattern("projects", `provider-notes\\/${kebabCaseSlugPatternSource}`),
   },
   {
     type: "decision",
     archived: false,
-    pattern: docPattern("projects", `decisions\\/${yearPattern}\\/${datePattern}-${slugPattern}`),
+    pattern: docPattern(
+      "projects",
+      `decisions\\/${yearPattern}\\/${isoDatePatternSource}-${kebabCaseSlugPatternSource}`,
+    ),
   },
   {
     type: "runbook",
     archived: false,
-    pattern: docPattern("projects", `runbooks\\/${slugPattern}`),
+    pattern: docPattern("projects", `runbooks\\/${kebabCaseSlugPatternSource}`),
   },
   {
     type: "canonical-doc",
     archived: false,
-    pattern: docPattern("projects", `canonical-docs\\/${slugPattern}\\/${slugPattern}`),
+    pattern: docPattern(
+      "projects",
+      `canonical-docs\\/${kebabCaseSlugPatternSource}\\/${kebabCaseSlugPatternSource}`,
+    ),
   },
   {
     type: "work-item",
     archived: false,
-    pattern: docPattern("projects", `work-items\\/${yearPattern}\\/${datePattern}-${slugPattern}`),
+    pattern: docPattern(
+      "projects",
+      `work-items\\/${yearPattern}\\/${isoDatePatternSource}-${kebabCaseSlugPatternSource}`,
+    ),
   },
   {
     type: "session-note",
     archived: true,
-    pattern: docPattern("archives", `session-log\\/${yearPattern}\\/${monthPattern}\\/${datePattern}-${slugPattern}`),
+    pattern: docPattern(
+      "archives",
+      `session-log\\/${yearPattern}\\/${monthPattern}\\/${isoDatePatternSource}-${kebabCaseSlugPatternSource}`,
+    ),
   },
   {
     type: "verification-result",
     archived: true,
-    pattern: docPattern("archives", `verification\\/${yearPattern}\\/${datePattern}-${slugPattern}`),
+    pattern: docPattern(
+      "archives",
+      `verification\\/${yearPattern}\\/${isoDatePatternSource}-${kebabCaseSlugPatternSource}`,
+    ),
   },
 ];
 

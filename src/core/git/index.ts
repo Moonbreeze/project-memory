@@ -4,19 +4,33 @@ import path from "node:path";
 import { resolveArchiveRelativePath } from "../archive/index.ts";
 import { createRepositoryContext } from "../config/index.ts";
 import { isManagedDocumentRelativePath, resolveManagedDocumentPathInfo } from "../documents/index.ts";
+import { isLiteralMember, kebabCaseSlugPatternSource } from "../shared/index.ts";
 import type { CommitPendingChangesInput, ManagedDocumentPathInfo } from "../types/index.ts";
 
-type CommitScope =
-  | "session"
-  | "verification"
-  | "provider"
-  | "decision"
-  | "runbook"
-  | "canonical"
-  | "work-item"
-  | "archive"
-  | "mixed";
+/**
+ * Supported managed-doc commit scopes used in commit messages.
+ */
+const CommitScopeValues = [
+  "session",
+  "verification",
+  "provider",
+  "decision",
+  "runbook",
+  "canonical",
+  "work-item",
+  "archive",
+  "mixed",
+] as const;
 
+/**
+ * Supported managed-doc commit scope.
+ */
+type CommitScope =
+  typeof CommitScopeValues[number];
+
+/**
+ * Managed path metadata collected from pending git changes.
+ */
 type EligibleManagedPath = ManagedDocumentPathInfo & {
   relativePath: string;
 };
@@ -29,8 +43,16 @@ type CommitTarget = {
   scope: CommitScope;
 };
 
-const commitMessagePattern =
-  /^docs\(([a-z0-9]+(?:-[a-z0-9]+)*)\/(session|verification|provider|decision|runbook|canonical|work-item|archive|mixed)\): (\S(?:.*\S)?)$/;
+const commitMessagePattern = new RegExp(
+  `^docs\\((${kebabCaseSlugPatternSource})\\/(session|verification|provider|decision|runbook|canonical|work-item|archive|mixed)\\): (\\S(?:.*\\S)?)$`,
+);
+
+/**
+ * Returns `true` when `value` is one supported commit scope.
+ */
+const isCommitScope = (value: unknown): value is CommitScope => {
+  return isLiteralMember(CommitScopeValues, value);
+};
 
 /**
  * Executes a git command and returns trimmed stdout.
@@ -50,6 +72,9 @@ const runGit = (args: string[], cwd: string): string => {
   return result.stdout.trim();
 };
 
+/**
+ * Reads one git path list command and normalizes blank output to an empty array.
+ */
 const readGitPathList = (args: string[], cwd: string): string[] => {
   const output = runGit(args, cwd);
   if (!output) {
@@ -62,6 +87,9 @@ const readGitPathList = (args: string[], cwd: string): string[] => {
     .filter(Boolean);
 };
 
+/**
+ * Collects changed managed-document candidate paths from tracked and untracked git state.
+ */
 const collectChangedPaths = (cwd: string): string[] => {
   const changedPaths = new Set<string>();
   const gitCommands = [
@@ -79,6 +107,9 @@ const collectChangedPaths = (cwd: string): string[] => {
   return [...changedPaths];
 };
 
+/**
+ * Infers the commit scope for one approved managed-path batch.
+ */
 const inferCommitScope = (approvedPaths: EligibleManagedPath[]): CommitScope => {
   const archivePaths = approvedPaths.filter((approvedPath) => approvedPath.archived);
   if (archivePaths.length > 0) {
@@ -158,6 +189,9 @@ const inferCommitTarget = (approvedPaths: EligibleManagedPath[]): CommitTarget =
   };
 };
 
+/**
+ * Validates that one commit message matches the inferred project/scope target.
+ */
 const validateCommitMessage = (message: string, expectedTarget: CommitTarget): void => {
   const match = commitMessagePattern.exec(message);
   if (!match) {
@@ -167,7 +201,11 @@ const validateCommitMessage = (message: string, expectedTarget: CommitTarget): v
   }
 
   const actualProject = match[1];
-  const actualScope = match[2] as CommitScope;
+  const actualScope = match[2];
+  if (!isCommitScope(actualScope)) {
+    throw new Error(`Unsupported commit scope: ${actualScope}`);
+  }
+
   if (actualProject !== expectedTarget.project || actualScope !== expectedTarget.scope) {
     throw new Error(
       `Commit message must be docs(${expectedTarget.project}/${expectedTarget.scope}): for the current changes`,

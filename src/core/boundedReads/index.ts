@@ -530,6 +530,9 @@ const listPlanningBacklogEntries = (
   });
 };
 
+/**
+ * Collects explicit same-project planning locator targets for one relationship surface.
+ */
 const collectPlanningLocatorCandidatePaths = (
   context: RepositoryContext,
   project: string,
@@ -564,6 +567,9 @@ const collectPlanningLocatorCandidatePaths = (
   return relativePaths;
 };
 
+/**
+ * Collects explicit same-project dependency work-item paths from selected entries.
+ */
 const collectPlanningDependencyCandidatePaths = (
   context: RepositoryContext,
   project: string,
