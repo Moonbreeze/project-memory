@@ -77,6 +77,7 @@ const planningBacklogLimits = {
 
 const planningTopicEntryLimits = {
   workItems: 4,
+  dependencies: 2,
   canonicalDocs: 2,
   decisions: 2,
   sessionNotes: 1,
@@ -563,6 +564,36 @@ const collectPlanningLocatorCandidatePaths = (
   return relativePaths;
 };
 
+const collectPlanningDependencyCandidatePaths = (
+  context: RepositoryContext,
+  project: string,
+  entries: WorkItemPlanningEntry[],
+): string[] => {
+  const seenRelativePaths = new Set<string>();
+  const relativePaths: string[] = [];
+
+  for (const entry of entries) {
+    for (const dependency of entry.definition.dependencies) {
+      if (dependency.project !== project) {
+        continue;
+      }
+
+      const relativePath = resolveWorkItemLocatorRelativePath(dependency);
+      if (
+        seenRelativePaths.has(relativePath)
+        || !hasFile(path.join(context.memoryRootDir, relativePath))
+      ) {
+        continue;
+      }
+
+      seenRelativePaths.add(relativePath);
+      relativePaths.push(relativePath);
+    }
+  }
+
+  return relativePaths;
+};
+
 /**
  * Builds bounded planning explainability for the selected planning documents.
  */
@@ -781,7 +812,7 @@ export const readPlanningBacklog = (
 
 /**
  * Reads a bounded exact-topic planning package for one project/topic and its
- * explicit same-project context locators.
+ * explicit same-project dependency, context, and evidence locators.
  */
 export const readPlanningTopicEntry = (
   input: PlanningTopicEntryInput,
@@ -792,8 +823,9 @@ export const readPlanningTopicEntry = (
   const stages: BoundedReadStage[] = [];
   const documents: ParsedDocument[] = [];
   const notes = [
-    "Planning topic entry reads only same-project active work-item documents whose topic exactly matches the requested topic.",
+    "Planning topic entry seeds work-item selection with same-project active documents whose topic exactly matches the requested topic.",
     "Planning topic entry stays bounded and ordered by derived planning state before date/path tie-breaks.",
+    "Planning topic entry follows only explicit same-project dependency work items from the selected work items, with a fixed limit and no recursive expansion.",
     "Planning topic entry follows only explicit same-project context locators from the selected work items, with fixed per-type limits and no fallback expansion.",
     "Planning topic entry follows only explicit same-project evidence locators from the selected work items, with fixed per-type limits and no fallback expansion.",
   ];
@@ -830,6 +862,27 @@ export const readPlanningTopicEntry = (
 
     return planningEntry;
   });
+
+  appendStage(
+    stages,
+    documents,
+    seenRelativePaths,
+    {
+      name: "dependency-work-item-explicit",
+      documentType: "work-item",
+      strategy: "reference-follow",
+      limit: planningTopicEntryLimits.dependencies,
+      description:
+        "Read bounded explicit dependency work items from the selected work items without recursive follow.",
+      candidatePaths: collectPlanningDependencyCandidatePaths(
+        context,
+        project,
+        selectedPlanningEntries,
+      ),
+      allowedStatuses: activeStatuses,
+    },
+    context,
+  );
 
   appendStage(
     stages,
@@ -1122,6 +1175,16 @@ export const readTopicEntry = (
 
   if (exactMatchCount === 0) {
     notes.push("No exact topic matches were found; returned bounded filename contains matches instead.");
+
+    const hasExactTopicWorkItem = listProjectWorkItemPlanningEntries(context, project).some((entry) => {
+      return entry.definition.metadata.topic === topic && activeStatuses.includes(entry.document.metadata.status);
+    });
+
+    if (hasExactTopicWorkItem) {
+      notes.push(
+        "Exact-topic work items exist for this topic, but topic-entry intentionally excludes work-item documents; use planning-topic-entry for bounded execution context.",
+      );
+    }
 
     appendStage(
       stages,

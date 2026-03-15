@@ -10,7 +10,8 @@ import { optionalDocumentMetadataProperties } from "./common.ts";
  */
 export const createRunbookMcpTool: RegisteredMcpTool = {
   name: "create_runbook",
-  description: "Create one managed runbook document.",
+  description:
+    "Create one managed runbook document for a repeatable operational procedure that someone should be able to execute later. In the normal lifecycle this is one of the stable-guidance updates that may follow implementation and decision capture. Use it for procedural guidance, not one-off session notes or architecture rationale.",
   inputSchema: createObjectSchema(
     {
       project: {

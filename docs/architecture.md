@@ -1,0 +1,174 @@
+# Architecture
+
+This document describes the stable architecture of the `project-memory` tool repository.
+It is aimed at contributors who need the system model, retrieval model, and implementation constraints.
+It assumes the reader already knows the user-facing core concepts from the [README](../README.md).
+
+## System Boundary
+
+`project-memory` is split into two repositories:
+
+- tool repo: this repository, containing code, templates, wrappers, install flow, and tests
+- memory repo: an external repository containing managed Markdown documents
+
+The external memory repository is selected through `PROJECT_MEMORY_ROOT`.
+That split is deliberate:
+
+- the tool repo remains portable and publishable
+- managed project documents stay outside the main code repository
+- git history for code and managed knowledge remain separable
+
+## Design Goals
+
+The system is built for agent-assisted software work rather than for free-form note storage.
+Contributors should read the codebase with three goals in mind:
+
+- keep managed documents in the external memory repo as the source of truth
+- provide narrow, automatable retrieval surfaces instead of open-ended repository scans
+- keep CLI and MCP behavior aligned through shared core logic
+
+## Main Code Areas
+
+- `src/core/`: document parsing, validation, storage, search, bounded reads, git helpers, archive logic, and work-item planning logic
+- `src/cli/`: local command handlers built as a thin surface over `src/core/`
+- `src/mcp/`: MCP server, tool registration, and tool input parsing built as a thin surface over `src/core/`
+- `templates/`: managed document templates
+- `tests/`: core, CLI, MCP, and install/e2e coverage
+
+## Managed Document Model
+
+The tool works with project-scoped Markdown documents plus frontmatter.
+Current document types:
+
+- `session-note`
+- `verification-result`
+- `provider-note`
+- `decision`
+- `runbook`
+- `canonical-doc`
+- `work-item`
+
+Each document type has:
+
+- a stable repository path shape
+- validated frontmatter
+- a bounded set of statuses
+- a deterministic body template or parser
+
+The model is intentionally document-first rather than database-first.
+Files remain inspectable in git, while the tool enforces stable structure and path conventions around them.
+
+## Document Responsibility Model
+
+The document taxonomy is not only a storage concern.
+It is also how the system separates execution tracking, session chronology, durable rationale, verification evidence, and stable reference knowledge.
+
+This separation is what allows bounded reads and agent workflows to retrieve the right kind of context without treating every markdown file as interchangeable.
+
+When the taxonomy is violated, bounded reads become less trustworthy because unrelated semantics start to share the same retrieval surface.
+
+## Path Model
+
+Active documents live under the memory repo `projects/` tree.
+Archived historical records live under `archives/`.
+
+Representative active paths:
+
+- `projects/<project>/session-log/<year>/<month>/<date>-<topic>.md`
+- `projects/<project>/verification/<year>/<date>-<topic>.md`
+- `projects/<project>/provider-notes/<topic>.md`
+- `projects/<project>/decisions/<year>/<date>-<topic>.md`
+- `projects/<project>/runbooks/<topic>.md`
+- `projects/<project>/canonical-docs/<registry-scope>/<topic>.md`
+- `projects/<project>/work-items/<year>/<date>-<topic>.md`
+
+The tool repo never becomes the source of truth for these managed records.
+It only provides the runtime, templates, validation, and retrieval surfaces that operate on the external repository.
+
+## Work-Item Model
+
+Work items represent executable backlog slices rather than architectural truth.
+
+They use two separate axes:
+
+- document `status`: for managed document lifecycle
+- `work_item_state`: for execution lifecycle
+
+That split lets the tool distinguish document visibility from execution progress.
+
+Work items can store:
+
+- origin metadata
+- explicit dependency locators to other work items
+- explicit same-project context locators
+- verification targets
+- explicit same-project evidence locators
+
+The current runtime model keeps those relationships same-project by default.
+
+## Search, List, And Read Model
+
+The tool provides three broad retrieval layers:
+
+- list/search/read of individual managed documents
+- preset-based listing such as backlog
+- bounded read entrypoints for common agent retrieval patterns
+
+`list-documents` returns metadata only by default.
+`read-document` is the direct path-based full read surface.
+`search-documents` returns matched documents with excerpts.
+
+These layers intentionally serve different callers:
+
+- direct reads and searches are maintenance primitives
+- presets provide a small amount of opinionated shaping over generic listing
+- bounded reads are the preferred startup surface for recurring MCP-driven workflows
+
+## Bounded Read Architecture
+
+Bounded reads return a structured package rather than an open-ended project scan.
+Each bounded read contains:
+
+- selected documents
+- explainable stages
+- notes about fallbacks or intentional omissions
+- planning explainability when the entrypoint is work-item planning oriented
+
+Current bounded entrypoints:
+
+- `cold-start`
+- `planning-backlog`
+- `planning-topic-entry`
+- `topic-entry`
+- `rationale-entry`
+
+The planning entrypoints are work-item aware:
+
+- `planning-backlog` reads active same-project work items in planning-ranked order
+- `planning-topic-entry` starts from exact-topic same-project work items and can follow explicit dependency, context, and evidence references with fixed limits
+
+This is the core architectural tradeoff of the project.
+The tool does less than a fully open retrieval system on purpose so callers can trust scope, ordering, and explainability.
+
+## Retrieval Constraints
+
+The retrieval model intentionally favors bounded and deterministic behavior.
+These constraints are part of the runtime contract, not temporary implementation shortcuts.
+
+Key guardrails:
+
+- same-project defaults for planning relationships
+- fixed per-stage limits in bounded reads
+- deterministic ordering by planning state, date, and path as appropriate
+- no implicit cross-project aggregation in default planning or bounded read flows
+- no recursive graph walking in reference-follow stages
+- project-scoped commit validation for managed document commits
+
+## Interaction Surfaces
+
+The CLI and MCP server expose the same core capabilities over different interaction models.
+Both surfaces ultimately call the shared `src/core/` logic so that validation, parsing, bounded read behavior, and commit rules stay consistent.
+They are parallel surfaces over the same core behavior, not layers that depend on each other.
+
+Contributors should preserve one document model and one retrieval model across both surfaces.
+Human-readable browsing, if added, should remain a projection over the same underlying managed files rather than a separate source of truth.

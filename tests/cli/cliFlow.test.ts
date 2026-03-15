@@ -891,6 +891,29 @@ test("CLI exposes bounded read entrypoints", async () => {
       "--project",
       "acme-app",
       "--topic",
+      "resume prerequisite",
+      "--summary",
+      "Complete the prerequisite slice.",
+      "--outcome",
+      "Main planning work can depend on a bounded prerequisite.",
+      "--origin-kind",
+      "ad-hoc",
+      "--origin-note",
+      "CLI bounded planning dependency coverage.",
+      "--verification",
+      "Confirm the prerequisite stays readable",
+      "--date",
+      "2026-03-12",
+      "--work-item-state",
+      "done",
+    ],
+  );
+  await runCli(
+    [
+      "upsert-work-item",
+      "--project",
+      "acme-app",
+      "--topic",
       "resume slice",
       "--summary",
       "Implement the planning slice.",
@@ -900,6 +923,8 @@ test("CLI exposes bounded read entrypoints", async () => {
       "ad-hoc",
       "--origin-note",
       "CLI bounded planning coverage.",
+      "--dependencies",
+      "work-item:acme-app:2026-03-12:resume-prerequisite",
       "--context",
       "canonical-doc:acme-app:resume-flow:resume-policy|decision:acme-app:2026-03-12:resume-architecture",
       "--evidence",
@@ -963,7 +988,14 @@ test("CLI exposes bounded read entrypoints", async () => {
 
       return document.metadata.topic;
     }),
-    ["resume-slice", "resume-policy", "resume-architecture", "resume-check", "resume-evidence"],
+    [
+      "resume-slice",
+      "resume-prerequisite",
+      "resume-policy",
+      "resume-architecture",
+      "resume-check",
+      "resume-evidence",
+    ],
   );
   if (
     !Array.isArray(planningTopicResult.planningExplainability)

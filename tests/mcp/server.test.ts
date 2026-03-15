@@ -286,7 +286,31 @@ test("MCP server completes initialize and tools/list handshake", () => {
     .map((tool) => tool.name)
     .filter((name): name is string => typeof name === "string");
 
+  const toolDescriptions = new Map(
+    listResult.tools
+      .filter((tool): tool is Record<string, unknown> => isRecord(tool))
+      .flatMap((tool) => {
+        if (typeof tool.name !== "string" || typeof tool.description !== "string") {
+          return [];
+        }
+
+        return [[tool.name, tool.description] as const];
+      }),
+  );
+  const toolsByName = new Map(
+    listResult.tools
+      .filter((tool): tool is Record<string, unknown> => isRecord(tool))
+      .flatMap((tool) => {
+        if (typeof tool.name !== "string") {
+          return [];
+        }
+
+        return [[tool.name, tool] as const];
+      }),
+  );
+
   assert(toolNames.includes("list_documents"));
+  assert(toolNames.includes("choose_workflow"));
   assert(toolNames.includes("read_cold_start"));
   assert(toolNames.includes("read_planning_backlog"));
   assert(toolNames.includes("read_planning_topic_entry"));
@@ -297,6 +321,77 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert(toolNames.includes("archive_work_item"));
   assert(toolNames.includes("close_work_item"));
   assert(toolNames.includes("upsert_work_item"));
+
+  assert.match(toolDescriptions.get("list_documents") ?? "", /choose read_cold_start/i);
+  assert.match(toolDescriptions.get("choose_workflow") ?? "", /fallback read-only chooser/i);
+  assert.match(toolDescriptions.get("choose_workflow") ?? "", /does not route, mutate data/i);
+  assert.match(toolDescriptions.get("list_documents") ?? "", /read_planning_backlog/i);
+  assert.match(toolDescriptions.get("search_documents") ?? "", /do not use this as the default startup path/i);
+  assert.match(toolDescriptions.get("read_document") ?? "", /direct maintenance primitive/i);
+  assert.match(toolDescriptions.get("read_cold_start") ?? "", /normal execution flow/i);
+  assert.match(toolDescriptions.get("read_cold_start") ?? "", /commit memory-repo changes separately from code-repo changes/i);
+  assert.match(toolDescriptions.get("read_planning_backlog") ?? "", /after cold-start/i);
+  assert.match(toolDescriptions.get("upsert_work_item") ?? "", /executable backlog slice/i);
+  assert.match(toolDescriptions.get("upsert_work_item") ?? "", /visibility status, and execution progress/i);
+  assert.match(toolDescriptions.get("append_session_note") ?? "", /chronological execution/i);
+  assert.match(toolDescriptions.get("create_decision") ?? "", /durable rationale/i);
+  assert.match(toolDescriptions.get("record_verification_result") ?? "", /concrete evidence/i);
+  assert.match(toolDescriptions.get("upsert_canonical_doc") ?? "", /current stable guidance/i);
+  assert.match(toolDescriptions.get("create_runbook") ?? "", /repeatable operational procedure/i);
+  assert.match(toolDescriptions.get("upsert_provider_note") ?? "", /provider-specific constraints/i);
+  assert.match(toolDescriptions.get("read_topic_entry") ?? "", /same-project topic/i);
+  assert.match(toolDescriptions.get("read_rationale_entry") ?? "", /same-project topic/i);
+  assert.match(toolDescriptions.get("close_work_item") ?? "", /before the memory-repo commit/i);
+  assert.match(toolDescriptions.get("commit_pending_changes") ?? "", /separately from code-repo commits/i);
+
+  const upsertWorkItemTool = toolsByName.get("upsert_work_item");
+  if (!isRecord(upsertWorkItemTool) || !isRecord(upsertWorkItemTool.inputSchema) || !isRecord(upsertWorkItemTool.inputSchema.properties)) {
+    throw new Error("Expected upsert_work_item schema in tools/list");
+  }
+
+  const statusProperty = upsertWorkItemTool.inputSchema.properties.status;
+  const workItemStateProperty = upsertWorkItemTool.inputSchema.properties.workItemState;
+  if (!isRecord(statusProperty) || !isRecord(workItemStateProperty)) {
+    throw new Error("Expected work-item status properties in tools/list schema");
+  }
+
+  assert.match(String(statusProperty.description ?? ""), /document lifecycle status controlling managed visibility/i);
+  assert.match(String(statusProperty.description ?? ""), /separate from execution progress/i);
+  assert.match(String(workItemStateProperty.description ?? ""), /execution lifecycle state controlling planning progress/i);
+  assert.match(String(workItemStateProperty.description ?? ""), /separate from document visibility/i);
+});
+
+test("MCP choose_workflow recommends bounded startup reads and lifecycle next steps", () => {
+  const startupResponse = callTool("workflow-1", "choose_workflow", {
+    goal: "I need startup context before I decide what to work on in this project.",
+  });
+  const startupResult = readToolResult(startupResponse);
+
+  if (!isRecord(startupResult.structuredContent) || !Array.isArray(startupResult.structuredContent.recommendedTools)) {
+    throw new Error("Expected choose_workflow startup payload");
+  }
+
+  assert.equal(startupResult.structuredContent.route, "bounded-read-cold-start");
+  assert.equal(startupResult.structuredContent.lifecyclePosition, "bounded-context");
+  assert.equal(startupResult.structuredContent.recommendedTools[0]?.name, "read_cold_start");
+  assert.match(String(startupResult.structuredContent.nextStep ?? ""), /read_cold_start/);
+  assert(Array.isArray(startupResult.structuredContent.lifecycleGuide));
+  assert.equal(startupResult.structuredContent.lifecycleGuide.length, 9);
+
+  const nextStepResponse = callTool("workflow-2", "choose_workflow", {
+    goal: "I implemented the fix and I already appended the session note. What should I do next?",
+    currentStep: "Implemented the fix and appended the session note for the work-item.",
+  });
+  const nextStepResult = readToolResult(nextStepResponse);
+
+  if (!isRecord(nextStepResult.structuredContent) || !Array.isArray(nextStepResult.structuredContent.recommendedTools)) {
+    throw new Error("Expected choose_workflow lifecycle payload");
+  }
+
+  assert.equal(nextStepResult.structuredContent.route, "lifecycle-next-step");
+  assert.equal(nextStepResult.structuredContent.lifecyclePosition, "post-session-note-pre-verification");
+  assert.equal(nextStepResult.structuredContent.recommendedTools[0]?.name, "record_verification_result");
+  assert.match(String(nextStepResult.structuredContent.nextStep ?? ""), /record_verification_result/);
 });
 
 test("MCP stdio framing carries one initialize exchange", () => {
@@ -821,6 +916,17 @@ test("MCP server exposes bounded read entrypoints", () => {
     steps: ["Run explicit evidence coverage"],
     result: "Pass",
   });
+  callTool("bounded-prerequisite-work-item", "upsert_work_item", {
+    project: "acme-app",
+    topic: "resume prerequisite",
+    date: "2026-03-12",
+    summary: "Complete the prerequisite slice.",
+    outcome: "Main planning work can depend on a bounded prerequisite.",
+    originKind: "ad-hoc",
+    originNote: "MCP bounded planning dependency coverage.",
+    verification: ["Confirm the prerequisite stays readable."],
+    workItemState: "done",
+  });
   callTool("bounded-work-item", "upsert_work_item", {
     project: "acme-app",
     topic: "resume slice",
@@ -829,6 +935,7 @@ test("MCP server exposes bounded read entrypoints", () => {
     outcome: "Dedicated planning reads can return work-item-only context.",
     originKind: "ad-hoc",
     originNote: "MCP bounded planning coverage.",
+    dependencies: ["work-item:acme-app:2026-03-12:resume-prerequisite"],
     context: [
       "canonical-doc:acme-app:resume-flow:resume-policy",
       "decision:acme-app:2026-03-12:resume-architecture",
@@ -899,7 +1006,14 @@ test("MCP server exposes bounded read entrypoints", () => {
 
       return document.metadata.topic;
     }),
-    ["resume-slice", "resume-policy", "resume-architecture", "resume-check", "resume-evidence"],
+    [
+      "resume-slice",
+      "resume-prerequisite",
+      "resume-policy",
+      "resume-architecture",
+      "resume-check",
+      "resume-evidence",
+    ],
   );
   if (
     !Array.isArray(planningTopicResult.structuredContent.planningExplainability)

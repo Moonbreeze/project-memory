@@ -15,7 +15,8 @@ import { DocumentSourceValues } from "../../../../core/types/index.ts";
  */
 export const upsertWorkItemMcpTool: RegisteredMcpTool = {
   name: "upsert_work_item",
-  description: "Create or replace one managed work-item document.",
+  description:
+    "Create or replace one managed work-item document for an executable backlog slice. In the normal lifecycle this is the document to open or update before active implementation so origin, dependencies, context, verification targets, evidence, visibility status, and execution progress stay explicit instead of leaking into decisions or session prose.",
   inputSchema: createObjectSchema(
     {
       project: {
@@ -86,12 +87,14 @@ export const upsertWorkItemMcpTool: RegisteredMcpTool = {
       },
       status: {
         type: "string",
-        description: "Optional work-item document status.",
+        description:
+          "Optional document lifecycle status controlling managed visibility of the work-item record itself; this is separate from execution progress tracked by workItemState.",
         enum: [...WorkItemDocumentStatusValues],
       },
       workItemState: {
         type: "string",
-        description: "Optional execution state for the work item.",
+        description:
+          "Optional execution lifecycle state controlling planning progress for the work-item slice; this is separate from document visibility tracked by status.",
         enum: [...WorkItemStateValues],
       },
     },

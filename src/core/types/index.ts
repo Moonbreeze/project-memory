@@ -18,7 +18,9 @@ export {
  * Core domain types and type guards.
  */
 export type {
+  BoundedReadDependencySurface,
   BoundedReadEntrypoint,
+  BoundedReadPlanningExplainability,
   BoundedReadResult,
   BoundedReadStage,
   BoundedReadStrategy,

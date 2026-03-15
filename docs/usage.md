@@ -1,0 +1,205 @@
+# Usage Guide
+
+This guide assumes the core concepts from the [README](../README.md).
+It focuses on how the managed document model is used during everyday work.
+
+## Document Responsibilities
+
+Each managed document type has one job.
+Keeping those boundaries clear is what makes the repository readable for both agents and humans.
+
+| Document type | Responsibility | Create or update it when | Do not use it for |
+| --- | --- | --- | --- |
+| `work-item` | Own one executable backlog slice | There is concrete work to do, track, block, resume, or close | Durable architectural truth or long-form session history |
+| `session-note` | Record what happened during one work session | You want a chronological trace of actions taken, findings, and follow-up | Stable policy, backlog ownership, or repeatable procedures |
+| `decision` | Capture durable rationale and chosen direction | A change sets or revises policy, constraints, or architecture | Ad-hoc progress notes or raw test evidence |
+| `verification-result` | Capture evidence that something was checked | A test, validation step, smoke check, or review produced a result | Broad narrative context or future planning |
+| `canonical-doc` | State current stable guidance for one scoped topic | A topic has settled enough to need a maintained source of current truth | Session chronology or unresolved exploration |
+| `runbook` | Define a repeatable operational procedure | Someone should be able to execute the same procedure later | One-off implementation notes or policy arguments |
+| `provider-note` | Capture stable guidance for working with one provider | A provider has constraints, quirks, or usage guidance worth preserving | Generic architecture, backlog tracking, or session logs |
+
+The intended paradigm is:
+
+1. `work-item` owns the execution slice.
+2. `session-note` records what happened while executing it.
+3. `decision` records durable reasoning when policy changes.
+4. `verification-result` records proof that something was checked.
+5. `canonical-doc`, `runbook`, and `provider-note` hold stable reference knowledge after the work settles.
+
+## Model Lifecycle
+
+A normal documentation lifecycle is described first as model operations, not as shell commands:
+
+1. Open or update the `work-item` that owns the current slice.
+2. Read bounded context for the topic, rationale, and dependencies that matter.
+3. Perform the implementation, investigation, or migration work in the relevant repository.
+4. Record session-level progress in a `session-note`.
+5. Record a `verification-result` when a meaningful check completes.
+6. If stable policy or architecture changes, create or update a `decision`.
+7. If long-lived guidance changes, update the relevant `canonical-doc`, `runbook`, or `provider-note`.
+8. Close or archive the `work-item` when the slice is done.
+9. Commit memory-repo changes separately from code-repo changes.
+
+For feature and change work, the lifecycle usually looks like this:
+
+```mermaid
+flowchart TD
+    start[Need to change something] --> backlog[Open or update<br/>a work-item]
+    backlog --> context[Read bounded context]
+    context --> session[Record session progress]
+    session --> policy{Policy or<br/>architecture changed?}
+    policy -- yes --> decision[Create or update a decision]
+    policy -- no --> verify[Record verification result]
+    decision --> verify[Record verification result]
+    verify --> stable{Stable guidance<br/>changed?}
+    stable -- yes --> reference[Update stable guidance]
+    stable -- no --> close
+    reference --> close[Close or archive<br/>the work-item]
+```
+
+This process keeps the memory repo understandable after the session ends.
+The next human or agent should be able to answer:
+
+- what was being worked on
+- what happened during execution
+- what decisions became durable
+- what evidence supports the current state
+- what remains open
+
+## Example: One Iteration
+
+The same lifecycle becomes more concrete when shown as one end-to-end iteration through MCP:
+
+```mermaid
+sequenceDiagram
+    actor Human
+    participant Agent
+    participant Memory as project-memory via MCP
+    participant Code as Code repository
+
+    Human->>Agent: Request change or investigation
+    Agent->>Memory: Read bounded context
+    Agent-->>Human: Share plan or findings
+    Human-->>Agent: Clarify or confirm direction
+    Agent->>Memory: Open or update work-item
+    Agent->>Code: Implement or analyze
+    Agent-->>Human: Report progress or questions
+    Human-->>Agent: Refine direction if needed
+    Agent->>Memory: Append session-note
+    Agent->>Code: Run checks
+    Agent->>Memory: Record verification-result
+    alt Policy or guidance changed
+        Agent-->>Human: Propose durable update
+        Human-->>Agent: Confirm or refine direction
+        Agent->>Memory: Create or update decision
+        Agent->>Memory: Update canonical-doc
+    end
+    Agent->>Memory: Close or archive work-item
+    Agent-->>Human: Return result and follow-up
+```
+
+## Installation
+
+For install and bootstrap, use the onboarding flow in the [README](../README.md).
+This guide starts after the tool repo and external memory repo already exist.
+
+## Scenario: Start A Work Session
+
+Do not start by scanning the whole memory repo.
+Start with a bounded read that matches the question you are trying to answer.
+
+Use the entrypoints as concrete system operations:
+
+1. Read `cold-start` when you need startup context for a project.
+2. Read `planning-backlog` when you need to know what work is ready, in progress, or blocked.
+3. Read `planning-topic-entry` when one work-item topic needs exact dependency, context, and evidence follow.
+4. Read `topic-entry` when you need the current truth for one topic.
+5. Read `rationale-entry` when you need the durable reasoning behind a policy or decision.
+6. Open or update the relevant `work-item` before the active slice drifts into undocumented execution.
+
+The point is not convenience alone.
+These entrypoints keep reads narrow, deterministic, and explainable so the caller does not have to rediscover repository boundaries every session.
+
+## Validation And Path Rules
+
+The managed surface is stricter than a generic markdown repository:
+
+- documents outside the managed path model are ignored by list and search entrypoints
+- direct reads and writes to disallowed paths fail instead of silently creating unmanaged records
+- invalid frontmatter fails validation on read and write
+- documents that match the path layout but violate the managed schema are rejected until corrected
+
+In practice, this means the memory repo is not defined by "all markdown files under version control".
+It is defined by markdown files that satisfy both the path model and the managed document contract.
+
+## Scenario: Backlog Triage And Work-Item Execution
+
+For backlog work, `work-item` is the authoritative execution unit.
+Planning should not depend on scattered session notes or recent decisions alone.
+
+Use planning reads as a short operational sequence:
+
+1. Read the backlog to identify what is ready, in progress, or blocked right now.
+2. Open one planning topic entry to inspect its explicit dependency, context, and evidence surfaces.
+3. Decide whether the `work-item` should be started, resumed, blocked, or closed.
+4. Update the `work-item` and related documents so the next planning read reflects the new state.
+
+`read-planning-topic-entry` starts from exact-topic same-project work items and then follows only explicit same-project references:
+
+- dependency work items
+- context documents
+- evidence documents
+
+The read remains bounded and deterministic.
+
+## Scenario: Repository Move Or Migration
+
+This scenario is about migrating existing operational documentation into a managed `project-memory` repository.
+It is not the same thing as moving one already-managed memory repo to another filesystem location.
+
+Typical migration shape:
+
+- identify the current source documents and decide which managed document type each piece of information belongs to
+- create `work-item` records for the migration slices instead of trying to rewrite everything in one pass
+- move chronological execution history into `session-note`
+- move durable rationale into `decision`
+- move stable current guidance into `canonical-doc`, `runbook`, or `provider-note`
+- record verification when migrated material is reviewed or validated
+
+Example:
+
+- `legacy/notes/2025-q4-rollout.md` becomes one or more `session-note` entries if it mostly records chronology, actions, and follow-up
+- `legacy/architecture-decisions.md` is split into durable topic-level `decision` documents
+- `legacy/ops-checklist.md` becomes a `runbook` if it is truly procedural, or a `canonical-doc` if it is current stable guidance rather than a step-by-step operation
+- the migration itself is tracked through a `work-item`, and review of the migrated output is captured in a `verification-result`
+
+The important goal is not to preserve the old folder layout.
+The goal is to re-express the information in the managed taxonomy so future bounded reads and planning flows become reliable.
+
+## CLI Reference Surface
+
+Use the CLI for exact local maintenance, scripting, and debugging.
+For the overall operating model, see the core concepts in the [README](../README.md).
+
+Current local entrypoints:
+
+```bash
+./scripts/run-cli.sh <command> ...
+./scripts/run-mcp.sh
+```
+
+Representative CLI operations:
+
+- list or search documents when you already know what you are looking for
+- inspect one exact path directly
+- run lifecycle operations such as close or archive
+- stage and commit managed document changes through the validated commit helper
+
+Example commands:
+
+```bash
+./scripts/run-cli.sh list-documents --project acme-api
+./scripts/run-cli.sh read-document --path projects/acme-api/decisions/2026/2026-03-14-repository-split.md
+./scripts/run-cli.sh close-work-item --project acme-api --topic bounded-read-follow-up --date 2026-03-14 --state done
+./scripts/run-cli.sh commit-pending-changes --message "docs(acme-api/session): record setup validation"
+```

@@ -72,6 +72,16 @@ export type JsonRpcError = {
   message: string;
 };
 
+/**
+ * Input for the fallback workflow chooser tool.
+ */
+export type ChooseWorkflowInput = {
+  /** Short natural-language goal or question. */
+  goal: string;
+  /** Optional description of the current lifecycle position or recent action. */
+  currentStep?: string;
+};
+
 const SupportedProtocolVersion = [
   "2024-11-05",
   "2025-03-26",
@@ -994,5 +1004,17 @@ export const parseCommitPendingChangesInput = (
 
   return {
     message: readRequiredString(params.message, "message"),
+  };
+};
+
+/**
+ * Parses params for `choose_workflow`.
+ */
+export const parseChooseWorkflowInput = (value: unknown): ChooseWorkflowInput => {
+  const params = readParams(value);
+
+  return {
+    goal: readRequiredString(params.goal, "goal"),
+    currentStep: readOptionalString(params.currentStep, "currentStep"),
   };
 };

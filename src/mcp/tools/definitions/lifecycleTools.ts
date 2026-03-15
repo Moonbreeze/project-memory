@@ -13,7 +13,8 @@ import { createObjectSchema } from "../schema.ts";
 export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
   archive_work_item: {
     name: "archive_work_item",
-    description: "Archive one existing work-item after it reaches a terminal lifecycle state.",
+    description:
+      "Archive one existing work-item after it already reached a terminal lifecycle state and no longer needs to stay visible in the active planning surface. In the normal lifecycle this is one of the final steps after execution, evidence, and any durable guidance updates are already captured.",
     inputSchema: createObjectSchema(
       {
         project: {
@@ -35,7 +36,8 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
   },
   close_work_item: {
     name: "close_work_item",
-    description: "Close one existing work-item by applying a terminal lifecycle state.",
+    description:
+      "Close one existing work-item by applying a terminal lifecycle state after the execution slice is actually done or canceled, typically once the relevant session notes, verification evidence, and durable guidance updates are already recorded. This is the normal lifecycle step before the memory-repo commit.",
     inputSchema: createObjectSchema(
       {
         project: {
@@ -62,7 +64,8 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
   },
   commit_pending_changes: {
     name: "commit_pending_changes",
-    description: "Stage and commit approved pending memory-repository changes.",
+    description:
+      "Stage and commit approved pending changes in the external managed memory repository after the document updates for the current slice are complete. Use this for memory-repo changes separately from code-repo commits; it is the final step of the normal documentation lifecycle.",
     inputSchema: createObjectSchema(
       {
         message: {

@@ -10,7 +10,8 @@ import { optionalDocumentMetadataProperties } from "./common.ts";
  */
 export const recordVerificationResultMcpTool: RegisteredMcpTool = {
   name: "record_verification_result",
-  description: "Create one managed verification result document.",
+  description:
+    "Create one managed verification result document to capture concrete evidence from a test, review, or validation step. In the normal lifecycle this is the evidence-recording step after a meaningful check completes. Use it for what was checked and what happened, not for broad narrative context or future planning.",
   inputSchema: createObjectSchema(
     {
       project: {

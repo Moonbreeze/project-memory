@@ -1,170 +1,96 @@
 # Project Memory
 
-`project-memory` is the tool repository for a private, multi-project knowledge base for AI agents.
-The code lives here. The actual project memory lives in a separate external repository selected through `PROJECT_MEMORY_ROOT`.
+`project-memory` is a standalone tool for managing a private, multi-project knowledge base for AI agents.
+This repository contains the install flow, CLI, MCP server, validation, bounded read helpers, templates, and tests.
+The managed documents themselves live in a separate external repository selected through `PROJECT_MEMORY_ROOT`.
+
+## Core Concepts
+
+- Repo split: this repository is the tool repo; managed documents live in a separate external memory repo under `projects/` and `archives/`.
+- MCP-first workflow: normal interactive work happens through an agent using bounded reads and managed write tools over MCP.
+- Secondary CLI: the CLI is the exact local surface for automation, debugging, and maintenance. It is intentionally structured rather than optimized for browsing.
 
 ## Quickstart
 
 Prerequisites:
 
-- a Node.js version that supports `--experimental-strip-types`
+- Node.js 22.6 or newer
 - `git`
 
-1. Install tool dependencies:
+Example paths used below:
+
+- tool repo checkout: `~/project-memory-tool`
+- external memory repo: `~/acme-memory`
+- example project slug inside the memory repo: `acme-api`
+
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-2. Create a separate memory repository:
+Create a separate memory repository and bootstrap one project:
 
 ```bash
-npm run install-memory -- --memory-root ~/project-memory-data --project project-memory --git-init true
+npm run install-memory -- --memory-root ~/acme-memory --project acme-api --git-init true
 ```
 
 This creates:
 
-- `~/project-memory-data/projects/`
-- `~/project-memory-data/archives/`
-- a git repository at `~/project-memory-data/.git`
-- an initial `project-memory` project tree
-- a global Codex MCP entry in `~/.codex/config.toml`
-- a global Claude MCP entry in `~/.claude.json`
-- a local shell file at `.project-memory.env`
-- a fallback Codex config snippet at `.project-memory.codex.toml`
-- a Claude config snippet at `.project-memory.claude.mcp.json`
+- `~/acme-memory/projects/`
+- `~/acme-memory/archives/`
+- a git repository at `~/acme-memory/.git`
+- an initial project tree under `~/acme-memory/projects/acme-api/`
+- `.project-memory.env` in this repo
+- local fallback MCP config snippets for Codex and Claude
+- optional global Codex and Claude MCP registration unless disabled with flags
 
-The install flow now emits only client-specific MCP snippets.
-There is no generic legacy `.mcp.json` artifact in the normal path anymore.
-
-3. Use the generated local wrapper for CLI commands:
+Today the supported local entrypoints are wrappers:
 
 ```bash
-./scripts/run-cli.sh list-documents --project project-memory
-./scripts/run-cli.sh list-documents --project project-memory --preset backlog
-```
-
-4. Use the generated local wrapper for the MCP server:
-
-```bash
+./scripts/run-cli.sh list-documents --project acme-api
 ./scripts/run-mcp.sh
 ```
 
-The install command writes `.project-memory.env`, and both wrappers source it automatically.
-`PROJECT_MEMORY_ROOT` is still required internally, but you no longer need to export it manually for normal local usage.
-Codex global MCP registration is attempted automatically by default.
-The MCP server currently accepts protocol revisions `2024-11-05`, `2025-03-26`, `2025-06-18`, and `2025-11-25`.
-If a client requests an unsupported date-based revision, `initialize` negotiates to the nearest supported revision that does not exceed the requested version.
-
-## Normal Workflow
-
-- Use `./scripts/run-cli.sh ...` for local manual operations.
-- Use `./scripts/run-mcp.sh` to start the MCP server with the generated env file.
-- Commit the tool repository and the memory repository separately.
-
-Examples:
-
-```bash
-./scripts/run-cli.sh append-session-note --project project-memory --topic setup --summary "Validated install flow." --actions "created memory repo" --follow-up "document MCP config"
-./scripts/run-cli.sh upsert-work-item --project project-memory --topic session-6-work-item-rollout --summary "Implement the first work-item document flow." --outcome "Project backlog can move off decisions." --origin-kind ad-hoc --origin-note "Session 6 implementation work." --verification "Run npm test"
-./scripts/run-cli.sh list-documents --project project-memory --preset backlog
-./scripts/run-cli.sh commit-pending-changes --message "docs(project-memory/session): record install validation"
-```
-
-`list-documents` returns metadata only by default. Use `--include-body true` only when the full Markdown body is actually needed.
-For project-scoped queries, the `backlog` preset now uses work-item planning when the project has managed work items. That view keeps only active ready, in-progress, and blocked work items, sorts them by planning state before date, and includes dependency counts in the result. When no project is supplied or the project has no work items yet, the preset falls back to the legacy decision backlog view: `type=decision`, excludes `superseded` and `archived`, and sorts by date descending.
+The wrappers source `.project-memory.env` automatically, so you normally do not need to export `PROJECT_MEMORY_ROOT` by hand.
+They are intentionally low-level entrypoints, not polished end-user commands.
 
 ## Install Command
 
-The install command is the intended onboarding path for new users:
+`install-memory` is the intended onboarding path:
 
 ```bash
-npm run install-memory -- --memory-root ~/project-memory-data --project acme-app --git-init true
+npm run install-memory -- --memory-root ~/acme-memory --project acme-api --git-init true
 ```
 
-Flags:
+Important flags:
 
-- `--memory-root`: required external memory repository path; it must not overlap the tool repository
-- `--project`: optional initial project to bootstrap
+- `--memory-root`: required external memory repository path; it must not overlap the tool repo
+- `--project`: optional initial project slug to bootstrap
 - `--git-init`: optional, defaults to `true`
-- `--codex-global`: optional, defaults to `true`; set `false` to skip editing `~/.codex/config.toml`
-- `--claude-global`: optional, defaults to `true`; set `false` to skip editing `~/.claude.json`
+- `--codex-global`: optional, defaults to `true`
+- `--claude-global`: optional, defaults to `true`
 
-The command also generates:
+If you disable global client registration, the command still writes local fallback snippets:
 
-- `.project-memory.env`: local shell env file with `PROJECT_MEMORY_ROOT`
-- updates `~/.codex/config.toml`: global Codex MCP registration for `project-memory`
-- updates `~/.claude.json`: global Claude MCP registration for `project-memory`
-- `.project-memory.codex.toml`: fallback Codex MCP snippet with the same server definition
-- `.project-memory.claude.mcp.json`: Claude MCP snippet for manual review or manual merge into Claude config
-
-Codex usage:
-
-- install updates `~/.codex/config.toml` automatically by default
-- if you prefer manual review only, run with `--codex-global false` and merge `.project-memory.codex.toml` yourself
-
-Claude usage:
-
-- install updates `~/.claude.json` automatically by default
-- if you prefer manual review only, run with `--claude-global false` and merge `.project-memory.claude.mcp.json` into your Claude config yourself
+- `.project-memory.codex.toml`
+- `.project-memory.claude.mcp.json`
 
 ## Verification
 
-- Run `npm test` for the default unit, CLI, MCP dispatcher, and e2e coverage.
-- Run `npm run test:stdio-integration` for the separate process-level stdio lifecycle check.
+Run the default automated coverage:
 
-The stdio integration test is kept outside the default `npm test` path because some sandboxed or agent-driven runners can make nested child-process stdio behavior unreliable. Run it in a normal shell or CI job to verify that the real MCP server process answers framed requests and exits after stdin closes.
+```bash
+npm test
+```
 
-## Repository Roles
+For the process-level stdio lifecycle check, run:
 
-Tool repository contents:
+```bash
+npm run test:stdio-integration
+```
 
-- `src/core/`: shared path, validation, search, git, and archive logic
-- `src/cli/`: local manual interface
-- `src/mcp/`: narrow MCP server surface
-- `templates/`: document templates used by write operations
-- `tests/`: unit and integration coverage
+## Read Next
 
-External memory repository contents:
-
-- `projects/`: active project-scoped documents
-- `archives/`: archived session notes and verification records
-- `projects/<project>/work-items/<year>/`: active work-item records used for backlog planning
-
-## Current MVP Scope
-
-- append session notes
-- record verification results
-- upsert provider notes
-- create decisions
-- create runbooks
-- upsert canonical docs bound to declared taxonomy-registry scopes
-- upsert work items with explicit provenance, dependencies, context, verification, and evidence sections
-- list, read, and search active documents
-- commit pending document changes
-- archive session and verification documents manually
-- update work-item lifecycle through `upsert-work-item` or `upsert_work_item`, including close and archive semantics via `work_item_state` and document `status`
-
-## Work-Item Support
-
-`src/core/workItems/` now provides both the Session 5 schema contract and the first Session 6 implementation surface. Work-item documents live under `projects/<project>/work-items/<year>/`, use the `work_item_state` frontmatter field, and serialize provenance, dependency, context, and evidence locators in a deterministic body format.
-
-`list-documents --preset backlog` and `list_documents` now switch to project-scoped work-item planning when work items exist for the requested project. The bounded read entrypoints still intentionally omit work-item sources until a dedicated planning read entrypoint is added.
-
-## Commit Rules
-
-`commit-pending-changes` enforces the commit message format `docs(<project>/<scope>): <summary>`.
-Supported scopes are `session`, `verification`, `provider`, `decision`, `runbook`, `canonical`, `work-item`, `archive`, and `mixed`.
-
-The project slug is inferred from the pending managed-document paths, and the default flow only allows one project per commit.
-Use `archive` only when the pending changes are strictly archive moves for session notes and verification results.
-If archived documents and active `projects/` documents are committed together for the same project, the required scope is `mixed`.
-If pending managed documents span multiple projects, commit them separately.
-
-Examples:
-
-- `docs(acme-app/session): resume verification notes`
-- `docs(acme-app/provider): claude working agreement`
-- `docs(acme-app/canonical): resume policy baseline`
-- `docs(acme-app/archive): archive stale notes`
-- `docs(acme-app/mixed): archive notes and add follow-up decision`
+- [`docs/usage.md`](docs/usage.md): document responsibilities, working lifecycle, and migration scenarios
+- [`docs/architecture.md`](docs/architecture.md): contributor-facing system model, bounded reads, and retrieval constraints

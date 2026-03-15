@@ -968,6 +968,9 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
     },
     context,
   );
+  createWorkItem("acme-app", "resume prerequisite", "2026-03-10", {
+    workItemState: "done",
+  });
 
   createWorkItem("acme-app", "resume slice", "2026-03-11", { workItemState: "canceled" });
   createWorkItem("acme-app", "resume slice", "2026-03-12", { workItemState: "done" });
@@ -999,6 +1002,14 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
   });
   createWorkItem("acme-app", "resume slice", "2026-03-14", {
     workItemState: "in_progress",
+    dependencies: [
+      {
+        type: "work-item",
+        project: "acme-app",
+        date: "2026-03-10",
+        topic: "resume-prerequisite",
+      },
+    ],
     context: [
       {
         type: "session-note",
@@ -1091,6 +1102,7 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
     result.stages.map((stage) => [stage.name, stage.relativePaths.length]),
     [
       ["work-item-exact", 4],
+      ["dependency-work-item-explicit", 1],
       ["context-canonical-explicit", 1],
       ["context-decision-explicit", 1],
       ["context-session-note-explicit", 1],
@@ -1105,6 +1117,7 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
       "projects/acme-app/work-items/2026/2026-03-14-resume-slice.md",
       "projects/acme-app/work-items/2026/2026-03-13-resume-slice.md",
       "projects/acme-app/work-items/2026/2026-03-12-resume-slice.md",
+      "projects/acme-app/work-items/2026/2026-03-10-resume-prerequisite.md",
       "projects/acme-app/canonical-docs/resume-flow/resume-policy.md",
       "projects/acme-app/decisions/2026/2026-03-11-resume-architecture.md",
       "projects/acme-app/session-log/2026/03/2026-03-12-resume-investigation.md",
@@ -1127,7 +1140,12 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
         0,
         [["projects/acme-app/work-items/2026/2026-03-12-resume-slice.md", true]],
       ],
-      ["projects/acme-app/work-items/2026/2026-03-14-resume-slice.md", "in_progress", 0, []],
+      [
+        "projects/acme-app/work-items/2026/2026-03-14-resume-slice.md",
+        "in_progress",
+        0,
+        [["projects/acme-app/work-items/2026/2026-03-10-resume-prerequisite.md", true]],
+      ],
       [
         "projects/acme-app/work-items/2026/2026-03-13-resume-slice.md",
         "blocked",
@@ -1139,7 +1157,12 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
   );
   assert(
     result.notes.includes(
-      "Planning topic entry reads only same-project active work-item documents whose topic exactly matches the requested topic.",
+      "Planning topic entry seeds work-item selection with same-project active documents whose topic exactly matches the requested topic.",
+    ),
+  );
+  assert(
+    result.notes.includes(
+      "Planning topic entry follows only explicit same-project dependency work items from the selected work items, with a fixed limit and no recursive expansion.",
     ),
   );
   assert(
@@ -1729,6 +1752,54 @@ test("readTopicEntry falls back to bounded contains matches when exact matches a
     ["canonical-fallback", "decision-fallback"],
   );
 });
+
+test("readTopicEntry explains when exact-topic work items exist but remain outside the topic-entry surface", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      date: "2026-03-12",
+      summary: "Implement the exact-topic work slice.",
+      outcome: "Planning reads expose the work item.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Topic-entry exclusion coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Run the bounded read assertions."],
+      evidence: [],
+    },
+    context,
+  );
+
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy fallback",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Fallback canonical guidance.",
+      guidance: ["Use bounded fallback"],
+      references: [],
+    },
+    context,
+  );
+
+  const result = readTopicEntry({ project: "acme-app", topic: "resume policy" }, context);
+
+  assert.equal(result.documents.length, 1);
+  assert(result.notes.some((note) => note.includes("No exact topic matches were found")));
+  assert(
+    result.notes.some((note) =>
+      note.includes("topic-entry intentionally excludes work-item documents; use planning-topic-entry"),
+    ),
+  );
+}
+);
 
 test("readRationaleEntry follows canonical references before generic fallback", () => {
   const rootDir = setupTestRepo();

@@ -10,7 +10,8 @@ import { optionalDocumentMetadataProperties } from "./common.ts";
  */
 export const upsertCanonicalDocMcpTool: RegisteredMcpTool = {
   name: "upsert_canonical_doc",
-  description: "Create or replace one managed canonical doc tied to a taxonomy-registry scope.",
+  description:
+    "Create or replace one managed canonical doc for the current stable guidance of a topic within a declared taxonomy-registry scope. In the normal lifecycle this is one of the stable-guidance updates that may follow verification and durable decision capture. Use it after policy settles, not for chronology, raw evidence, or unresolved exploration.",
   inputSchema: createObjectSchema(
     {
       project: {
