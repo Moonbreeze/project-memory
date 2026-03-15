@@ -10,6 +10,7 @@ import { optionalDocumentMetadataProperties } from "./common.ts";
  */
 export const appendSessionNoteMcpTool: RegisteredMcpTool = {
   name: "append_session_note",
+  resultMode: "compact-document",
   description:
     "Create one managed session note document to record chronological execution, actions taken, and follow-up from a work session. In the normal lifecycle this is the step after implementation work has moved forward and before the slice disappears into undocumented execution. Use it for session history, not for durable policy, current truth, or backlog ownership.",
   inputSchema: createObjectSchema(

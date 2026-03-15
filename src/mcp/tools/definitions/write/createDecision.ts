@@ -10,6 +10,7 @@ import { optionalDocumentMetadataProperties } from "./common.ts";
  */
 export const createDecisionMcpTool: RegisteredMcpTool = {
   name: "create_decision",
+  resultMode: "compact-document",
   description:
     "Create one managed decision record for durable rationale, chosen direction, and lasting constraints. In the normal lifecycle this happens when policy or architecture changes after execution or investigation, not to track day-to-day execution progress.",
   inputSchema: createObjectSchema(

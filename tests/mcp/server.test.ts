@@ -457,6 +457,13 @@ test("MCP server appends and lists documents through standard tools/call", () =>
 
   const appendResult = readToolResult(appendResponse);
   assert.equal(appendResult.isError, false);
+  if (!isRecord(appendResult.structuredContent) || !isRecord(appendResult.structuredContent.metadata)) {
+    throw new Error("Expected structured append_session_note result");
+  }
+
+  assert.equal("body" in appendResult.structuredContent, false);
+  assert.match(appendResult.content[0]?.text ?? "", /Updated session-note at projects\/acme-app\/session-log\//);
+  assert.doesNotMatch(appendResult.content[0]?.text ?? "", /Verified MCP write path|Wrote a document through MCP tools\/call/);
 
   const listResponse = callTool("2", "list_documents", {
     project: "acme-app",
@@ -621,7 +628,9 @@ test("MCP close_work_item closes a work item and removes it from the active back
     throw new Error("Expected structured close_work_item result");
   }
 
+  assert.equal("body" in closeResult.structuredContent, false);
   assert.equal(closeResult.structuredContent.metadata.work_item_state, "done");
+  assert.match(closeResult.content[0]?.text ?? "", /Updated work-item at .*closeable-slice\.md to done\./);
 
   const backlogResponse = callTool("work-close-3", "list_documents", {
     project: "acme-app",
@@ -667,8 +676,10 @@ test("MCP archive_work_item archives a terminal work item and removes it from th
     throw new Error("Expected structured archive_work_item result");
   }
 
+  assert.equal("body" in archiveResult.structuredContent, false);
   assert.equal(archiveResult.structuredContent.metadata.status, "archived");
   assert.equal(archiveResult.structuredContent.metadata.work_item_state, "done");
+  assert.match(archiveResult.content[0]?.text ?? "", /Archived work-item at .*archivable-slice\.md\./);
 
   const backlogResponse = callTool("work-archive-3", "list_documents", {
     project: "acme-app",
@@ -705,6 +716,7 @@ test("MCP archive_document archives canonical docs in place", () => {
     throw new Error("Expected structured canonical doc result");
   }
 
+  assert.equal("body" in createResult.structuredContent, false);
   const archiveResponse = callTool("doc-archive-2", "archive_document", {
     path: createResult.structuredContent.relativePath,
   });
@@ -713,8 +725,10 @@ test("MCP archive_document archives canonical docs in place", () => {
     throw new Error("Expected structured archive_document result");
   }
 
+  assert.equal("body" in archiveResult.structuredContent, false);
   assert.equal(archiveResult.structuredContent.relativePath, createResult.structuredContent.relativePath);
   assert.equal(archiveResult.structuredContent.metadata.status, "archived");
+  assert.match(archiveResult.content[0]?.text ?? "", /Archived canonical-doc at .*resume-policy\.md\./);
 
   const backlogResponse = callTool("doc-archive-3", "list_documents", {
     project: "acme-app",

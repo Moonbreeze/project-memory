@@ -1,4 +1,4 @@
-import { executeMcpTool, listMcpTools } from "./tools/index.ts";
+import { executeMcpTool, getRegisteredMcpTool, listMcpTools } from "./tools/index.ts";
 import {
   createInitializeResult,
   createJsonRpcErrorResponse,
@@ -40,9 +40,10 @@ export const handleMethod = (request: JsonRpcRequest): unknown => {
 
   if (request.method === "tools/call") {
     const toolCall = parseToolCallRequest(request.params);
+    const tool = getRegisteredMcpTool(toolCall.name);
 
     try {
-      return createToolCallResult(executeMcpTool(toolCall.name, toolCall.arguments));
+      return createToolCallResult(executeMcpTool(toolCall.name, toolCall.arguments), tool.resultMode);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return createToolCallErrorResult(message);

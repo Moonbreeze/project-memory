@@ -15,6 +15,7 @@ import { DocumentSourceValues } from "../../../../core/types/index.ts";
  */
 export const upsertWorkItemMcpTool: RegisteredMcpTool = {
   name: "upsert_work_item",
+  resultMode: "compact-document",
   description:
     "Create or replace one managed work-item document for an executable backlog slice. In the normal lifecycle this is the document to open or update before active implementation so origin, dependencies, context, verification targets, evidence, visibility status, and execution progress stay explicit instead of leaking into decisions or session prose.",
   inputSchema: createObjectSchema(

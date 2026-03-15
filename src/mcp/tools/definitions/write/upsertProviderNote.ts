@@ -10,6 +10,7 @@ import { optionalDocumentMetadataProperties } from "./common.ts";
  */
 export const upsertProviderNoteMcpTool: RegisteredMcpTool = {
   name: "upsert_provider_note",
+  resultMode: "compact-document",
   description:
     "Upsert the managed provider note for stable provider-specific constraints, quirks, and usage guidance inside one project. In the normal lifecycle this is one of the stable-guidance updates that may follow implementation or verification. Use it for provider operating knowledge, not generic architecture or backlog tracking.",
   inputSchema: createObjectSchema(

@@ -170,6 +170,11 @@ export type ToolCallResult = {
 };
 
 /**
+ * Controls how one successful MCP tool result should be shaped.
+ */
+export type ToolResultMode = "default-json" | "compact-document";
+
+/**
  * Minimal JSON schema property shape exposed to MCP hosts.
  */
 export type JsonSchemaProperty = {
@@ -685,15 +690,84 @@ export const createJsonRpcErrorResponse = (
 /**
  * Formats one successful tool result for MCP clients.
  */
-export const createToolCallResult = (value: unknown): ToolCallResult => {
+const isParsedDocumentResult = (
+  value: unknown,
+): value is {
+  path: string;
+  relativePath: string;
+  type: string;
+  metadata: Record<string, unknown>;
+  body: string;
+} => {
+  if (!isRecord(value) || !isRecord(value.metadata)) {
+    return false;
+  }
+
+  return (
+    typeof value.path === "string"
+    && typeof value.relativePath === "string"
+    && typeof value.type === "string"
+    && typeof value.body === "string"
+  );
+};
+
+/**
+ * Removes large document bodies from compact MCP write results.
+ */
+const compactToolCallValue = (value: unknown, mode: ToolResultMode): unknown => {
+  if (mode !== "compact-document" || !isParsedDocumentResult(value)) {
+    return value;
+  }
+
+  const { body: _body, ...compactDocument } = value;
+  return compactDocument;
+};
+
+/**
+ * Builds a concise human-readable summary for compact document tool results.
+ */
+const createCompactDocumentText = (value: unknown): string | null => {
+  if (!isRecord(value) || typeof value.relativePath !== "string" || typeof value.type !== "string") {
+    return null;
+  }
+
+  const metadata = isRecord(value.metadata) ? value.metadata : null;
+  const status = metadata && typeof metadata.status === "string" ? metadata.status : null;
+  const workItemState =
+    metadata && typeof metadata.work_item_state === "string" ? metadata.work_item_state : null;
+
+  if (status === "archived") {
+    return `Archived ${value.type} at ${value.relativePath}.`;
+  }
+
+  if (value.type === "work-item" && (workItemState === "done" || workItemState === "canceled")) {
+    return `Updated work-item at ${value.relativePath} to ${workItemState}.`;
+  }
+
+  return `Updated ${value.type} at ${value.relativePath}.`;
+};
+
+/**
+ * Formats one successful tool result for MCP clients.
+ */
+export const createToolCallResult = (
+  value: unknown,
+  mode: ToolResultMode = "default-json",
+): ToolCallResult => {
+  const structuredContent = compactToolCallValue(value, mode);
+  const text =
+    mode === "compact-document"
+      ? createCompactDocumentText(structuredContent) ?? JSON.stringify(structuredContent, null, 2)
+      : JSON.stringify(structuredContent, null, 2);
+
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify(value, null, 2),
+        text,
       },
     ],
-    structuredContent: value,
+    structuredContent,
   };
 };
 

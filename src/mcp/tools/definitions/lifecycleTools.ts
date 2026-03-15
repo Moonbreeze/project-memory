@@ -14,6 +14,7 @@ import type { RegisteredMcpTool } from "../toolTypes.ts";
 export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
   archive_document: {
     name: "archive_document",
+    resultMode: "compact-document",
     description:
       "Archive one existing managed document by repository-relative path. Session notes and verification results move into `archives/`, while provider notes, decisions, runbooks, and canonical docs archive in place by switching to archived status. Work items must use `archive_work_item` instead.",
     inputSchema: createObjectSchema(
@@ -29,6 +30,7 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
   },
   archive_work_item: {
     name: "archive_work_item",
+    resultMode: "compact-document",
     description:
       "Archive one existing work-item after it already reached a terminal lifecycle state and no longer needs to stay visible in the active planning surface. In the normal lifecycle this is one of the final steps after execution, evidence, and any durable guidance updates are already captured.",
     inputSchema: createObjectSchema(
@@ -52,6 +54,7 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
   },
   close_work_item: {
     name: "close_work_item",
+    resultMode: "compact-document",
     description:
       "Close one existing work-item by applying a terminal lifecycle state after the execution slice is actually done or canceled, typically once the relevant session notes, verification evidence, and durable guidance updates are already recorded. This is the normal lifecycle step before the memory-repo commit.",
     inputSchema: createObjectSchema(
