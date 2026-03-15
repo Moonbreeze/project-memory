@@ -70,7 +70,7 @@ When the taxonomy is violated, bounded reads become less trustworthy because unr
 ## Path Model
 
 Active documents live under the memory repo `projects/` tree.
-Archived historical records live under `archives/`.
+The `archives/` tree is reserved for moved historical records whose archive semantics are path-based rather than status-based.
 
 Representative active paths:
 
@@ -81,6 +81,15 @@ Representative active paths:
 - `projects/<project>/runbooks/<topic>.md`
 - `projects/<project>/canonical-docs/<registry-scope>/<topic>.md`
 - `projects/<project>/work-items/<year>/<date>-<topic>.md`
+
+Archive behavior is intentionally split by document role:
+
+- `session-note` and `verification-result` archive by moving into `archives/` because they are append-only historical records once retired from active read surfaces
+- `provider-note`, `decision`, `runbook`, `canonical-doc`, and `work-item` archive in place by switching to `status: archived`
+
+The in-place archive rule is part of the domain model, not just an implementation shortcut.
+For these document types, the `projects/` path is part of the document's stable identity and, for some types, part of its authority boundary.
+Moving them into a second tree would conflate semantic lifecycle with storage relocation, destabilize stable references, and make partial migration or authority reasoning harder than a status transition.
 
 The tool repo never becomes the source of truth for these managed records.
 It only provides the runtime, templates, validation, and retrieval surfaces that operate on the external repository.

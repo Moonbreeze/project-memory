@@ -150,6 +150,60 @@ test("search excludes archived files from active document queries", () => {
   assert.equal(afterArchive[0]?.type, "verification-result");
 });
 
+test("archiveDocument archives decisions in place by updating status", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  const decision = createDecision(
+    {
+      project: "acme-app",
+      topic: "archive policy",
+      date: "2026-03-11",
+      context: "Need explicit archive coverage for durable records.",
+      decision: "Archive decisions in place instead of moving them.",
+      consequences: ["Stable paths remain readable after archival."],
+    },
+    context,
+  );
+
+  const archived = archiveDocument({ relativePath: decision.relativePath }, context);
+  assert.equal(archived.relativePath, decision.relativePath);
+  assert.equal(archived.metadata.status, "archived");
+
+  const backlog = listDocuments({ project: "acme-app", preset: "backlog" }, context);
+  assert.equal(backlog.documents.length, 0);
+});
+
+test("archiveDocument rejects work-item paths and requires the dedicated lifecycle helper", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  const workItem = upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "archive via wrong helper",
+      date: "2026-03-11",
+      summary: "Verify archive helper boundaries.",
+      outcome: "Generic archive flow should reject work-item paths.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Negative archive coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Expect archiveDocument to reject work-item paths."],
+      evidence: [],
+      workItemState: "done",
+    },
+    context,
+  );
+
+  assert.throws(
+    () => archiveDocument({ relativePath: workItem.relativePath }, context),
+    /Use archiveWorkItem to archive work-item documents/,
+  );
+});
+
 test("list and search ignore markdown files outside the managed document structure", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);

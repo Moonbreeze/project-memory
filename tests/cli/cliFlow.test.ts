@@ -440,6 +440,59 @@ test("CLI can append, list, read, and archive documents", async () => {
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("CLI archive-document archives canonical docs in place", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const createCapture = createCapturedIo();
+  await runCli(
+    [
+      "upsert-canonical-doc",
+      "--project",
+      "acme-app",
+      "--topic",
+      "resume policy",
+      "--registry-scope",
+      "resume-flow",
+      "--summary",
+      "Keep resume behavior explicit.",
+      "--guidance",
+      "Use bounded reads",
+      "--references",
+      "decision: resume-architecture",
+      "--date",
+      "2026-03-11",
+    ],
+    createCapture.io,
+  );
+
+  const created = parseLastJson(createCapture.captured.stdout);
+  if (!isRecord(created) || typeof created.relativePath !== "string") {
+    throw new Error("Unexpected upsert-canonical-doc result shape");
+  }
+
+  const archiveCapture = createCapturedIo();
+  await runCli(["archive-document", "--path", created.relativePath], archiveCapture.io);
+  const archived = parseLastJson(archiveCapture.captured.stdout);
+  if (!isRecord(archived) || !isRecord(archived.metadata)) {
+    throw new Error("Unexpected archive-document result shape for canonical doc");
+  }
+
+  assert.equal(archived.relativePath, created.relativePath);
+  assert.equal(archived.metadata.status, "archived");
+
+  const backlogCapture = createCapturedIo();
+  await runCli(["list-documents", "--project", "acme-app", "--preset", "backlog"], backlogCapture.io);
+  const backlog = parseLastJson(backlogCapture.captured.stdout);
+  if (!isRecord(backlog) || !Array.isArray(backlog.documents)) {
+    throw new Error("Unexpected backlog result shape after archive-document");
+  }
+
+  assert.equal(backlog.documents.length, 0);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("CLI creates decisions through the manual interface", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
@@ -771,6 +824,47 @@ test("CLI archives terminal work items through the dedicated lifecycle command",
   }
 
   assert.equal(listResult.documents.length, 0);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("CLI archive-document rejects work-item paths", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  await runCli(
+    [
+      "upsert-work-item",
+      "--project",
+      "acme-app",
+      "--topic",
+      "archive via wrong cli",
+      "--summary",
+      "Verify CLI archive helper boundaries.",
+      "--outcome",
+      "Generic archive flow rejects work-item paths.",
+      "--origin-kind",
+      "ad-hoc",
+      "--origin-note",
+      "CLI negative archive coverage.",
+      "--verification",
+      "Expect archive-document to fail",
+      "--date",
+      "2026-03-11",
+      "--work-item-state",
+      "done",
+    ],
+  );
+
+  await assert.rejects(
+    () =>
+      runCli([
+        "archive-document",
+        "--path",
+        "projects/acme-app/work-items/2026/2026-03-11-archive-via-wrong-cli.md",
+      ]),
+    /Use archiveWorkItem to archive work-item documents/,
+  );
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

@@ -6,9 +6,10 @@ The managed documents themselves live in a separate external repository selected
 
 ## Core Concepts
 
-- Repo split: this repository is the tool repo; managed documents live in a separate external memory repo under `projects/` and `archives/`.
+- Repo split: this repository is the tool repo; managed documents live in a separate external memory repo, with active managed paths under `projects/` and moved historical session or verification records under `archives/`.
 - MCP-first workflow: normal interactive work happens through an agent using bounded reads and managed write tools over MCP.
 - Secondary CLI: the CLI is the exact local surface for automation, debugging, and maintenance. It is intentionally structured rather than optimized for browsing.
+- Archive semantics: archiving is a lifecycle operation, not always a file move. `session-note` and `verification-result` move into `archives/`, while `decision`, `runbook`, `provider-note`, and `canonical-doc` keep their stable `projects/` paths and switch to `status: archived`. `work-item` uses its dedicated lifecycle helper and also archives in place.
 
 ## Quickstart
 

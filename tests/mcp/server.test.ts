@@ -318,6 +318,7 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert(toolNames.includes("read_rationale_entry"));
   assert(toolNames.includes("append_session_note"));
   assert(toolNames.includes("commit_pending_changes"));
+  assert(toolNames.includes("archive_document"));
   assert(toolNames.includes("archive_work_item"));
   assert(toolNames.includes("close_work_item"));
   assert(toolNames.includes("upsert_work_item"));
@@ -341,6 +342,7 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert.match(toolDescriptions.get("upsert_provider_note") ?? "", /provider-specific constraints/i);
   assert.match(toolDescriptions.get("read_topic_entry") ?? "", /same-project topic/i);
   assert.match(toolDescriptions.get("read_rationale_entry") ?? "", /same-project topic/i);
+  assert.match(toolDescriptions.get("archive_document") ?? "", /archive one existing managed document/i);
   assert.match(toolDescriptions.get("close_work_item") ?? "", /before the memory-repo commit/i);
   assert.match(toolDescriptions.get("commit_pending_changes") ?? "", /separately from code-repo commits/i);
 
@@ -681,6 +683,79 @@ test("MCP archive_work_item archives a terminal work item and removes it from th
   }
 
   assert.equal(backlogResult.structuredContent.documents.length, 0);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP archive_document archives canonical docs in place", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const createResponse = callTool("doc-archive-1", "upsert_canonical_doc", {
+    project: "acme-app",
+    topic: "resume policy",
+    registryScope: "resume-flow",
+    summary: "Keep resume behavior explicit.",
+    guidance: ["Use bounded reads."],
+    references: ["decision: resume-architecture"],
+    date: "2026-03-11",
+  });
+  const createResult = readToolResult(createResponse);
+  if (!isRecord(createResult.structuredContent) || typeof createResult.structuredContent.relativePath !== "string") {
+    throw new Error("Expected structured canonical doc result");
+  }
+
+  const archiveResponse = callTool("doc-archive-2", "archive_document", {
+    path: createResult.structuredContent.relativePath,
+  });
+  const archiveResult = readToolResult(archiveResponse);
+  if (!isRecord(archiveResult.structuredContent) || !isRecord(archiveResult.structuredContent.metadata)) {
+    throw new Error("Expected structured archive_document result");
+  }
+
+  assert.equal(archiveResult.structuredContent.relativePath, createResult.structuredContent.relativePath);
+  assert.equal(archiveResult.structuredContent.metadata.status, "archived");
+
+  const backlogResponse = callTool("doc-archive-3", "list_documents", {
+    project: "acme-app",
+    preset: "backlog",
+  });
+  const backlogResult = readToolResult(backlogResponse);
+  if (
+    !isRecord(backlogResult.structuredContent)
+    || !Array.isArray(backlogResult.structuredContent.documents)
+  ) {
+    throw new Error("Expected structured backlog result after archive_document");
+  }
+
+  assert.equal(backlogResult.structuredContent.documents.length, 0);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP archive_document rejects work-item paths", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const createResponse = callTool("doc-archive-work-item-1", "upsert_work_item", {
+    project: "acme-app",
+    topic: "archive via wrong mcp",
+    summary: "Verify MCP archive helper boundaries.",
+    outcome: "Generic archive flow rejects work-item paths.",
+    originKind: "ad-hoc",
+    originNote: "MCP negative archive coverage.",
+    verification: ["Expect archive_document to reject work-item paths."],
+    date: "2026-03-11",
+    workItemState: "done",
+  });
+  assert.equal(readToolResult(createResponse).isError, false);
+
+  const archiveResponse = callTool("doc-archive-work-item-2", "archive_document", {
+    path: "projects/acme-app/work-items/2026/2026-03-11-archive-via-wrong-mcp.md",
+  });
+  const archiveResult = readToolResult(archiveResponse);
+  assert.equal(archiveResult.isError, true);
+  assert.match(archiveResult.content[0]?.text ?? "", /Use archiveWorkItem to archive work-item documents/);
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

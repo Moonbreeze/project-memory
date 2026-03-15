@@ -1,5 +1,6 @@
 import { CloseWorkItemStateValues } from "../../../core/workItems/index.ts";
 
+import { archiveDocumentTool } from "../archiveDocument.ts";
 import { archiveWorkItemTool } from "../archiveWorkItem.ts";
 import { closeWorkItemTool } from "../closeWorkItem.ts";
 import { commitPendingChangesTool } from "../commitPendingChanges.ts";
@@ -11,6 +12,21 @@ import type { RegisteredMcpTool } from "../toolTypes.ts";
  * MCP lifecycle-oriented tool definitions.
  */
 export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
+  archive_document: {
+    name: "archive_document",
+    description:
+      "Archive one existing managed document by repository-relative path. Session notes and verification results move into `archives/`, while provider notes, decisions, runbooks, and canonical docs archive in place by switching to archived status. Work items must use `archive_work_item` instead.",
+    inputSchema: createObjectSchema(
+      {
+        path: {
+          type: "string",
+          description: "Managed repository-relative path to the source document.",
+        },
+      },
+      ["path"],
+    ),
+    handler: archiveDocumentTool,
+  },
   archive_work_item: {
     name: "archive_work_item",
     description:
