@@ -16,6 +16,7 @@ import { readPlanningTopicEntryCommand } from "./readPlanningTopicEntry.ts";
 import { readRationaleEntryCommand } from "./readRationaleEntry.ts";
 import { readTopicEntryCommand } from "./readTopicEntry.ts";
 import { recordVerificationResultCommand } from "./recordVerificationResult.ts";
+import { pushPendingChangesCommand } from "./pushPendingChanges.ts";
 import { searchDocumentsCommand } from "./searchDocuments.ts";
 import { upsertCanonicalDocCommand } from "./upsertCanonicalDoc.ts";
 import { upsertProviderNoteCommand } from "./upsertProviderNote.ts";
@@ -50,5 +51,6 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "read-topic-entry": readTopicEntryCommand,
   "read-rationale-entry": readRationaleEntryCommand,
   "commit-pending-changes": commitPendingChangesCommand,
+  "push-pending-changes": pushPendingChangesCommand,
   "archive-document": archiveDocumentCommand,
 };

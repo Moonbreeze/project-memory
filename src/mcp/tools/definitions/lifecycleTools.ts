@@ -4,6 +4,7 @@ import { archiveDocumentTool } from "../archiveDocument.ts";
 import { archiveWorkItemTool } from "../archiveWorkItem.ts";
 import { closeWorkItemTool } from "../closeWorkItem.ts";
 import { commitPendingChangesTool } from "../commitPendingChanges.ts";
+import { pushPendingChangesTool } from "../pushPendingChanges.ts";
 import { createObjectSchema } from "../schema.ts";
 
 import type { RegisteredMcpTool } from "../toolTypes.ts";
@@ -84,7 +85,7 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
   commit_pending_changes: {
     name: "commit_pending_changes",
     description:
-      "Stage and commit approved pending changes in the external managed memory repository after the document updates for the current slice are complete. Use this for memory-repo changes separately from code-repo commits; it is the final step of the normal documentation lifecycle.",
+      "Stage and commit approved pending changes in the external managed memory repository after the document updates for the current slice are complete. Use this for local memory-repo commits separately from code-repo commits before any explicit remote push step.",
     inputSchema: createObjectSchema(
       {
         message: {
@@ -95,5 +96,21 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
       ["message"],
     ),
     handler: commitPendingChangesTool,
+  },
+  push_pending_changes: {
+    name: "push_pending_changes",
+    description:
+      "Push the current memory-repo branch to a configured remote after local documentation commits are ready to leave the checkout. Use this as the explicit post-commit remote sync step instead of assuming commit_pending_changes will push automatically.",
+    inputSchema: createObjectSchema({
+      remote: {
+        type: "string",
+        description: "Optional remote name; defaults to origin.",
+      },
+      branch: {
+        type: "string",
+        description: "Optional remote branch name; defaults to the current local branch.",
+      },
+    }),
+    handler: pushPendingChangesTool,
   },
 };

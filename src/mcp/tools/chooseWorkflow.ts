@@ -46,6 +46,7 @@ const lifecycleGuide = [
   "7. If long-lived guidance changes, update the relevant canonical-doc, runbook, or provider-note.",
   "8. Close or archive the work-item when the slice is done.",
   "9. Commit memory-repo changes separately from code-repo changes.",
+  "10. Push the memory-repo branch explicitly when the local commit should sync to a remote.",
 ] as const;
 
 /**
@@ -128,19 +129,52 @@ const chooseLifecycleRecommendation = (
       goal,
       currentStep,
       route: "lifecycle-next-step",
-      why: "The work-item is already in a terminal state, so the remaining lifecycle action is the memory-repo commit.",
+      why: "The work-item is already in a terminal state, so the remaining lifecycle actions are the memory-repo commit and any explicit remote push.",
       recommendedTools: [
         createRecommendation(
           "commit_pending_changes",
           "Commit the memory-repo updates after the work-item lifecycle is complete.",
         ),
+        createRecommendation(
+          "push_pending_changes",
+          "Push the resulting memory-repo commit when it should leave the local checkout.",
+        ),
       ],
-      nextStep: "Call commit_pending_changes after reviewing the pending memory-repo diff.",
+      nextStep: "Call commit_pending_changes after reviewing the pending memory-repo diff, then push_pending_changes if the new commit should sync to a remote.",
       lifecyclePosition: "post-close-pre-commit",
       lifecycleGuide: [...lifecycleGuide],
       alternatives: [],
       notes: [
         "Memory-repo commits stay separate from code-repo commits.",
+        "Remote sync is explicit so agents do not assume origin or branch behavior silently.",
+      ],
+    };
+  }
+
+  if (includesAny(combined, [
+    "commit_pending_changes",
+    "committed memory-repo",
+    "committed memory repo",
+    "memory-repo commit",
+    "memory repo commit",
+  ])) {
+    return {
+      goal,
+      currentStep,
+      route: "lifecycle-next-step",
+      why: "The local memory-repo commit already exists, so the remaining optional lifecycle action is explicit remote synchronization.",
+      recommendedTools: [
+        createRecommendation(
+          "push_pending_changes",
+          "Push the current memory-repo branch when the local commit should sync to a configured remote.",
+        ),
+      ],
+      nextStep: "Call push_pending_changes if the committed memory-repo branch should be pushed.",
+      lifecyclePosition: "post-commit-pre-push",
+      lifecycleGuide: [...lifecycleGuide],
+      alternatives: [],
+      notes: [
+        "The push step is separate so callers can still inspect, amend, or defer remote synchronization after the local commit.",
       ],
     };
   }

@@ -446,6 +446,16 @@ export type CommitPendingChangesInput = {
 };
 
 /**
+ * Input used to push committed project-memory changes to a remote.
+ */
+export type PushPendingChangesInput = {
+  /** Optional remote name; defaults to `origin`. */
+  remote?: string;
+  /** Optional remote branch name; defaults to the current local branch. */
+  branch?: string;
+};
+
+/**
  * Input used to archive one active document.
  */
 export type ArchiveDocumentInput = {

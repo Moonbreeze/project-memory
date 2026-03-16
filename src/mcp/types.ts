@@ -33,6 +33,7 @@ import type {
   ListDocumentsSortField,
   PlanningBacklogInput,
   PlanningTopicEntryInput,
+  PushPendingChangesInput,
   ProviderNoteInput,
   RationaleEntryInput,
   RunbookInput,
@@ -1178,6 +1179,20 @@ export const parseCommitPendingChangesInput = (
 
   return {
     message: readRequiredString(params.message, "message"),
+  };
+};
+
+/**
+ * Parses params for `push_pending_changes`.
+ */
+export const parsePushPendingChangesInput = (
+  value: unknown,
+): PushPendingChangesInput => {
+  const params = readParams(value);
+
+  return {
+    remote: readOptionalString(params.remote, "remote"),
+    branch: readOptionalString(params.branch, "branch"),
   };
 };
 

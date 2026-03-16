@@ -44,6 +44,7 @@ export type {
   ManagedDocumentPathInfo,
   PlanningBacklogInput,
   ParsedDocument,
+  PushPendingChangesInput,
   ProviderNoteInput,
   RationaleEntryInput,
   RepositoryContext,

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { Buffer } from "node:buffer";
+import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -20,6 +21,38 @@ const rawDumpText = Array.from({ length: 18 }, (_value, index) => `$ command ${i
  */
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
+/**
+ * Creates a temporary git wrapper that records `push` invocations and delegates all other commands.
+ */
+const createPushLoggingGitWrapper = (): { binDir: string; logPath: string } => {
+  const realGitPath = spawnSync("which", ["git"], { encoding: "utf8" }).stdout.trim();
+  if (!realGitPath) {
+    throw new Error("Failed to resolve git binary path");
+  }
+
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "project-memory-git-wrapper-"));
+  const logPath = path.join(binDir, "push.log");
+  const wrapperPath = path.join(binDir, "git");
+
+  fs.writeFileSync(
+    wrapperPath,
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'if [ "$#" -gt 0 ] && [ "$1" = "push" ]; then',
+      `  printf '%s\\n' "$@" > '${logPath}'`,
+      "  exit 0",
+      "fi",
+      `exec '${realGitPath}' "$@"`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.chmodSync(wrapperPath, 0o755);
+
+  return { binDir, logPath };
 };
 
 /**
@@ -402,6 +435,7 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert(toolNames.includes("bootstrap_project"));
   assert(toolNames.includes("append_session_note"));
   assert(toolNames.includes("commit_pending_changes"));
+  assert(toolNames.includes("push_pending_changes"));
   assert(toolNames.includes("archive_document"));
   assert(toolNames.includes("archive_work_item"));
   assert(toolNames.includes("close_work_item"));
@@ -432,7 +466,8 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert.match(toolDescriptions.get("read_rationale_entry") ?? "", /same-project topic/i);
   assert.match(toolDescriptions.get("archive_document") ?? "", /archive one existing managed document/i);
   assert.match(toolDescriptions.get("close_work_item") ?? "", /before the memory-repo commit/i);
-  assert.match(toolDescriptions.get("commit_pending_changes") ?? "", /separately from code-repo commits/i);
+  assert.match(toolDescriptions.get("commit_pending_changes") ?? "", /explicit remote push step/i);
+  assert.match(toolDescriptions.get("push_pending_changes") ?? "", /post-commit remote sync step/i);
 
   const upsertWorkItemTool = toolsByName.get("upsert_work_item");
   if (!isRecord(upsertWorkItemTool) || !isRecord(upsertWorkItemTool.inputSchema) || !isRecord(upsertWorkItemTool.inputSchema.properties)) {
@@ -466,7 +501,7 @@ test("MCP choose_workflow recommends bounded startup reads and lifecycle next st
   assert.equal(startupResult.structuredContent.recommendedTools[0]?.name, "read_cold_start");
   assert.match(String(startupResult.structuredContent.nextStep ?? ""), /read_cold_start/);
   assert(Array.isArray(startupResult.structuredContent.lifecycleGuide));
-  assert.equal(startupResult.structuredContent.lifecycleGuide.length, 9);
+  assert.equal(startupResult.structuredContent.lifecycleGuide.length, 10);
 
   const nextStepResponse = callTool("workflow-2", "choose_workflow", {
     goal: "I implemented the fix and I already appended the session note. What should I do next?",
@@ -482,6 +517,20 @@ test("MCP choose_workflow recommends bounded startup reads and lifecycle next st
   assert.equal(nextStepResult.structuredContent.lifecyclePosition, "post-session-note-pre-verification");
   assert.equal(nextStepResult.structuredContent.recommendedTools[0]?.name, "record_verification_result");
   assert.match(String(nextStepResult.structuredContent.nextStep ?? ""), /record_verification_result/);
+
+  const postCommitResponse = callTool("workflow-3", "choose_workflow", {
+    goal: "What should I do next?",
+    currentStep: "I already ran commit_pending_changes for the memory repo.",
+  });
+  const postCommitResult = readToolResult(postCommitResponse);
+
+  if (!isRecord(postCommitResult.structuredContent) || !Array.isArray(postCommitResult.structuredContent.recommendedTools)) {
+    throw new Error("Expected choose_workflow post-commit payload");
+  }
+
+  assert.equal(postCommitResult.structuredContent.lifecyclePosition, "post-commit-pre-push");
+  assert.equal(postCommitResult.structuredContent.recommendedTools[0]?.name, "push_pending_changes");
+  assert.match(String(postCommitResult.structuredContent.nextStep ?? ""), /push_pending_changes/);
 });
 
 test("MCP stdio framing carries one initialize exchange", () => {
@@ -973,6 +1022,106 @@ test("MCP server rejects commit messages that do not match the enforced format",
 
   assert.equal(toolResult.isError, true);
   assert.match(toolResult.content[0]?.text ?? "", /docs\(<project>\/<scope>\): <summary>/);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP server pushes committed memory-repo changes to origin", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  callTool("push-1", "append_session_note", {
+    project: "acme-app",
+    topic: "mcp push flow",
+    date: "2026-03-11",
+    summary: "Prepared MCP push flow validation.",
+    actions: ["Created a managed document"],
+    followUp: ["Push it to origin"],
+  });
+
+  const commitResponse = callTool("push-2", "commit_pending_changes", {
+    message: "docs(acme-app/session): mcp push flow validation",
+  });
+  assert.notEqual(readToolResult(commitResponse).isError, true);
+
+  spawnSync("git", ["remote", "add", "origin", "https://example.invalid/project-memory.git"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  });
+
+  const localBranch = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  }).stdout.trim();
+  const { binDir, logPath } = createPushLoggingGitWrapper();
+  const previousPath = process.env.PATH;
+
+  process.env.PATH = `${binDir}:${previousPath ?? ""}`;
+
+  try {
+    const pushResponse = callTool("push-3", "push_pending_changes", {});
+    const pushResult = readToolResult(pushResponse);
+
+    assert.notEqual(pushResult.isError, true);
+    if (
+      !isRecord(pushResult.structuredContent)
+      || typeof pushResult.structuredContent.remote !== "string"
+      || typeof pushResult.structuredContent.branch !== "string"
+      || typeof pushResult.structuredContent.currentBranch !== "string"
+    ) {
+      throw new Error("Expected push_pending_changes structured content");
+    }
+
+    const pushLog = fs.readFileSync(logPath, "utf8");
+
+    assert.equal(pushResult.structuredContent.remote, "origin");
+    assert.equal(pushResult.structuredContent.branch, localBranch);
+    assert.equal(pushResult.structuredContent.currentBranch, localBranch);
+    assert.match(pushLog, /^push$/m);
+    assert.match(pushLog, /^origin$/m);
+    assert.match(pushLog, new RegExp(`^${localBranch}$`, "m"));
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = previousPath;
+    }
+  }
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP server rejects push when origin is not configured", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  callTool("push-missing-1", "append_session_note", {
+    project: "acme-app",
+    topic: "mcp missing push remote",
+    date: "2026-03-11",
+    summary: "Prepared missing push remote coverage.",
+    actions: ["Created a managed document"],
+    followUp: ["Reject missing origin"],
+  });
+
+  const commitResponse = callTool("push-missing-2", "commit_pending_changes", {
+    message: "docs(acme-app/session): mcp missing push remote",
+  });
+  assert.notEqual(readToolResult(commitResponse).isError, true);
+
+  const pushResponse = callTool("push-missing-3", "push_pending_changes", {});
+  const pushResult = readToolResult(pushResponse);
+
+  assert.equal(pushResult.isError, true);
+  assert.match(pushResult.content[0]?.text ?? "", /Remote origin is not configured/);
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

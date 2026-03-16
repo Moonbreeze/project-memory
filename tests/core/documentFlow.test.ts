@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
@@ -14,6 +16,7 @@ import {
   createDecision,
   createRunbook,
   listDocuments,
+  pushPendingChanges,
   readDocument,
   readColdStart,
   readPlanningBacklog,
@@ -39,6 +42,38 @@ const setupAcmeTaxonomy = (
   scopes: string[],
 ): void => {
   setupTestProjectTaxonomy(context, "acme-app", scopes);
+};
+
+/**
+ * Creates a temporary git wrapper that records `push` invocations and delegates all other commands.
+ */
+const createPushLoggingGitWrapper = (): { binDir: string; logPath: string } => {
+  const realGitPath = spawnSync("which", ["git"], { encoding: "utf8" }).stdout.trim();
+  if (!realGitPath) {
+    throw new Error("Failed to resolve git binary path");
+  }
+
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "project-memory-git-wrapper-"));
+  const logPath = path.join(binDir, "push.log");
+  const wrapperPath = path.join(binDir, "git");
+
+  fs.writeFileSync(
+    wrapperPath,
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'if [ "$#" -gt 0 ] && [ "$1" = "push" ]; then',
+      `  printf '%s\\n' "$@" > '${logPath}'`,
+      "  exit 0",
+      "fi",
+      `exec '${realGitPath}' "$@"`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.chmodSync(wrapperPath, 0o755);
+
+  return { binDir, logPath };
 };
 
 const writeRawCanonicalDoc = (
@@ -1897,6 +1932,89 @@ test("commitPendingChanges rejects pending managed changes from multiple project
   assert.throws(
     () => commitPendingChanges({ message: "docs(acme-app/mixed): invalid multi-project batch" }, context),
     /multiple projects|one project at a time|special-case path/,
+  );
+});
+
+test("pushPendingChanges pushes the current branch to origin by default", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "push flow",
+      date: "2026-03-11",
+      summary: "Prepared push flow validation.",
+      actions: ["Created session note"],
+      followUp: ["Push it to origin"],
+    },
+    context,
+  );
+
+  commitPendingChanges({ message: "docs(acme-app/session): push flow validation" }, context);
+
+  spawnSync("git", ["remote", "add", "origin", "https://example.invalid/project-memory.git"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  });
+
+  const localBranch = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  }).stdout.trim();
+  const { binDir, logPath } = createPushLoggingGitWrapper();
+  const previousPath = process.env.PATH;
+
+  process.env.PATH = `${binDir}:${previousPath ?? ""}`;
+
+  try {
+    const result = pushPendingChanges({}, context);
+    const pushLog = fs.readFileSync(logPath, "utf8");
+
+    assert.equal(result.remote, "origin");
+    assert.equal(result.branch, localBranch);
+    assert.equal(result.currentBranch, localBranch);
+    assert.match(pushLog, /^push$/m);
+    assert.match(pushLog, /^origin$/m);
+    assert.match(pushLog, new RegExp(`^${localBranch}$`, "m"));
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = previousPath;
+    }
+  }
+});
+
+test("pushPendingChanges rejects missing origin remote", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "push without remote",
+      date: "2026-03-11",
+      summary: "Prepared missing remote validation.",
+      actions: ["Created session note"],
+      followUp: ["Reject missing origin"],
+    },
+    context,
+  );
+
+  commitPendingChanges({ message: "docs(acme-app/session): missing remote validation" }, context);
+
+  assert.throws(
+    () => pushPendingChanges({}, context),
+    /Remote origin is not configured/,
   );
 });
 

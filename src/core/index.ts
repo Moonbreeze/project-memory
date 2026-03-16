@@ -59,7 +59,7 @@ export { archiveDocument, resolveArchiveRelativePath } from "./archive/index.ts"
 /**
  * Core git operations.
  */
-export { commitPendingChanges } from "./git/index.ts";
+export { commitPendingChanges, pushPendingChanges } from "./git/index.ts";
 
 /**
  * Core validation operations.

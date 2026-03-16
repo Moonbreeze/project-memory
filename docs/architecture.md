@@ -172,6 +172,7 @@ Key guardrails:
 - no implicit cross-project aggregation in default planning or bounded read flows
 - no recursive graph walking in reference-follow stages
 - project-scoped commit validation for managed document commits
+- explicit remote push behavior instead of implicit origin sync during commit
 
 ## Interaction Surfaces
 

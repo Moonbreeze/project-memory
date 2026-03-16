@@ -41,6 +41,7 @@ A normal documentation lifecycle is described first as model operations, not as 
 7. If long-lived guidance changes, update the relevant `canonical-doc`, `runbook`, or `provider-note`.
 8. Close or archive the `work-item` when the slice is done.
 9. Commit memory-repo changes separately from code-repo changes.
+10. Push the memory-repo branch explicitly when the local commit should sync to a remote.
 
 For feature and change work, the lifecycle usually looks like this:
 
@@ -196,6 +197,7 @@ Representative CLI operations:
 - inspect one exact path directly
 - run lifecycle operations such as close or archive
 - stage and commit managed document changes through the validated commit helper
+- push the committed memory-repo branch through an explicit remote-sync helper
 
 Example commands:
 
@@ -205,4 +207,5 @@ Example commands:
 ./scripts/run-cli.sh read-document --path projects/acme-api/decisions/2026/2026-03-14-repository-split.md
 ./scripts/run-cli.sh close-work-item --project acme-api --topic bounded-read-follow-up --date 2026-03-14 --state done
 ./scripts/run-cli.sh commit-pending-changes --message "docs(acme-api/session): record setup validation"
+./scripts/run-cli.sh push-pending-changes --remote origin
 ```

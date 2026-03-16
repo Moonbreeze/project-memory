@@ -86,6 +86,38 @@ const createCapturedIo = (): {
 };
 
 /**
+ * Creates a temporary git wrapper that records `push` invocations and delegates all other commands.
+ */
+const createPushLoggingGitWrapper = (): { binDir: string; logPath: string } => {
+  const realGitPath = spawnSync("which", ["git"], { encoding: "utf8" }).stdout.trim();
+  if (!realGitPath) {
+    throw new Error("Failed to resolve git binary path");
+  }
+
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "project-memory-git-wrapper-"));
+  const logPath = path.join(binDir, "push.log");
+  const wrapperPath = path.join(binDir, "git");
+
+  fs.writeFileSync(
+    wrapperPath,
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'if [ "$#" -gt 0 ] && [ "$1" = "push" ]; then',
+      `  printf '%s\\n' "$@" > '${logPath}'`,
+      "  exit 0",
+      "fi",
+      `exec '${realGitPath}' "$@"`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.chmodSync(wrapperPath, 0o755);
+
+  return { binDir, logPath };
+};
+
+/**
  * Parses the last JSON payload written by the CLI.
  */
 const parseLastJson = (chunks: string[]): unknown => {
@@ -738,6 +770,83 @@ test("CLI upserts provider notes and commits pending document changes", async ()
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("CLI pushes committed memory-repo changes to origin", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  await runCli([
+    "append-session-note",
+    "--project",
+    "acme-app",
+    "--topic",
+    "cli push flow",
+    "--summary",
+    "Prepared push flow validation.",
+    "--actions",
+    "created note",
+    "--follow-up",
+    "push it to origin",
+    "--date",
+    "2026-03-11",
+  ]);
+
+  await runCli([
+    "commit-pending-changes",
+    "--message",
+    "docs(acme-app/session): cli push flow validation",
+  ]);
+
+  spawnSync("git", ["remote", "add", "origin", "https://example.invalid/project-memory.git"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  });
+
+  const localBranch = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  }).stdout.trim();
+  const { binDir, logPath } = createPushLoggingGitWrapper();
+  const previousPath = process.env.PATH;
+
+  process.env.PATH = `${binDir}:${previousPath ?? ""}`;
+
+  try {
+    const pushCapture = createCapturedIo();
+    await runCli(["push-pending-changes"], pushCapture.io);
+
+    const pushResult = parseLastJson(pushCapture.captured.stdout);
+    if (
+      !isRecord(pushResult) ||
+      typeof pushResult.remote !== "string" ||
+      typeof pushResult.branch !== "string" ||
+      typeof pushResult.currentBranch !== "string"
+    ) {
+      throw new Error("Unexpected push-pending-changes result shape");
+    }
+
+    const pushLog = fs.readFileSync(logPath, "utf8");
+
+    assert.equal(pushResult.remote, "origin");
+    assert.equal(pushResult.branch, localBranch);
+    assert.equal(pushResult.currentBranch, localBranch);
+    assert.match(pushLog, /^push$/m);
+    assert.match(pushLog, /^origin$/m);
+    assert.match(pushLog, new RegExp(`^${localBranch}$`, "m"));
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = previousPath;
+    }
+  }
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("CLI upserts canonical docs and exposes them through read-document", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
@@ -1307,6 +1416,44 @@ test("CLI rejects commit messages that do not match the enforced format", async 
   await assert.rejects(
     () => runCli(["commit-pending-changes", "--message", "invalid commit message"]),
     /docs\(<project>\/<scope>\): <summary>/,
+  );
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("CLI rejects push when origin is not configured", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
+  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
+
+  await runCli([
+    "append-session-note",
+    "--project",
+    "acme-app",
+    "--topic",
+    "cli missing push remote",
+    "--summary",
+    "Prepared missing push remote coverage.",
+    "--actions",
+    "created note",
+    "--follow-up",
+    "reject missing origin",
+    "--date",
+    "2026-03-11",
+  ]);
+
+  await runCli([
+    "commit-pending-changes",
+    "--message",
+    "docs(acme-app/session): cli missing push remote",
+  ]);
+
+  await assert.rejects(
+    () => runCli(["push-pending-changes"]),
+    /Remote origin is not configured/,
   );
 
   delete process.env.PROJECT_MEMORY_ROOT;

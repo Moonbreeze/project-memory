@@ -5,7 +5,11 @@ import { resolveArchiveRelativePath } from "../archive/index.ts";
 import { createRepositoryContext } from "../config/index.ts";
 import { isManagedDocumentRelativePath, resolveManagedDocumentPathInfo } from "../documents/index.ts";
 import { isLiteralMember, kebabCaseSlugPatternSource } from "../shared/index.ts";
-import type { CommitPendingChangesInput, ManagedDocumentPathInfo } from "../types/index.ts";
+import type {
+  CommitPendingChangesInput,
+  ManagedDocumentPathInfo,
+  PushPendingChangesInput,
+} from "../types/index.ts";
 
 /**
  * Supported managed-doc commit scopes used in commit messages.
@@ -76,6 +80,21 @@ const runGit = (args: string[], cwd: string): string => {
  * Reads one git path list command and normalizes blank output to an empty array.
  */
 const readGitPathList = (args: string[], cwd: string): string[] => {
+  const output = runGit(args, cwd);
+  if (!output) {
+    return [];
+  }
+
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+};
+
+/**
+ * Reads one git line-list command and normalizes blank output to an empty array.
+ */
+const readGitLineList = (args: string[], cwd: string): string[] => {
   const output = runGit(args, cwd);
   if (!output) {
     return [];
@@ -249,5 +268,38 @@ export const commitPendingChanges = (
   return {
     message: input.message,
     committedPaths: staged.map((entry) => path.normalize(entry)),
+  };
+};
+
+/**
+ * Pushes the current memory-repo branch to one configured remote.
+ */
+export const pushPendingChanges = (
+  input: PushPendingChangesInput = {},
+  context = createRepositoryContext(),
+): { remote: string; branch: string; currentBranch: string } => {
+  const remote = input.remote?.trim() || "origin";
+  const currentBranch = runGit(["rev-parse", "--abbrev-ref", "HEAD"], context.memoryRootDir);
+  if (currentBranch === "HEAD") {
+    throw new Error("Cannot push pending changes from a detached HEAD; check out a branch first");
+  }
+
+  const branch = input.branch?.trim() || currentBranch;
+  if (!branch) {
+    throw new Error("Push branch must not be empty");
+  }
+
+  const configuredRemotes = readGitLineList(["remote"], context.memoryRootDir);
+  if (!configuredRemotes.includes(remote)) {
+    throw new Error(`Remote ${remote} is not configured for the memory repository`);
+  }
+
+  const pushRef = branch === currentBranch ? branch : `HEAD:${branch}`;
+  runGit(["push", remote, pushRef], context.memoryRootDir);
+
+  return {
+    remote,
+    branch,
+    currentBranch,
   };
 };
