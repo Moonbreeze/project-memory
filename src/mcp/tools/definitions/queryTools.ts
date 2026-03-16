@@ -6,6 +6,7 @@ import {
   SortOrderValues,
 } from "../../../core/types/index.ts";
 
+import { auditTaxonomyMcpTool } from "./query/auditTaxonomy.ts";
 import { chooseWorkflowTool } from "../chooseWorkflow.ts";
 import { listDocumentsTool } from "../listDocuments.ts";
 import { readColdStartTool } from "../readColdStart.ts";
@@ -23,6 +24,7 @@ import type { RegisteredMcpTool } from "../toolTypes.ts";
  * MCP query-oriented tool definitions.
  */
 export const queryMcpTools: Record<string, RegisteredMcpTool> = {
+  audit_taxonomy: auditTaxonomyMcpTool,
   choose_workflow: {
     name: "choose_workflow",
     description:

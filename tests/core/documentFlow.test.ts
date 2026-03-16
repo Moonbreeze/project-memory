@@ -5,8 +5,10 @@ import test from "node:test";
 
 import {
   appendSessionNote,
+  auditTaxonomyConsistency,
   archiveDocument,
   archiveWorkItem,
+  bootstrapProject,
   closeWorkItem,
   commitPendingChanges,
   createDecision,
@@ -22,10 +24,62 @@ import {
   resolveArchiveRelativePath,
   resolveDocumentRelativePath,
   searchDocuments,
+  upsertTaxonomyRegistry,
   upsertCanonicalDoc,
   upsertWorkItem,
 } from "../../src/core/index.ts";
-import { createTestRepositoryContext, setupTestRepo } from "../fixtures/setupTestRepo.ts";
+import {
+  createTestRepositoryContext,
+  setupTestProjectTaxonomy,
+  setupTestRepo,
+} from "../fixtures/setupTestRepo.ts";
+
+const setupAcmeTaxonomy = (
+  context: ReturnType<typeof createTestRepositoryContext>,
+  scopes: string[],
+): void => {
+  setupTestProjectTaxonomy(context, "acme-app", scopes);
+};
+
+const writeRawCanonicalDoc = (
+  rootDir: string,
+  relativePath: string,
+  registryScope: string,
+  topic: string,
+): void => {
+  fs.mkdirSync(`${rootDir}/${relativePath.slice(0, relativePath.lastIndexOf("/"))}`, {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    `${rootDir}/${relativePath}`,
+    [
+      "---",
+      "date: 2026-03-11",
+      "project: acme-app",
+      `topic: ${topic}`,
+      `registry_scope: ${registryScope}`,
+      "source: manual",
+      "status: active",
+      "---",
+      "",
+      "# Canonical Doc",
+      "",
+      "## Summary",
+      "",
+      "Manual canonical fixture.",
+      "",
+      "## Guidance",
+      "",
+      "- Keep manual fixture active",
+      "",
+      "## References",
+      "",
+      "- none",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+};
 
 test("appendSessionNote writes a structured document to the expected path", () => {
   const rootDir = setupTestRepo();
@@ -340,6 +394,7 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
 test("upsertCanonicalDoc writes a scoped document and keeps it visible to list, read, and search", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["resume-flow"]);
 
   const initial = upsertCanonicalDoc(
     {
@@ -363,9 +418,12 @@ test("upsertCanonicalDoc writes a scoped document and keeps it visible to list, 
   assert.match(fs.readFileSync(initial.path, "utf8"), /registry_scope: resume-flow/);
 
   const listed = listDocuments({ project: "acme-app", type: "canonical-doc", includeBody: true }, context);
-  assert.equal(listed.documents.length, 1);
-  assert.equal(listed.documents[0]?.metadata.registry_scope, "resume-flow");
-  assert.match(listed.documents[0]?.body ?? "", /Canonical guidance for the resume flow scope/);
+  assert.equal(listed.documents.length, 2);
+  const resumePolicyDocument = listed.documents.find((document) => {
+    return document.metadata.registry_scope === "resume-flow";
+  });
+  assert.equal(resumePolicyDocument?.metadata.registry_scope, "resume-flow");
+  assert.match(resumePolicyDocument?.body ?? "", /Canonical guidance for the resume flow scope/);
 
   const searched = searchDocuments({ project: "acme-app", type: "canonical-doc", text: "finalized guidance" }, context);
   assert.equal(searched.length, 1);
@@ -387,6 +445,143 @@ test("upsertCanonicalDoc writes a scoped document and keeps it visible to list, 
   assert.equal(reread.metadata.registry_scope, "resume-flow");
   assert.match(reread.body, /Updated canonical guidance/);
   assert.doesNotMatch(reread.body, /Store only finalized guidance here/);
+});
+
+test("bootstrapProject creates the reserved active taxonomy registry document", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  const result = bootstrapProject(
+    {
+      project: "Acme App",
+      date: "2026-03-11",
+    },
+    context,
+  );
+  const registryDocument = readDocument(context, result.registryRelativePath);
+
+  assert.equal(result.project, "acme-app");
+  assert.equal(result.registryCreated, true);
+  assert.equal(registryDocument.metadata.registry_scope, "taxonomy-registry");
+  assert.equal(registryDocument.metadata.topic, "taxonomy-registry");
+  assert.match(registryDocument.body, /registry-entry:/);
+});
+
+test("upsertCanonicalDoc rejects unknown taxonomy scopes after bootstrap", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  bootstrapProject(
+    {
+      project: "acme-app",
+      date: "2026-03-11",
+    },
+    context,
+  );
+
+  assert.throws(
+    () =>
+      upsertCanonicalDoc(
+        {
+          project: "acme-app",
+          topic: "resume policy",
+          registryScope: "resume-flow",
+          date: "2026-03-11",
+          summary: "Canonical guidance for resume flow.",
+          guidance: ["Keep scope registration explicit"],
+          references: [],
+        },
+        context,
+      ),
+    /Unknown taxonomy registry scope: resume-flow/,
+  );
+});
+
+test("auditTaxonomyConsistency reports duplicate authority, unknown scope usage, and retired scope usage", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["resume-flow", "legacy-flow"]);
+
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-flow",
+      date: "2026-03-11",
+      summary: "Primary resume policy.",
+      guidance: ["Keep one primary authority"],
+      references: [],
+    },
+    context,
+  );
+  upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "legacy policy",
+      registryScope: "legacy-flow",
+      date: "2026-03-11",
+      summary: "Legacy policy before retirement.",
+      guidance: ["Retire after audit coverage"],
+      references: [],
+    },
+    context,
+  );
+  upsertTaxonomyRegistry(
+    {
+      project: "acme-app",
+      date: "2026-03-11",
+      entries: [
+        {
+          scope: "taxonomy-registry",
+          topic: "taxonomy-registry",
+          authority: "taxonomy-registry",
+          state: "active",
+          migration: "create-topic",
+          aliases: [],
+          mappedScopes: [],
+        },
+        {
+          scope: "resume-flow",
+          topic: "resume-flow",
+          authority: "resume-flow",
+          state: "active",
+          migration: "create-topic",
+          aliases: [],
+          mappedScopes: [],
+        },
+        {
+          scope: "legacy-flow",
+          topic: "legacy-flow",
+          authority: "legacy-flow",
+          state: "retired",
+          migration: "retire-topic",
+          aliases: [],
+          mappedScopes: [],
+        },
+      ],
+    },
+    context,
+  );
+  writeRawCanonicalDoc(
+    rootDir,
+    "projects/acme-app/canonical-docs/resume-flow/resume-policy-shadow.md",
+    "resume-flow",
+    "resume-policy-shadow",
+  );
+  writeRawCanonicalDoc(
+    rootDir,
+    "projects/acme-app/canonical-docs/unknown-scope/unknown-policy.md",
+    "unknown-scope",
+    "unknown-policy",
+  );
+
+  const result = auditTaxonomyConsistency({ project: "acme-app" }, context);
+
+  assert.equal(result.passed, false);
+  assert.deepEqual(
+    result.issues.map((issue) => issue.code),
+    ["duplicate-authority", "retired-scope-usage", "unknown-scope"],
+  );
 });
 
 test("upsertWorkItem writes a managed work item and exposes planning metadata through list, read, and search", () => {
@@ -904,6 +1099,7 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
 test("readPlanningTopicEntry returns a bounded exact-topic work-item planning slice", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["resume-flow"]);
 
   const createWorkItem = (
     project: string,
@@ -1394,6 +1590,7 @@ test("commitPendingChanges rejects a commit message with the wrong project", () 
 test("commitPendingChanges accepts canonical scope for canonical docs", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["resume-flow"]);
 
   spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
   spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
@@ -1419,7 +1616,7 @@ test("commitPendingChanges accepts canonical scope for canonical docs", () => {
   const log = spawnSync("git", ["log", "--oneline", "-1"], { cwd: rootDir, encoding: "utf8" });
 
   assert.equal(result.message, "docs(acme-app/canonical): resume policy baseline");
-  assert.equal(result.committedPaths.length, 1);
+  assert.equal(result.committedPaths.length, 2);
   assert.match(log.stdout, /docs\(acme-app\/canonical\): resume policy baseline/);
 });
 
@@ -1502,6 +1699,7 @@ test("commitPendingChanges rejects pending managed changes from multiple project
 test("readColdStart returns a bounded project snapshot with fixed source ordering", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["api", "delivery", "resume-flow", "zzz-extra"]);
 
   createRunbook(
     {
@@ -1668,6 +1866,7 @@ test("readColdStart returns a bounded project snapshot with fixed source orderin
 test("readTopicEntry prefers exact canonical and exact-topic supporting documents", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["resume-flow", "fallback-scope"]);
 
   upsertCanonicalDoc(
     {
@@ -1770,6 +1969,7 @@ test("readTopicEntry prefers exact canonical and exact-topic supporting document
 test("readTopicEntry falls back to bounded contains matches when exact matches are absent", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["resume-flow"]);
 
   upsertCanonicalDoc(
     {
@@ -1810,6 +2010,7 @@ test("readTopicEntry falls back to bounded contains matches when exact matches a
 test("readTopicEntry explains when exact-topic work items exist but remain outside the topic-entry surface", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["resume-flow"]);
 
   upsertWorkItem(
     {
@@ -1858,6 +2059,7 @@ test("readTopicEntry explains when exact-topic work items exist but remain outsi
 test("readRationaleEntry follows canonical references before generic fallback", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  setupAcmeTaxonomy(context, ["resume-flow"]);
 
   upsertCanonicalDoc(
     {

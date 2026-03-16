@@ -7,7 +7,11 @@ import test from "node:test";
 
 import { createMcpResponse } from "../../src/mcp/dispatch.ts";
 import { formatResponsePayload, readMessage } from "../../src/mcp/stdio.ts";
-import { setupTestRepo } from "../fixtures/setupTestRepo.ts";
+import {
+  createTestRepositoryContext,
+  setupTestProjectTaxonomy,
+  setupTestRepo,
+} from "../fixtures/setupTestRepo.ts";
 
 const rawDumpText = Array.from({ length: 18 }, (_value, index) => `$ command ${index + 1}`).join("\n");
 
@@ -112,6 +116,84 @@ test("MCP server requires PROJECT_MEMORY_ROOT for document access", () => {
   const toolResult = readToolResult(response);
   assert.equal(toolResult.isError, true);
   assert.match(toolResult.content[0]?.text ?? "", /PROJECT_MEMORY_ROOT is required/);
+});
+
+test("MCP bootstrap_project creates the reserved taxonomy registry surface", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+  try {
+    const response = callTool("bootstrap-project", "bootstrap_project", {
+      project: "Acme App",
+      date: "2026-03-11",
+    });
+    const toolResult = readToolResult(response);
+
+    assert.notEqual(toolResult.isError, true);
+
+    if (
+      !isRecord(toolResult.structuredContent)
+      || typeof toolResult.structuredContent.registryRelativePath !== "string"
+    ) {
+      throw new Error("Expected bootstrap_project structured content");
+    }
+
+    assert(fs.existsSync(path.join(rootDir, toolResult.structuredContent.registryRelativePath)));
+  } finally {
+    delete process.env.PROJECT_MEMORY_ROOT;
+  }
+});
+
+test("MCP upsert_taxonomy_registry and audit_taxonomy stay consistent", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+  try {
+    const bootstrapResponse = callTool("taxonomy-bootstrap", "bootstrap_project", {
+      project: "acme-app",
+      date: "2026-03-11",
+    });
+    assert.notEqual(readToolResult(bootstrapResponse).isError, true);
+
+    const upsertResponse = callTool("taxonomy-upsert", "upsert_taxonomy_registry", {
+      project: "acme-app",
+      date: "2026-03-11",
+      entries: [
+        {
+          scope: "taxonomy-registry",
+          topic: "taxonomy-registry",
+          authority: "taxonomy-registry",
+          state: "active",
+          migration: "create-topic",
+          aliases: [],
+          mappedScopes: [],
+        },
+        {
+          scope: "resume-flow",
+          topic: "resume-flow",
+          authority: "resume-flow",
+          state: "active",
+          migration: "create-topic",
+          aliases: [],
+          mappedScopes: [],
+        },
+      ],
+    });
+    assert.notEqual(readToolResult(upsertResponse).isError, true);
+
+    const auditResponse = callTool("taxonomy-audit", "audit_taxonomy", {
+      project: "acme-app",
+    });
+    const auditResult = readToolResult(auditResponse);
+
+    if (
+      !isRecord(auditResult.structuredContent)
+      || auditResult.structuredContent.passed !== true
+      || auditResult.structuredContent.registryEntryCount !== 2
+    ) {
+      throw new Error("Expected audit_taxonomy structured content");
+    }
+  } finally {
+    delete process.env.PROJECT_MEMORY_ROOT;
+  }
 });
 
 test("MCP server negotiates down for newer unsupported protocol versions during initialize", () => {
@@ -311,18 +393,22 @@ test("MCP server completes initialize and tools/list handshake", () => {
 
   assert(toolNames.includes("list_documents"));
   assert(toolNames.includes("choose_workflow"));
+  assert(toolNames.includes("audit_taxonomy"));
   assert(toolNames.includes("read_cold_start"));
   assert(toolNames.includes("read_planning_backlog"));
   assert(toolNames.includes("read_planning_topic_entry"));
   assert(toolNames.includes("read_topic_entry"));
   assert(toolNames.includes("read_rationale_entry"));
+  assert(toolNames.includes("bootstrap_project"));
   assert(toolNames.includes("append_session_note"));
   assert(toolNames.includes("commit_pending_changes"));
   assert(toolNames.includes("archive_document"));
   assert(toolNames.includes("archive_work_item"));
   assert(toolNames.includes("close_work_item"));
+  assert(toolNames.includes("upsert_taxonomy_registry"));
   assert(toolNames.includes("upsert_work_item"));
 
+  assert.match(toolDescriptions.get("audit_taxonomy") ?? "", /taxonomy consistency/i);
   assert.match(toolDescriptions.get("list_documents") ?? "", /choose read_cold_start/i);
   assert.match(toolDescriptions.get("choose_workflow") ?? "", /fallback read-only chooser/i);
   assert.match(toolDescriptions.get("choose_workflow") ?? "", /does not route, mutate data/i);
@@ -332,12 +418,14 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert.match(toolDescriptions.get("read_cold_start") ?? "", /normal execution flow/i);
   assert.match(toolDescriptions.get("read_cold_start") ?? "", /commit memory-repo changes separately from code-repo changes/i);
   assert.match(toolDescriptions.get("read_planning_backlog") ?? "", /after cold-start/i);
+  assert.match(toolDescriptions.get("bootstrap_project") ?? "", /reserved active taxonomy registry/i);
   assert.match(toolDescriptions.get("upsert_work_item") ?? "", /executable backlog slice/i);
   assert.match(toolDescriptions.get("upsert_work_item") ?? "", /visibility status, and execution progress/i);
   assert.match(toolDescriptions.get("append_session_note") ?? "", /chronological execution/i);
   assert.match(toolDescriptions.get("create_decision") ?? "", /durable rationale/i);
   assert.match(toolDescriptions.get("record_verification_result") ?? "", /concrete evidence/i);
   assert.match(toolDescriptions.get("upsert_canonical_doc") ?? "", /current stable guidance/i);
+  assert.match(toolDescriptions.get("upsert_taxonomy_registry") ?? "", /reserved active taxonomy registry/i);
   assert.match(toolDescriptions.get("create_runbook") ?? "", /repeatable operational procedure/i);
   assert.match(toolDescriptions.get("upsert_provider_note") ?? "", /provider-specific constraints/i);
   assert.match(toolDescriptions.get("read_topic_entry") ?? "", /same-project topic/i);
@@ -701,6 +789,7 @@ test("MCP archive_work_item archives a terminal work item and removes it from th
 test("MCP archive_document archives canonical docs in place", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
+  setupTestProjectTaxonomy(createTestRepositoryContext(rootDir), "acme-app", ["resume-flow"]);
 
   const createResponse = callTool("doc-archive-1", "upsert_canonical_doc", {
     project: "acme-app",
@@ -884,6 +973,7 @@ test("MCP server rejects secret-like content for upsert_provider_note", () => {
 test("MCP server upserts canonical docs and returns them through list_documents", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
+  setupTestProjectTaxonomy(createTestRepositoryContext(rootDir), "acme-app", ["resume-flow"]);
 
   const writeResponse = callTool("canonical-write", "upsert_canonical_doc", {
     project: "acme-app",
@@ -914,8 +1004,15 @@ test("MCP server upserts canonical docs and returns them through list_documents"
     throw new Error("Expected canonical-doc list payload");
   }
 
-  assert.equal(listResult.structuredContent.documents.length, 1);
-  assert.equal(listResult.structuredContent.documents[0].metadata.registry_scope, "resume-flow");
+  assert.equal(listResult.structuredContent.documents.length, 2);
+  const resumePolicyDocument = listResult.structuredContent.documents.find((document) => {
+    return isRecord(document) && isRecord(document.metadata) && document.metadata.registry_scope === "resume-flow";
+  });
+  if (!isRecord(resumePolicyDocument) || !isRecord(resumePolicyDocument.metadata)) {
+    throw new Error("Expected resume-flow canonical-doc list payload");
+  }
+
+  assert.equal(resumePolicyDocument.metadata.registry_scope, "resume-flow");
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });
@@ -963,6 +1060,7 @@ test("MCP server rejects raw dump content for create_runbook", () => {
 test("MCP server exposes bounded read entrypoints", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
+  setupTestProjectTaxonomy(createTestRepositoryContext(rootDir), "acme-app", ["resume-flow"]);
 
   callTool("bounded-runbook", "create_runbook", {
     project: "acme-app",

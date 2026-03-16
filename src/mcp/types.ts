@@ -1,8 +1,11 @@
 import {
+  isTaxonomyRegistryEntryState,
+  isTaxonomyRegistryMigrationKind,
   isCloseWorkItemState,
   isDocumentSource,
   isDocumentStatus,
   isDocumentType,
+  isRecord,
   isLiteralMember,
   isListDocumentsPreset,
   isListDocumentsSortField,
@@ -15,6 +18,7 @@ import {
 import type {
   ArchiveDocumentInput,
   ArchiveWorkItemInput,
+  BootstrapProjectInput,
   ColdStartInput,
   CanonicalDocInput,
   CloseWorkItemInput,
@@ -35,6 +39,9 @@ import type {
   SearchQuery,
   SessionNoteInput,
   SortOrder,
+  TaxonomyAuditInput,
+  TaxonomyRegistryEntry,
+  TaxonomyRegistryInput,
   TopicEntryInput,
   VerificationResultInput,
   WorkItemContextLocator,
@@ -186,7 +193,7 @@ export type JsonSchemaProperty = {
   items?: {
     /** Array item JSON schema type. */
     type: "string";
-  };
+  } | JsonSchemaObject;
   /** Optional enum values for string fields. */
   enum?: string[];
 };
@@ -265,13 +272,6 @@ export class JsonRpcResponseError extends Error {
 }
 
 /**
- * Returns `true` when a value is a plain object.
- */
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-};
-
-/**
  * Reads a required non-empty string field from unknown input.
  */
 const readRequiredString = (value: unknown, fieldName: string): string => {
@@ -332,6 +332,34 @@ const readOptionalBoolean = (value: unknown, fieldName: string): boolean | undef
   }
 
   return value;
+};
+
+/**
+ * Reads one validated taxonomy registry entry state from unknown input.
+ */
+const readRequiredTaxonomyRegistryEntryState = (
+  value: unknown,
+): TaxonomyRegistryEntry["state"] => {
+  const state = readRequiredString(value, "state");
+  if (!isTaxonomyRegistryEntryState(state)) {
+    throw new Error("Invalid taxonomy registry entry state");
+  }
+
+  return state;
+};
+
+/**
+ * Reads one validated taxonomy registry migration marker from unknown input.
+ */
+const readRequiredTaxonomyRegistryMigrationKind = (
+  value: unknown,
+): TaxonomyRegistryEntry["migration"] => {
+  const migration = readRequiredString(value, "migration");
+  if (!isTaxonomyRegistryMigrationKind(migration)) {
+    throw new Error("Invalid taxonomy registry migration");
+  }
+
+  return migration;
 };
 
 /**
@@ -917,6 +945,53 @@ export const parseCanonicalDocInput = (value: unknown): CanonicalDocInput => {
 };
 
 /**
+ * Parses params for `bootstrap_project`.
+ */
+export const parseBootstrapProjectInput = (value: unknown): BootstrapProjectInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    date: readOptionalString(params.date, "date"),
+    source: readOptionalDocumentSource(params.source),
+  };
+};
+
+/**
+ * Parses params for `upsert_taxonomy_registry`.
+ */
+export const parseTaxonomyRegistryInput = (value: unknown): TaxonomyRegistryInput => {
+  const params = readParams(value);
+  const entriesValue = params.entries;
+  if (!Array.isArray(entriesValue)) {
+    throw new Error("Invalid taxonomy registry entries");
+  }
+
+  return {
+    project: readRequiredString(params.project, "project"),
+    date: readOptionalString(params.date, "date"),
+    source: readOptionalDocumentSource(params.source),
+    summary: readOptionalString(params.summary, "summary"),
+    references: readOptionalStringArray(params.references, "references"),
+    entries: entriesValue.map((entry) => {
+      if (!isRecord(entry)) {
+        throw new Error("Invalid taxonomy registry entries");
+      }
+
+        return {
+          scope: readRequiredString(entry.scope, "scope"),
+          topic: readRequiredString(entry.topic, "topic"),
+          authority: readRequiredString(entry.authority, "authority"),
+          state: readRequiredTaxonomyRegistryEntryState(entry.state),
+          migration: readRequiredTaxonomyRegistryMigrationKind(entry.migration),
+          aliases: readOptionalStringArray(entry.aliases, "aliases"),
+          mappedScopes: readOptionalStringArray(entry.mappedScopes, "mappedScopes"),
+        };
+    }),
+  };
+};
+
+/**
  * Parses params for `upsert_work_item`.
  */
 export const parseWorkItemInput = (value: unknown): WorkItemInput => {
@@ -1079,6 +1154,17 @@ export const parseRationaleEntryInput = (value: unknown): RationaleEntryInput =>
   return {
     project: readRequiredString(params.project, "project"),
     topic: readRequiredString(params.topic, "topic"),
+  };
+};
+
+/**
+ * Parses params for `audit_taxonomy`.
+ */
+export const parseTaxonomyAuditInput = (value: unknown): TaxonomyAuditInput => {
+  const params = readParams(value);
+
+  return {
+    project: readRequiredString(params.project, "project"),
   };
 };
 

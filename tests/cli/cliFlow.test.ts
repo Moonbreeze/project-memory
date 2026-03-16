@@ -7,7 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { runCli } from "../../src/cli/dispatch.ts";
-import { setupTestRepo } from "../fixtures/setupTestRepo.ts";
+import { createTestRepositoryContext, setupTestProjectTaxonomy, setupTestRepo } from "../fixtures/setupTestRepo.ts";
 
 type CapturedIo = {
   stdout: string[];
@@ -356,15 +356,71 @@ test("CLI bootstrap creates the expected project directory structure", async () 
   await runCli(["bootstrap", "--project", "Acme App"], io);
 
   const result = parseLastJson(captured.stdout);
-  if (!isRecord(result) || typeof result.project !== "string" || !Array.isArray(result.created)) {
+  if (
+    !isRecord(result)
+    || typeof result.project !== "string"
+    || !Array.isArray(result.created)
+    || typeof result.registryRelativePath !== "string"
+  ) {
     throw new Error("Unexpected bootstrap result shape");
   }
 
   assert.equal(result.project, "acme-app");
   assert(result.created.includes("projects/acme-app/provider-notes"));
   assert(fs.existsSync(path.join(rootDir, "projects/acme-app/provider-notes")));
+  assert(fs.existsSync(path.join(rootDir, result.registryRelativePath)));
 
   delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("CLI can upsert and audit the taxonomy registry", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+  try {
+    await runCli(["bootstrap", "--project", "Acme App"]);
+
+    const upsertCapture = createCapturedIo();
+    await runCli(
+      [
+        "upsert-taxonomy-registry",
+        "--project",
+        "acme-app",
+        "--date",
+        "2026-03-11",
+        "--entries",
+        JSON.stringify([
+          {
+            scope: "taxonomy-registry",
+            topic: "taxonomy-registry",
+            authority: "taxonomy-registry",
+            state: "active",
+            migration: "create-topic",
+            aliases: [],
+            mappedScopes: [],
+          },
+          {
+            scope: "resume-flow",
+            topic: "resume-flow",
+            authority: "resume-flow",
+            state: "active",
+            migration: "create-topic",
+            aliases: [],
+            mappedScopes: [],
+          },
+        ]),
+      ],
+      upsertCapture.io,
+    );
+
+    const auditCapture = createCapturedIo();
+    await runCli(["audit-taxonomy", "--project", "acme-app"], auditCapture.io);
+    const auditResult = parseLastJson(auditCapture.captured.stdout);
+    if (!isRecord(auditResult) || auditResult.passed !== true || auditResult.registryEntryCount !== 2) {
+      throw new Error("Unexpected audit-taxonomy result shape");
+    }
+  } finally {
+    delete process.env.PROJECT_MEMORY_ROOT;
+  }
 });
 
 test("CLI can append, list, read, and archive documents", async () => {
@@ -443,6 +499,7 @@ test("CLI can append, list, read, and archive documents", async () => {
 test("CLI archive-document archives canonical docs in place", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
+  setupTestProjectTaxonomy(createTestRepositoryContext(rootDir), "acme-app", ["resume-flow"]);
 
   const createCapture = createCapturedIo();
   await runCli(
@@ -593,6 +650,7 @@ test("CLI upserts provider notes and commits pending document changes", async ()
 test("CLI upserts canonical docs and exposes them through read-document", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
+  setupTestProjectTaxonomy(createTestRepositoryContext(rootDir), "acme-app", ["resume-flow"]);
 
   const canonicalCapture = createCapturedIo();
   await runCli(
@@ -891,6 +949,7 @@ test("CLI rejects reading unmanaged document paths", async () => {
 test("CLI exposes bounded read entrypoints", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
+  setupTestProjectTaxonomy(createTestRepositoryContext(rootDir), "acme-app", ["resume-flow"]);
 
   await runCli(
     [

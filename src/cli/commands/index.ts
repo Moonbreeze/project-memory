@@ -1,4 +1,5 @@
 import { appendSessionNoteCommand } from "./appendSessionNote.ts";
+import { auditTaxonomyCommand } from "./auditTaxonomy.ts";
 import { archiveDocumentCommand } from "./archiveDocument.ts";
 import { archiveWorkItemCommand } from "./archiveWorkItem.ts";
 import { bootstrapCommand } from "./bootstrap.ts";
@@ -18,6 +19,7 @@ import { recordVerificationResultCommand } from "./recordVerificationResult.ts";
 import { searchDocumentsCommand } from "./searchDocuments.ts";
 import { upsertCanonicalDocCommand } from "./upsertCanonicalDoc.ts";
 import { upsertProviderNoteCommand } from "./upsertProviderNote.ts";
+import { upsertTaxonomyRegistryCommand } from "./upsertTaxonomyRegistry.ts";
 import { upsertWorkItemCommand } from "./upsertWorkItem.ts";
 
 import type { CliCommandHandler } from "../types.ts";
@@ -28,10 +30,12 @@ import type { CliCommandHandler } from "../types.ts";
 export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   install: installCommand,
   bootstrap: bootstrapCommand,
+  "audit-taxonomy": auditTaxonomyCommand,
   "append-session-note": appendSessionNoteCommand,
   "record-verification-result": recordVerificationResultCommand,
   "upsert-provider-note": upsertProviderNoteCommand,
   "upsert-canonical-doc": upsertCanonicalDocCommand,
+  "upsert-taxonomy-registry": upsertTaxonomyRegistryCommand,
   "upsert-work-item": upsertWorkItemCommand,
   "close-work-item": closeWorkItemCommand,
   "archive-work-item": archiveWorkItemCommand,

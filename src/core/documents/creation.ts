@@ -1,4 +1,5 @@
 import { createRepositoryContext } from "../config/index.ts";
+import { assertCanonicalDocWriteAllowed } from "../taxonomy/index.ts";
 import type {
   CanonicalDocInput,
   DecisionInput,
@@ -144,6 +145,15 @@ export const upsertCanonicalDoc = (
     ...input,
     registryScope: input.registryScope,
   });
+  assertCanonicalDocWriteAllowed(
+    {
+      project: metadata.project,
+      topic: metadata.topic,
+      registryScope: input.registryScope,
+      status: metadata.status,
+    },
+    context,
+  );
   const body = renderTemplate(loadTemplate(context, "canonical-doc.md"), {
     summary: input.summary.trim(),
     guidance: renderList(input.guidance),

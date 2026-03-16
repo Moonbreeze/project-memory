@@ -4,6 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createRepositoryContext } from "../../src/core/config/index.ts";
+import {
+  ReservedTaxonomyRegistryScope,
+  ReservedTaxonomyRegistryTopic,
+  bootstrapProject,
+  upsertTaxonomyRegistry,
+} from "../../src/core/index.ts";
 import type { RepositoryContext } from "../../src/core/types/index.ts";
 
 const fixtureDir = path.dirname(fileURLToPath(import.meta.url));
@@ -27,4 +33,47 @@ export const setupTestRepo = (): string => {
  */
 export const createTestRepositoryContext = (memoryRootDir: string): RepositoryContext => {
   return createRepositoryContext({ toolRootDir, memoryRootDir });
+};
+
+/**
+ * Bootstraps one managed test project and optionally seeds additional taxonomy scopes.
+ */
+export const setupTestProjectTaxonomy = (
+  context: RepositoryContext,
+  project: string,
+  scopes: string[] = [],
+): void => {
+  bootstrapProject({ project, date: "2026-03-11" }, context);
+
+  if (scopes.length === 0) {
+    return;
+  }
+
+  upsertTaxonomyRegistry(
+    {
+      project,
+      date: "2026-03-11",
+      entries: [
+        {
+          scope: ReservedTaxonomyRegistryScope,
+          topic: ReservedTaxonomyRegistryTopic,
+          authority: ReservedTaxonomyRegistryTopic,
+          state: "active",
+          migration: "create-topic",
+          aliases: [],
+          mappedScopes: [],
+        },
+        ...scopes.map((scope) => ({
+          scope,
+          topic: scope,
+          authority: scope,
+          state: "active" as const,
+          migration: "create-topic" as const,
+          aliases: [],
+          mappedScopes: [],
+        })),
+      ],
+    },
+    context,
+  );
 };

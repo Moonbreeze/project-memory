@@ -7,3 +7,10 @@ export const isLiteralMember = <T extends readonly string[]>(
 ): value is T[number] => {
   return typeof value === "string" && values.includes(value);
 };
+
+/**
+ * Returns `true` when `value` is a plain record object.
+ */
+export const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+};

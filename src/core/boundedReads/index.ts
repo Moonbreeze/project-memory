@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { createRepositoryContext } from "../config/index.ts";
 import { ensureKebabCaseProject, ensureSlug, readDocument } from "../documents/index.ts";
+import { ReservedTaxonomyRegistryScope } from "../taxonomy/index.ts";
 import {
   buildWorkItemPlanningEntries,
   resolveWorkItemLocatorRelativePath,
@@ -236,6 +237,15 @@ const collectCanonicalDocPaths = (
   }
 
   return matches;
+};
+
+/**
+ * Removes the reserved taxonomy registry control-plane doc from cold-start current-truth reads.
+ */
+const filterColdStartCanonicalPaths = (candidatePaths: string[]): string[] => {
+  return candidatePaths.filter((candidatePath) => {
+    return !candidatePath.includes(`/canonical-docs/${ReservedTaxonomyRegistryScope}/`);
+  });
 };
 
 /**
@@ -686,12 +696,14 @@ export const readColdStart = (
       strategy: "path-ordered",
       limit: coldStartLimits.canonicalDocs,
       description: "Read the first bounded canonical docs by scope/path for current authoritative context.",
-      candidatePaths: collectCanonicalDocPaths(
-        context,
-        project,
-        "",
-        candidateLimitForStage(coldStartLimits.canonicalDocs),
-        "all",
+      candidatePaths: filterColdStartCanonicalPaths(
+        collectCanonicalDocPaths(
+          context,
+          project,
+          "",
+          candidateLimitForStage(coldStartLimits.canonicalDocs),
+          "all",
+        ),
       ),
       allowedStatuses: activeStatuses,
     },

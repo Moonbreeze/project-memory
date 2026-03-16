@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { createRepositoryContext, parseBooleanString } from "../../core/index.ts";
+import { bootstrapProject, createRepositoryContext, isRecord, parseBooleanString } from "../../core/index.ts";
 import { printJson, requireFlag } from "../commandSupport.ts";
 import type { CliCommandHandler } from "../types.ts";
 
@@ -64,13 +64,6 @@ const escapeTomlString = (value: string): string => {
  */
 const escapeShellString = (value: string): string => {
   return `'${value.replaceAll("'", `'\\''`)}'`;
-};
-
-/**
- * Returns `true` when a value is a plain object.
- */
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
 /**
@@ -338,22 +331,9 @@ const installMemoryRepository = (
 
   if (project) {
     projectSlug = slugifyProject(project);
-    const year = new Date().toISOString().slice(0, 4);
-    const projectDirectories = [
-      path.join(context.projectsDir, projectSlug, "canonical-docs"),
-      path.join(context.projectsDir, projectSlug, "decisions", year),
-      path.join(context.projectsDir, projectSlug, "provider-notes"),
-      path.join(context.projectsDir, projectSlug, "runbooks"),
-      path.join(context.projectsDir, projectSlug, "session-log"),
-      path.join(context.projectsDir, projectSlug, "verification"),
-      path.join(context.projectsDir, projectSlug, "work-items", year),
-      path.join(context.archivesDir, projectSlug, "session-log"),
-      path.join(context.archivesDir, projectSlug, "verification"),
-    ];
-
-    for (const directory of projectDirectories) {
-      fs.mkdirSync(directory, { recursive: true });
-      created.add(path.relative(memoryRootDir, directory));
+    const bootstrapResult = bootstrapProject({ project: projectSlug }, context);
+    for (const createdPath of bootstrapResult.created) {
+      created.add(createdPath);
     }
   }
 

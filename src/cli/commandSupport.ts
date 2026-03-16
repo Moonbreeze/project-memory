@@ -71,6 +71,21 @@ export const parseList = (value: string | undefined): string[] => {
 };
 
 /**
+ * Parses one required JSON object or array flag.
+ */
+export const parseRequiredJson = (value: string | undefined, key: string): unknown => {
+  if (!value) {
+    throw new Error(`Missing required flag --${key}`);
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error(`Invalid --${key} JSON payload`);
+  }
+};
+
+/**
  * Parses an optional document source flag.
  */
 export const parseOptionalDocumentSource = (

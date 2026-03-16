@@ -67,6 +67,11 @@ export { commitPendingChanges } from "./git/index.ts";
 export { validateBody, validateFrontmatter } from "./validation/index.ts";
 
 /**
+ * Core taxonomy operations.
+ */
+export * from "./taxonomy/index.ts";
+
+/**
  * Core domain types and constants.
  */
 export * from "./types/index.ts";

@@ -180,12 +180,14 @@ test("install script provisions wrappers and local wrapper flow reaches the exte
     throw new Error("Expected list-documents to return a structured result");
   }
 
-  const firstDocument = listedDocuments.documents[0];
-  if (!isRecord(firstDocument) || typeof firstDocument.relativePath !== "string") {
-    throw new Error("Expected managed document metadata from list-documents");
+  const sessionDocument = listedDocuments.documents.find((document) => {
+    return isRecord(document)
+      && typeof document.relativePath === "string"
+      && /projects\/acme-app\/session-log\/2026\/03\//.test(document.relativePath);
+  });
+  if (!isRecord(sessionDocument) || typeof sessionDocument.relativePath !== "string") {
+    throw new Error("Expected a session-note entry from list-documents");
   }
-
-  assert.match(firstDocument.relativePath, /projects\/acme-app\/session-log\/2026\/03\//);
 
   const sessionNotePath = path.join(
     memoryRootDir,
