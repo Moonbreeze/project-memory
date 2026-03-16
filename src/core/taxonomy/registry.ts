@@ -52,6 +52,18 @@ type RawTaxonomyRegistryEntry = Omit<TaxonomyRegistryEntry, "state" | "migration
 };
 
 /**
+ * One resolved taxonomy registry match for a canonical scope or one of its aliases.
+ */
+type ResolvedRegistryEntry = {
+  /** Parsed registry entry that owns the matched name. */
+  entry: TaxonomyRegistryEntry;
+  /** Raw scope slug declared by the canonical doc. */
+  inputScope: string;
+  /** Indicates whether the raw scope matched through an alias instead of the canonical scope. */
+  usesAlias: boolean;
+};
+
+/**
  * Extracts one Markdown section body by heading.
  */
 const extractSectionBody = (body: string, heading: string, nextHeading: string): string => {
@@ -205,6 +217,11 @@ const validateRegistryEntries = (entries: TaxonomyRegistryEntry[]): TaxonomyRegi
   const aliasOwners = new Map<string, string>();
 
   for (const entry of normalizedEntries) {
+    const existingAliasOwner = aliasOwners.get(entry.scope);
+    if (existingAliasOwner && existingAliasOwner !== entry.scope) {
+      throw new Error(`Taxonomy registry scope collides with alias: ${entry.scope}`);
+    }
+
     if (entriesByScope.has(entry.scope)) {
       throw new Error(`Duplicate taxonomy registry scope: ${entry.scope}`);
     }
@@ -216,8 +233,13 @@ const validateRegistryEntries = (entries: TaxonomyRegistryEntry[]): TaxonomyRegi
         throw new Error(`Taxonomy registry alias duplicates its scope: ${entry.scope}`);
       }
 
-      const existingAliasOwner = aliasOwners.get(alias);
-      if (existingAliasOwner && existingAliasOwner !== entry.scope) {
+      const existingScopeOwner = entriesByScope.get(alias);
+      if (existingScopeOwner && existingScopeOwner.scope !== entry.scope) {
+        throw new Error(`Taxonomy registry alias collides with registered scope: ${alias}`);
+      }
+
+      const existingAliasOwnerForAlias = aliasOwners.get(alias);
+      if (existingAliasOwnerForAlias && existingAliasOwnerForAlias !== entry.scope) {
         throw new Error(`Taxonomy registry alias collision: ${alias}`);
       }
 
@@ -311,6 +333,44 @@ const collectProjectCanonicalDocs = (
 };
 
 /**
+ * Builds one lookup that resolves canonical scopes and alias names to their owning registry entry.
+ */
+const buildRegistryEntryLookup = (
+  entries: TaxonomyRegistryEntry[],
+): Map<string, TaxonomyRegistryEntry> => {
+  const lookup = new Map<string, TaxonomyRegistryEntry>();
+
+  for (const entry of entries) {
+    lookup.set(entry.scope, entry);
+
+    for (const alias of entry.aliases) {
+      lookup.set(alias, entry);
+    }
+  }
+
+  return lookup;
+};
+
+/**
+ * Resolves one declared registry scope against canonical scope names and alias names.
+ */
+const resolveRegistryEntry = (
+  lookup: Map<string, TaxonomyRegistryEntry>,
+  scope: string,
+): ResolvedRegistryEntry | undefined => {
+  const entry = lookup.get(scope);
+  if (!entry) {
+    return undefined;
+  }
+
+  return {
+    entry,
+    inputScope: scope,
+    usesAlias: scope !== entry.scope,
+  };
+};
+
+/**
  * Ensures one canonical-doc write satisfies registry-backed taxonomy invariants.
  */
 export const assertCanonicalDocWriteAllowed = (
@@ -326,10 +386,12 @@ export const assertCanonicalDocWriteAllowed = (
   }
 
   const registry = readActiveTaxonomyRegistry(projectSlug, context);
-  const entry = registry.entries.find((candidate) => candidate.scope === registryScope);
-  if (!entry) {
+  const registryEntryLookup = buildRegistryEntryLookup(registry.entries);
+  const resolvedEntry = resolveRegistryEntry(registryEntryLookup, registryScope);
+  if (!resolvedEntry) {
     throw new Error(`Unknown taxonomy registry scope: ${registryScope}`);
   }
+  const entry = resolvedEntry.entry;
 
   if (nextStatus === "active" && !activeLikeRegistryStates.has(entry.state)) {
     throw new Error(`Retired taxonomy registry scope cannot own an active canonical doc: ${registryScope}`);
@@ -347,16 +409,26 @@ export const assertCanonicalDocWriteAllowed = (
     { registryScope },
   );
   const conflictingDocument = collectProjectCanonicalDocs(projectSlug, context).find((document) => {
+    const documentRegistryScope = document.metadata.registry_scope;
+    if (!documentRegistryScope) {
+      return false;
+    }
+
+    const resolvedDocumentEntry = resolveRegistryEntry(registryEntryLookup, documentRegistryScope);
+    if (!resolvedDocumentEntry) {
+      return false;
+    }
+
     return (
       document.metadata.status === "active"
-      && document.metadata.registry_scope === registryScope
+      && resolvedDocumentEntry.entry.scope === entry.scope
       && document.relativePath !== candidateRelativePath
     );
   });
 
   if (conflictingDocument) {
     throw new Error(
-      `Active canonical authority already exists for scope ${registryScope}: ${conflictingDocument.relativePath}`,
+      `Active canonical authority already exists for scope ${entry.scope}: ${conflictingDocument.relativePath}`,
     );
   }
 };
@@ -483,6 +555,7 @@ export const auditTaxonomyConsistency = (
 
     registryEntryByScope.set(entry.scope, entry);
   }
+  const registryEntryLookup = buildRegistryEntryLookup(registryEntries);
 
   const activeNonRegistryCanonicalDocs = activeCanonicalDocs.filter((document) => {
     return document.metadata.registry_scope !== ReservedTaxonomyRegistryScope;
@@ -495,12 +568,8 @@ export const auditTaxonomyConsistency = (
       continue;
     }
 
-    const scopedDocuments = activeDocsByScope.get(registryScope) ?? [];
-    scopedDocuments.push(document);
-    activeDocsByScope.set(registryScope, scopedDocuments);
-
-    const entry = registryEntryByScope.get(registryScope);
-    if (!entry) {
+    const resolvedEntry = resolveRegistryEntry(registryEntryLookup, registryScope);
+    if (!resolvedEntry) {
       issues.push(
         createAuditIssue({
           code: "unknown-scope",
@@ -513,13 +582,30 @@ export const auditTaxonomyConsistency = (
       continue;
     }
 
-    if (entry.state === "retired") {
+    const ownerScope = resolvedEntry.entry.scope;
+    const ownerScopedDocuments = activeDocsByScope.get(ownerScope) ?? [];
+    ownerScopedDocuments.push(document);
+    activeDocsByScope.set(ownerScope, ownerScopedDocuments);
+
+    if (resolvedEntry.usesAlias) {
+      issues.push(
+        createAuditIssue({
+          code: "alias-scope-usage",
+          severity: "warning",
+          message: `Active canonical doc uses taxonomy alias ${registryScope} for registered scope ${ownerScope}.`,
+          scope: registryScope,
+          relativePaths: [document.relativePath, registryRelativePath],
+        }),
+      );
+    }
+
+    if (resolvedEntry.entry.state === "retired") {
       issues.push(
         createAuditIssue({
           code: "retired-scope-usage",
           severity: "error",
-          message: `Active canonical doc still targets retired taxonomy registry scope ${registryScope}.`,
-          scope: registryScope,
+          message: `Active canonical doc still targets retired taxonomy registry scope ${ownerScope}.`,
+          scope: ownerScope,
           relativePaths: [document.relativePath, registryRelativePath],
         }),
       );

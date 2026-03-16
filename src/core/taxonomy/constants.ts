@@ -44,6 +44,7 @@ export const TaxonomyAuditIssueCode = [
   "invalid-registry",
   "duplicate-registry",
   "duplicate-registry-entry",
+  "alias-scope-usage",
   "unknown-scope",
   "retired-scope-usage",
   "duplicate-authority",

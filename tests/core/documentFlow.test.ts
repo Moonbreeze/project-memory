@@ -648,6 +648,146 @@ test("auditTaxonomyConsistency reports duplicate authority, unknown scope usage,
   );
 });
 
+test("upsertCanonicalDoc accepts alias-backed scopes and audit reports warning-level alias usage", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  bootstrapProject(
+    {
+      project: "acme-app",
+      date: "2026-03-11",
+    },
+    context,
+  );
+  upsertTaxonomyRegistry(
+    {
+      project: "acme-app",
+      date: "2026-03-11",
+      entries: [
+        {
+          scope: "taxonomy-registry",
+          topic: "taxonomy-registry",
+          authority: "taxonomy-registry",
+          state: "active",
+          migration: "create-topic",
+          aliases: [],
+          mappedScopes: [],
+        },
+        {
+          scope: "resume-flow",
+          topic: "resume-flow",
+          authority: "resume-flow",
+          state: "active",
+          migration: "alias-add",
+          aliases: ["resume-legacy"],
+          mappedScopes: [],
+        },
+      ],
+    },
+    context,
+  );
+
+  const document = upsertCanonicalDoc(
+    {
+      project: "acme-app",
+      topic: "resume policy",
+      registryScope: "resume-legacy",
+      date: "2026-03-11",
+      summary: "Alias-backed resume policy.",
+      guidance: ["Treat aliases as transitional compatibility names"],
+      references: [],
+    },
+    context,
+  );
+
+  assert.equal(document.metadata.registry_scope, "resume-legacy");
+
+  const result = auditTaxonomyConsistency({ project: "acme-app" }, context);
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(result.issues.map((issue) => issue.code), ["alias-scope-usage"]);
+  assert.equal(result.issues[0]?.severity, "warning");
+  assert.match(result.issues[0]?.message ?? "", /resume-legacy/);
+  assert.match(result.issues[0]?.message ?? "", /resume-flow/);
+});
+
+test("auditTaxonomyConsistency resolves alias-backed docs to their owner scope for duplicate and retired checks", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  bootstrapProject(
+    {
+      project: "acme-app",
+      date: "2026-03-11",
+    },
+    context,
+  );
+  upsertTaxonomyRegistry(
+    {
+      project: "acme-app",
+      date: "2026-03-11",
+      entries: [
+        {
+          scope: "taxonomy-registry",
+          topic: "taxonomy-registry",
+          authority: "taxonomy-registry",
+          state: "active",
+          migration: "create-topic",
+          aliases: [],
+          mappedScopes: [],
+        },
+        {
+          scope: "resume-flow",
+          topic: "resume-flow",
+          authority: "resume-flow",
+          state: "active",
+          migration: "alias-add",
+          aliases: ["resume-legacy"],
+          mappedScopes: [],
+        },
+        {
+          scope: "legacy-flow",
+          topic: "legacy-flow",
+          authority: "legacy-flow",
+          state: "retired",
+          migration: "alias-add",
+          aliases: ["legacy-archive"],
+          mappedScopes: [],
+        },
+      ],
+    },
+    context,
+  );
+  writeRawCanonicalDoc(
+    rootDir,
+    "projects/acme-app/canonical-docs/resume-flow/resume-policy.md",
+    "resume-flow",
+    "resume-policy",
+  );
+  writeRawCanonicalDoc(
+    rootDir,
+    "projects/acme-app/canonical-docs/resume-legacy/resume-policy-shadow.md",
+    "resume-legacy",
+    "resume-policy-shadow",
+  );
+  writeRawCanonicalDoc(
+    rootDir,
+    "projects/acme-app/canonical-docs/legacy-archive/legacy-policy.md",
+    "legacy-archive",
+    "legacy-policy",
+  );
+
+  const result = auditTaxonomyConsistency({ project: "acme-app" }, context);
+
+  assert.equal(result.passed, false);
+  assert.deepEqual(
+    result.issues.map((issue) => issue.code),
+    ["duplicate-authority", "retired-scope-usage", "alias-scope-usage", "alias-scope-usage"],
+  );
+  assert.equal(result.issues[2]?.severity, "warning");
+  assert.equal(result.issues[3]?.severity, "warning");
+});
+
 test("upsertWorkItem writes a managed work item and exposes planning metadata through list, read, and search", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
