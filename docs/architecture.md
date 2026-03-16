@@ -120,7 +120,7 @@ The current runtime model keeps those relationships same-project by default.
 The tool provides three broad retrieval layers:
 
 - list/search/read of individual managed documents
-- preset-based listing such as backlog
+- preset-based listing such as backlog or ideas
 - bounded read entrypoints for common agent retrieval patterns
 
 `list-documents` returns metadata only by default.

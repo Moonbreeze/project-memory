@@ -391,6 +391,70 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
   );
 });
 
+test("listDocuments ideas preset returns newest draft decisions only", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "older draft idea",
+      date: "2026-03-10",
+      context: "Need one older idea.",
+      decision: "Keep this draft visible in the inbox.",
+      consequences: ["Shows draft ordering"],
+      status: "draft",
+    },
+    context,
+  );
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "newer draft idea",
+      date: "2026-03-12",
+      context: "Need one newer idea.",
+      decision: "Keep newer draft ideas first.",
+      consequences: ["Shows newest-first ordering"],
+      status: "draft",
+    },
+    context,
+  );
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "active decision",
+      date: "2026-03-13",
+      context: "Need one non-draft decision.",
+      decision: "Do not mix accepted decisions into ideas.",
+      consequences: ["Should be filtered out"],
+      status: "active",
+    },
+    context,
+  );
+
+  const listed = listDocuments({ project: "acme-app", preset: "ideas" }, context);
+
+  assert.deepEqual(
+    listed.appliedQuery,
+    {
+      project: "acme-app",
+      type: "decision",
+      status: "draft",
+      preset: "ideas",
+      sort: "date",
+      order: "desc",
+      limit: 100,
+      includeBody: false,
+    },
+  );
+  assert.deepEqual(
+    listed.documents.map((document) => document.metadata.topic),
+    ["newer-draft-idea", "older-draft-idea"],
+  );
+});
+
 test("upsertCanonicalDoc writes a scoped document and keeps it visible to list, read, and search", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);

@@ -50,6 +50,7 @@ Today the supported local entrypoints are wrappers:
 
 ```bash
 ./scripts/run-cli.sh list-documents --project acme-api
+./scripts/run-cli.sh list-documents --project acme-api --preset ideas
 ./scripts/run-mcp.sh
 ```
 

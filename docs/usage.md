@@ -26,6 +26,8 @@ The intended paradigm is:
 4. `verification-result` records proof that something was checked.
 5. `canonical-doc`, `runbook`, and `provider-note` hold stable reference knowledge after the work settles.
 
+Use `list-documents --preset backlog` for executable work only and `list-documents --preset ideas` for the draft-decision inbox that still needs triage.
+
 ## Model Lifecycle
 
 A normal documentation lifecycle is described first as model operations, not as shell commands:
@@ -199,6 +201,7 @@ Example commands:
 
 ```bash
 ./scripts/run-cli.sh list-documents --project acme-api
+./scripts/run-cli.sh list-documents --project acme-api --preset ideas
 ./scripts/run-cli.sh read-document --path projects/acme-api/decisions/2026/2026-03-14-repository-split.md
 ./scripts/run-cli.sh close-work-item --project acme-api --topic bounded-read-follow-up --date 2026-03-14 --state done
 ./scripts/run-cli.sh commit-pending-changes --message "docs(acme-api/session): record setup validation"

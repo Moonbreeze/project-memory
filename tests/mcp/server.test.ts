@@ -644,6 +644,70 @@ test("MCP list_documents backlog preset returns newest current decisions first",
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("MCP list_documents ideas preset returns newest draft decisions only", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  callTool("ideas-10", "create_decision", {
+    project: "acme-app",
+    topic: "older idea",
+    date: "2026-03-10",
+    context: "Need an older draft idea.",
+    decision: "Keep this draft visible.",
+    consequences: ["Older idea stays in the inbox"],
+    status: "draft",
+  });
+
+  callTool("ideas-11", "create_decision", {
+    project: "acme-app",
+    topic: "newer idea",
+    date: "2026-03-12",
+    context: "Need a newer draft idea.",
+    decision: "Keep newer draft ideas first.",
+    consequences: ["Newer item should sort first"],
+    status: "draft",
+  });
+
+  callTool("ideas-12", "create_decision", {
+    project: "acme-app",
+    topic: "accepted idea",
+    date: "2026-03-13",
+    context: "Need a non-draft decision.",
+    decision: "Accepted decisions should stay out of the ideas inbox.",
+    consequences: ["Should be filtered"],
+    status: "active",
+  });
+
+  const response = callTool("ideas-13", "list_documents", {
+    project: "acme-app",
+    preset: "ideas",
+  });
+  const toolResult = readToolResult(response);
+  if (
+    !isRecord(toolResult.structuredContent) ||
+    !Array.isArray(toolResult.structuredContent.documents) ||
+    !isRecord(toolResult.structuredContent.appliedQuery)
+  ) {
+    throw new Error("Expected structured ideas list result");
+  }
+
+  const documents = toolResult.structuredContent.documents;
+  assert.deepEqual(
+    documents.map((document) => {
+      if (!isRecord(document) || !isRecord(document.metadata) || typeof document.metadata.topic !== "string") {
+        throw new Error("Expected listed idea metadata");
+      }
+
+      return document.metadata.topic;
+    }),
+    ["newer-idea", "older-idea"],
+  );
+  assert.equal(toolResult.structuredContent.appliedQuery.status, "draft");
+  assert.equal(toolResult.structuredContent.appliedQuery.type, "decision");
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("MCP upsert_work_item feeds the project backlog planning view", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;

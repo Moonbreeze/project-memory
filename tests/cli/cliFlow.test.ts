@@ -584,6 +584,97 @@ test("CLI creates decisions through the manual interface", async () => {
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("CLI lists draft-decision ideas through the ideas preset", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  await runCli(
+    [
+      "create-decision",
+      "--project",
+      "acme-app",
+      "--topic",
+      "older idea",
+      "--context",
+      "Need one older draft idea.",
+      "--decision",
+      "Keep this draft visible.",
+      "--consequences",
+      "shows draft ordering",
+      "--status",
+      "draft",
+      "--date",
+      "2026-03-10",
+    ],
+  );
+
+  await runCli(
+    [
+      "create-decision",
+      "--project",
+      "acme-app",
+      "--topic",
+      "newer idea",
+      "--context",
+      "Need one newer draft idea.",
+      "--decision",
+      "Keep newer draft ideas first.",
+      "--consequences",
+      "shows newest first ordering",
+      "--status",
+      "draft",
+      "--date",
+      "2026-03-12",
+    ],
+  );
+
+  await runCli(
+    [
+      "create-decision",
+      "--project",
+      "acme-app",
+      "--topic",
+      "accepted idea",
+      "--context",
+      "Need one accepted decision.",
+      "--decision",
+      "Do not include accepted decisions in ideas.",
+      "--consequences",
+      "should stay out of ideas",
+      "--status",
+      "active",
+      "--date",
+      "2026-03-13",
+    ],
+  );
+
+  const ideasCapture = createCapturedIo();
+  await runCli(
+    ["list-documents", "--project", "acme-app", "--preset", "ideas"],
+    ideasCapture.io,
+  );
+
+  const ideasResult = parseLastJson(ideasCapture.captured.stdout);
+  if (!isRecord(ideasResult) || !Array.isArray(ideasResult.documents) || !isRecord(ideasResult.appliedQuery)) {
+    throw new Error("Unexpected ideas preset result shape");
+  }
+
+  assert.deepEqual(
+    ideasResult.documents.map((document) => {
+      if (!isRecord(document) || !isRecord(document.metadata) || typeof document.metadata.topic !== "string") {
+        throw new Error("Expected listed idea document metadata");
+      }
+
+      return document.metadata.topic;
+    }),
+    ["newer-idea", "older-idea"],
+  );
+  assert.equal(ideasResult.appliedQuery.status, "draft");
+  assert.equal(ideasResult.appliedQuery.type, "decision");
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("CLI upserts provider notes and commits pending document changes", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;

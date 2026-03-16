@@ -24,7 +24,7 @@ export const DocumentStatus = ["draft", "active", "superseded", "archived"] as c
 /**
  * Supported list-documents presets.
  */
-export const ListDocumentsPreset = ["backlog"] as const;
+export const ListDocumentsPreset = ["backlog", "ideas"] as const;
 
 /**
  * Supported bounded-read entrypoints.

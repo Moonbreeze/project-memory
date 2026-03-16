@@ -14,6 +14,12 @@ import type {
 import type { WorkItemPlanningMetadata } from "../workItems/index.ts";
 
 const backlogExcludedStatuses: DocumentStatus[] = ["superseded", "archived"];
+const ideasPresetDefaults: Partial<AppliedListDocumentsQuery> = {
+  type: "decision",
+  status: "draft",
+  sort: "date",
+  order: "desc",
+};
 const workItemBacklogPlanningStatePriority: Record<string, number> = {
   ready: 0,
   in_progress: 1,
@@ -111,6 +117,8 @@ const normalizeListDocumentsQuery = (
             sort: "date",
             order: "desc",
           }
+      : query.preset === "ideas"
+        ? ideasPresetDefaults
       : {};
 
   const statusOverridesPreset = query.status !== undefined || query.excludeStatuses !== undefined;
