@@ -2,7 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { createRepositoryContext } from "../config/index.ts";
-import { ensureKebabCaseProject, ensureSlug, readDocument } from "../documents/index.ts";
+import {
+  compareDocumentsByTimeline,
+  ensureKebabCaseProject,
+  ensureSlug,
+  readDocument,
+  sortRelativePathsByDocumentTimeline,
+} from "../documents/index.ts";
 import { ReservedTaxonomyRegistryScope } from "../taxonomy/index.ts";
 import {
   buildWorkItemPlanningEntries,
@@ -355,6 +361,24 @@ const collectProjectWorkItemPaths = (
 };
 
 /**
+ * Collects bounded dated candidate paths and reorders them by document timeline.
+ */
+const collectTimelineOrderedDatedTopicPaths = (
+  context: RepositoryContext,
+  project: string,
+  directoryName: "decisions" | "verification" | "session-log",
+  topic: string,
+  limit: number,
+  matchMode: PathMatchMode,
+  shape: DatedDirectoryShape,
+): string[] => {
+  return sortRelativePathsByDocumentTimeline(
+    context,
+    collectDatedTopicPaths(context, project, directoryName, topic, limit, matchMode, shape),
+  );
+};
+
+/**
  * Reads selected candidate paths with dedupe and status filtering.
  */
 const readStageDocuments = (
@@ -513,12 +537,7 @@ const sortPlanningEntries = (
       return priorityDifference;
     }
 
-    const dateDifference = right.document.metadata.date.localeCompare(left.document.metadata.date);
-    if (dateDifference !== 0) {
-      return dateDifference;
-    }
-
-    return left.document.relativePath.localeCompare(right.document.relativePath);
+    return compareDocumentsByTimeline(left.document, right.document, "desc");
   });
 };
 
@@ -842,7 +861,7 @@ export const readPlanningTopicEntry = (
   const documents: ParsedDocument[] = [];
   const notes = [
     "Planning topic entry seeds work-item selection with same-project active documents whose topic exactly matches the requested topic.",
-    "Planning topic entry stays bounded and ordered by derived planning state before date/path tie-breaks.",
+    "Planning topic entry stays bounded and ordered by derived planning state before timeline/path tie-breaks.",
     "Planning topic entry follows only explicit same-project dependency work items from the selected work items, with a fixed limit and no recursive expansion.",
     "Planning topic entry follows only explicit same-project context locators from the selected work items, with fixed per-type limits and no fallback expansion.",
     "Planning topic entry follows only explicit same-project evidence locators from the selected work items, with fixed per-type limits and no fallback expansion.",
@@ -1120,8 +1139,8 @@ export const readTopicEntry = (
       documentType: "decision",
       strategy: "topic-exact",
       limit: topicEntryLimits.decisions,
-      description: "Read the newest exact-topic active-or-draft decisions by dated path.",
-      candidatePaths: collectDatedTopicPaths(
+      description: "Read the newest exact-topic active-or-draft decisions in timeline order.",
+      candidatePaths: collectTimelineOrderedDatedTopicPaths(
         context,
         project,
         "decisions",
@@ -1144,8 +1163,8 @@ export const readTopicEntry = (
       documentType: "session-note",
       strategy: "topic-exact",
       limit: topicEntryLimits.sessionNotes,
-      description: "Read the freshest exact-topic session note for recent execution context.",
-      candidatePaths: collectDatedTopicPaths(
+      description: "Read the freshest exact-topic session note in timeline order.",
+      candidatePaths: collectTimelineOrderedDatedTopicPaths(
         context,
         project,
         "session-log",
@@ -1168,8 +1187,8 @@ export const readTopicEntry = (
       documentType: "verification-result",
       strategy: "topic-exact",
       limit: topicEntryLimits.verificationResults,
-      description: "Read the freshest exact-topic verification result for current evidence.",
-      candidatePaths: collectDatedTopicPaths(
+      description: "Read the freshest exact-topic verification result in timeline order.",
+      candidatePaths: collectTimelineOrderedDatedTopicPaths(
         context,
         project,
         "verification",
@@ -1281,8 +1300,8 @@ export const readTopicEntry = (
         documentType: "decision",
         strategy: "topic-contains",
         limit: topicEntryLimits.fallbackDecisions,
-        description: "Fallback to the newest bounded decisions whose topic slug contains the request.",
-        candidatePaths: collectDatedTopicPaths(
+        description: "Fallback to the newest bounded decisions in timeline order whose topic slug contains the request.",
+        candidatePaths: collectTimelineOrderedDatedTopicPaths(
           context,
           project,
           "decisions",
@@ -1356,7 +1375,7 @@ export const readRationaleEntry = (
       limit: rationaleEntryLimits.referencedDecisions,
       description: "Follow explicit decision references from the selected canonical docs.",
       candidatePaths: referencedDecisionTopics.flatMap((decisionTopic) =>
-        collectDatedTopicPaths(
+        collectTimelineOrderedDatedTopicPaths(
           context,
           project,
           "decisions",
@@ -1408,8 +1427,8 @@ export const readRationaleEntry = (
       documentType: "decision",
       strategy: "topic-exact",
       limit: rationaleEntryLimits.exactDecisions,
-      description: "Read the newest exact-topic decisions, including superseded ones when needed for rationale history.",
-      candidatePaths: collectDatedTopicPaths(
+      description: "Read the newest exact-topic decisions in timeline order, including superseded ones when needed for rationale history.",
+      candidatePaths: collectTimelineOrderedDatedTopicPaths(
         context,
         project,
         "decisions",
@@ -1478,8 +1497,8 @@ export const readRationaleEntry = (
       documentType: "session-note",
       strategy: "topic-exact",
       limit: rationaleEntryLimits.sessionNotes,
-      description: "Read the freshest exact-topic session note for recent supporting context.",
-      candidatePaths: collectDatedTopicPaths(
+      description: "Read the freshest exact-topic session note in timeline order for recent supporting context.",
+      candidatePaths: collectTimelineOrderedDatedTopicPaths(
         context,
         project,
         "session-log",
@@ -1502,8 +1521,8 @@ export const readRationaleEntry = (
       documentType: "verification-result",
       strategy: "topic-exact",
       limit: rationaleEntryLimits.verificationResults,
-      description: "Read the freshest exact-topic verification result for supporting evidence.",
-      candidatePaths: collectDatedTopicPaths(
+      description: "Read the freshest exact-topic verification result in timeline order for supporting evidence.",
+      candidatePaths: collectTimelineOrderedDatedTopicPaths(
         context,
         project,
         "verification",
@@ -1559,8 +1578,8 @@ export const readRationaleEntry = (
         documentType: "decision",
         strategy: "topic-contains",
         limit: rationaleEntryLimits.fallbackDecisions,
-        description: "Fallback to the newest bounded decisions whose topic slug contains the request.",
-        candidatePaths: collectDatedTopicPaths(
+        description: "Fallback to the newest bounded decisions in timeline order whose topic slug contains the request.",
+        candidatePaths: collectTimelineOrderedDatedTopicPaths(
           context,
           project,
           "decisions",

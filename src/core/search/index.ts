@@ -1,5 +1,9 @@
 import { createRepositoryContext } from "../config/index.ts";
-import { listAllActiveDocumentPaths, readDocument } from "../documents/index.ts";
+import {
+  compareDocumentsByTimeline,
+  listAllActiveDocumentPaths,
+  readDocument,
+} from "../documents/index.ts";
 import { buildWorkItemPlanningEntries } from "../workItems/index.ts";
 import type {
   AppliedListDocumentsQuery,
@@ -123,8 +127,8 @@ const normalizeListDocumentsQuery = (
 
   const statusOverridesPreset = query.status !== undefined || query.excludeStatuses !== undefined;
   const normalizedQuery: AppliedListDocumentsQuery = {
-    sort: query.sort ?? presetDefaults.sort ?? "path",
-    order: query.order ?? presetDefaults.order ?? "asc",
+    sort: query.sort ?? presetDefaults.sort ?? "date",
+    order: query.order ?? presetDefaults.order ?? "desc",
     limit: query.limit ?? 100,
     includeBody: query.includeBody ?? false,
   };
@@ -178,10 +182,7 @@ const compareDocuments = (
   const ascendingFactor = query.order === "asc" ? 1 : -1;
 
   if (query.sort === "date") {
-    const dateComparison = left.metadata.date.localeCompare(right.metadata.date);
-    if (dateComparison !== 0) {
-      return dateComparison * ascendingFactor;
-    }
+    return compareDocumentsByTimeline(left, right, query.order);
   }
 
   return left.relativePath.localeCompare(right.relativePath) * ascendingFactor;
@@ -305,6 +306,7 @@ export const searchDocuments = (
 
   return documents
     .filter((document) => matchesQuery(document, query))
+    .sort((left, right) => compareDocumentsByTimeline(left, right, "desc"))
     .slice(0, query.limit ?? 50)
     .map((document) => ({
       ...document,

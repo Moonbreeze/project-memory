@@ -62,6 +62,8 @@ export type FrontmatterKey = typeof FrontmatterKeyValues[number];
 export type Frontmatter = {
   /** Document date in `YYYY-MM-DD` format. */
   date: string;
+  /** Optional UTC ISO 8601 timeline timestamp for intra-day ordering. */
+  recorded_at?: string;
   /** Project slug owning the document. */
   project: string;
   /** Document topic slug. */
@@ -146,6 +148,8 @@ export type CreateDocumentInput = {
   topic: string;
   /** Optional explicit date in `YYYY-MM-DD` format. */
   date?: string;
+  /** Optional explicit UTC ISO 8601 timeline timestamp. */
+  recordedAt?: string;
   /** Optional explicit document source. */
   source?: DocumentSource;
   /** Optional explicit document status. */

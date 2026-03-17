@@ -42,9 +42,13 @@ export const buildFrontmatter = (frontmatter: Frontmatter): string => {
   const lines = [
     "---",
     `date: ${frontmatter.date}`,
-    `project: ${frontmatter.project}`,
-    `topic: ${frontmatter.topic}`,
   ];
+
+  if (frontmatter.recorded_at) {
+    lines.push(`recorded_at: ${frontmatter.recorded_at}`);
+  }
+
+  lines.push(`project: ${frontmatter.project}`, `topic: ${frontmatter.topic}`);
 
   if (frontmatter.registry_scope) {
     lines.push(`registry_scope: ${frontmatter.registry_scope}`);

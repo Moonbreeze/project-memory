@@ -31,6 +31,7 @@ import {
   ensureSlug,
   resolveDocumentRelativePath,
 } from "./pathLayout.ts";
+import { resolveRecordedAtForWrite } from "./timeline.ts";
 import { readDocument, writeDocument } from "./storage.ts";
 
 /**
@@ -40,6 +41,7 @@ type DefaultFrontmatterInput = {
   project: string;
   topic: string;
   date?: string;
+  recordedAt?: string;
   registryScope?: string;
   source?: Frontmatter["source"];
   status?: Frontmatter["status"];
@@ -49,19 +51,37 @@ type DefaultFrontmatterInput = {
  * Applies shared frontmatter defaults for document creation commands.
  */
 const defaultFrontmatter = (input: DefaultFrontmatterInput): Frontmatter => {
-  const metadata: Frontmatter = {
+  return {
     date: input.date ?? currentDate(),
     project: ensureKebabCaseProject(input.project),
     topic: ensureSlug(input.topic, "Topic"),
     source: input.source ?? "agent",
     status: input.status ?? "active",
+    ...(input.registryScope
+      ? { registry_scope: ensureSlug(input.registryScope, "registryScope") }
+      : {}),
   };
+};
 
-  if (input.registryScope) {
-    metadata.registry_scope = ensureSlug(input.registryScope, "registryScope");
-  }
-
-  return metadata;
+/**
+ * Applies the managed timeline key for one document write.
+ */
+const withRecordedAt = (
+  metadata: Frontmatter,
+  relativePath: string,
+  input: DefaultFrontmatterInput,
+  context: ReturnType<typeof createRepositoryContext>,
+): Frontmatter => {
+  return {
+    ...metadata,
+    recorded_at: resolveRecordedAtForWrite({
+      context,
+      relativePath,
+      date: metadata.date,
+      recordedAt: input.recordedAt,
+      preferCurrentTime: input.date === undefined,
+    }),
+  };
 };
 
 /**
@@ -71,18 +91,19 @@ export const appendSessionNote = (
   input: SessionNoteInput,
   context = createRepositoryContext(),
 ): ParsedDocument => {
-  const metadata = defaultFrontmatter(input);
+  const baseMetadata = defaultFrontmatter(input);
+  const relativePath = resolveDocumentRelativePath(
+    baseMetadata.project,
+    "session-note",
+    baseMetadata.topic,
+    baseMetadata.date,
+  );
+  const metadata = withRecordedAt(baseMetadata, relativePath, input, context);
   const body = renderTemplate(loadTemplate(context, "session-note.md"), {
     summary: input.summary.trim(),
     actions: renderList(input.actions),
     follow_up: renderList(input.followUp),
   });
-  const relativePath = resolveDocumentRelativePath(
-    metadata.project,
-    "session-note",
-    metadata.topic,
-    metadata.date,
-  );
   return writeDocument(context, relativePath, metadata, body);
 };
 
@@ -93,18 +114,19 @@ export const recordVerificationResult = (
   input: VerificationResultInput,
   context = createRepositoryContext(),
 ): ParsedDocument => {
-  const metadata = defaultFrontmatter(input);
+  const baseMetadata = defaultFrontmatter(input);
+  const relativePath = resolveDocumentRelativePath(
+    baseMetadata.project,
+    "verification-result",
+    baseMetadata.topic,
+    baseMetadata.date,
+  );
+  const metadata = withRecordedAt(baseMetadata, relativePath, input, context);
   const body = renderTemplate(loadTemplate(context, "verification-result.md"), {
     scope: input.scope.trim(),
     steps: renderList(input.steps),
     result: input.result.trim(),
   });
-  const relativePath = resolveDocumentRelativePath(
-    metadata.project,
-    "verification-result",
-    metadata.topic,
-    metadata.date,
-  );
   return writeDocument(context, relativePath, metadata, body);
 };
 
@@ -115,22 +137,23 @@ export const upsertProviderNote = (
   input: ProviderNoteInput,
   context = createRepositoryContext(),
 ): ParsedDocument => {
-  const metadata = defaultFrontmatter({
+  const baseMetadata = defaultFrontmatter({
     ...input,
     topic: input.provider,
   });
+  const relativePath = resolveDocumentRelativePath(
+    baseMetadata.project,
+    "provider-note",
+    baseMetadata.topic,
+    baseMetadata.date,
+    { provider: input.provider },
+  );
+  const metadata = withRecordedAt(baseMetadata, relativePath, input, context);
   const body = renderTemplate(loadTemplate(context, "provider-note.md"), {
     overview: input.overview.trim(),
     constraints: renderList(input.constraints),
     guidance: renderList(input.guidance),
   });
-  const relativePath = resolveDocumentRelativePath(
-    metadata.project,
-    "provider-note",
-    metadata.topic,
-    metadata.date,
-    { provider: input.provider },
-  );
   return writeDocument(context, relativePath, metadata, body);
 };
 
@@ -141,31 +164,32 @@ export const upsertCanonicalDoc = (
   input: CanonicalDocInput,
   context = createRepositoryContext(),
 ): ParsedDocument => {
-  const metadata = defaultFrontmatter({
+  const baseMetadata = defaultFrontmatter({
     ...input,
     registryScope: input.registryScope,
   });
   assertCanonicalDocWriteAllowed(
     {
-      project: metadata.project,
-      topic: metadata.topic,
+      project: baseMetadata.project,
+      topic: baseMetadata.topic,
       registryScope: input.registryScope,
-      status: metadata.status,
+      status: baseMetadata.status,
     },
     context,
   );
+  const relativePath = resolveDocumentRelativePath(
+    baseMetadata.project,
+    "canonical-doc",
+    baseMetadata.topic,
+    baseMetadata.date,
+    { registryScope: input.registryScope },
+  );
+  const metadata = withRecordedAt(baseMetadata, relativePath, input, context);
   const body = renderTemplate(loadTemplate(context, "canonical-doc.md"), {
     summary: input.summary.trim(),
     guidance: renderList(input.guidance),
     references: renderList(input.references),
   });
-  const relativePath = resolveDocumentRelativePath(
-    metadata.project,
-    "canonical-doc",
-    metadata.topic,
-    metadata.date,
-    { registryScope: input.registryScope },
-  );
   return writeDocument(context, relativePath, metadata, body);
 };
 
@@ -176,18 +200,19 @@ export const createDecision = (
   input: DecisionInput,
   context = createRepositoryContext(),
 ): ParsedDocument => {
-  const metadata = defaultFrontmatter(input);
+  const baseMetadata = defaultFrontmatter(input);
+  const relativePath = resolveDocumentRelativePath(
+    baseMetadata.project,
+    "decision",
+    baseMetadata.topic,
+    baseMetadata.date,
+  );
+  const metadata = withRecordedAt(baseMetadata, relativePath, input, context);
   const body = renderTemplate(loadTemplate(context, "decision.md"), {
     context: input.context.trim(),
     decision: input.decision.trim(),
     consequences: renderList(input.consequences),
   });
-  const relativePath = resolveDocumentRelativePath(
-    metadata.project,
-    "decision",
-    metadata.topic,
-    metadata.date,
-  );
   return writeDocument(context, relativePath, metadata, body);
 };
 
@@ -198,18 +223,19 @@ export const createRunbook = (
   input: RunbookInput,
   context = createRepositoryContext(),
 ): ParsedDocument => {
-  const metadata = defaultFrontmatter(input);
+  const baseMetadata = defaultFrontmatter(input);
+  const relativePath = resolveDocumentRelativePath(
+    baseMetadata.project,
+    "runbook",
+    baseMetadata.topic,
+    baseMetadata.date,
+  );
+  const metadata = withRecordedAt(baseMetadata, relativePath, input, context);
   const body = renderTemplate(loadTemplate(context, "runbook.md"), {
     purpose: input.purpose.trim(),
     procedure: renderList(input.procedure),
     verification: renderList(input.verification),
   });
-  const relativePath = resolveDocumentRelativePath(
-    metadata.project,
-    "runbook",
-    metadata.topic,
-    metadata.date,
-  );
   return writeDocument(context, relativePath, metadata, body);
 };
 
@@ -222,10 +248,17 @@ export const upsertWorkItem = (
 ): ParsedDocument => {
   const workItemStatus: WorkItemDocumentStatus = input.status ?? "active";
   const workItemState: WorkItemState = input.workItemState ?? "open";
-  const baseMetadata = defaultFrontmatter({
+  const initialMetadata = defaultFrontmatter({
     ...input,
     status: workItemStatus,
   });
+  const relativePath = resolveDocumentRelativePath(
+    initialMetadata.project,
+    "work-item",
+    initialMetadata.topic,
+    initialMetadata.date,
+  );
+  const baseMetadata = withRecordedAt(initialMetadata, relativePath, input, context);
   const metadata: Frontmatter = {
     ...baseMetadata,
     work_item_state: workItemState,
@@ -252,12 +285,6 @@ export const upsertWorkItem = (
   }
 
   const body = renderWorkItemBody(loadTemplate(context, "work-item.md"), definition);
-  const relativePath = resolveDocumentRelativePath(
-    metadata.project,
-    "work-item",
-    metadata.topic,
-    metadata.date,
-  );
   return writeDocument(context, relativePath, metadata, body);
 };
 

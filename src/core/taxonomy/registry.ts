@@ -4,12 +4,13 @@ import { createRepositoryContext } from "../config/index.ts";
 import {
   currentDate,
   ensureKebabCaseProject,
+  ensureSlug,
   listAllActiveDocumentPaths,
   loadTemplate,
   readDocument,
+  resolveRecordedAtForWrite,
   renderList,
   renderTemplate,
-  ensureSlug,
   resolveDocumentRelativePath,
   writeDocument,
 } from "../documents/index.ts";
@@ -436,8 +437,23 @@ export const upsertTaxonomyRegistry = (
   context = createRepositoryContext(),
 ): ParsedDocument => {
   const project = ensureKebabCaseProject(input.project);
+  const date = input.date ?? currentDate();
+  const relativePath = resolveDocumentRelativePath(
+    project,
+    "canonical-doc",
+    ReservedTaxonomyRegistryTopic,
+    date,
+    { registryScope: ReservedTaxonomyRegistryScope },
+  );
   const metadata: Frontmatter = {
-    date: input.date ?? currentDate(),
+    date,
+    recorded_at: resolveRecordedAtForWrite({
+      context,
+      relativePath,
+      date,
+      recordedAt: input.recordedAt,
+      preferCurrentTime: input.date === undefined,
+    }),
     project,
     topic: ReservedTaxonomyRegistryTopic,
     registry_scope: ReservedTaxonomyRegistryScope,
@@ -451,14 +467,6 @@ export const upsertTaxonomyRegistry = (
     guidance: renderList(entries.map((entry) => serializeRegistryEntry(entry))),
     references: renderList(input.references ?? []),
   });
-  const relativePath = resolveDocumentRelativePath(
-    project,
-    "canonical-doc",
-    ReservedTaxonomyRegistryTopic,
-    metadata.date,
-    { registryScope: ReservedTaxonomyRegistryScope },
-  );
-
   return writeDocument(context, relativePath, metadata, body);
 };
 

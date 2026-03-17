@@ -179,6 +179,74 @@ test("readDocument rejects legacy project_commit frontmatter", () => {
   assert.throws(() => readDocument(context, relativePath), /Unknown metadata field: project_commit/);
 });
 
+test("readDocument rejects invalid or cross-day recorded_at frontmatter", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  const invalidRelativePath = "projects/acme-app/runbooks/invalid-recorded-at.md";
+  const mismatchedRelativePath = "projects/acme-app/runbooks/mismatched-recorded-at.md";
+
+  fs.mkdirSync(`${rootDir}/projects/acme-app/runbooks`, { recursive: true });
+  fs.writeFileSync(
+    `${rootDir}/${invalidRelativePath}`,
+    [
+      "---",
+      "date: 2026-03-11",
+      "recorded_at: 2026-03-11T12:00:00Z",
+      "project: acme-app",
+      "topic: invalid-recorded-at",
+      "source: manual",
+      "status: active",
+      "---",
+      "",
+      "# Runbook",
+      "",
+      "## Purpose",
+      "",
+      "Exercise timestamp validation.",
+      "",
+      "## Procedure",
+      "",
+      "- Attempt to read the document",
+      "",
+      "## Verification",
+      "",
+      "- Expect recorded_at validation to fail",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    `${rootDir}/${mismatchedRelativePath}`,
+    [
+      "---",
+      "date: 2026-03-11",
+      "recorded_at: 2026-03-12T00:00:00.000Z",
+      "project: acme-app",
+      "topic: mismatched-recorded-at",
+      "source: manual",
+      "status: active",
+      "---",
+      "",
+      "# Runbook",
+      "",
+      "## Purpose",
+      "",
+      "Exercise cross-day timestamp validation.",
+      "",
+      "## Procedure",
+      "",
+      "- Attempt to read the document",
+      "",
+      "## Verification",
+      "",
+      "- Expect recorded_at date matching to fail",
+    ].join("\n"),
+    "utf8",
+  );
+
+  assert.throws(() => readDocument(context, invalidRelativePath), /recorded_at must use UTC ISO 8601 format/);
+  assert.throws(() => readDocument(context, mismatchedRelativePath), /recorded_at must stay within the declared UTC date/);
+});
+
 test("validation rejects secret-like content", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
@@ -342,6 +410,8 @@ test("listDocuments omits bodies by default and includes them on request", () =>
   const listedWithoutBody = listDocuments({ project: "acme-app" }, context);
   const listedWithBody = listDocuments({ project: "acme-app", includeBody: true }, context);
 
+  assert.equal(listedWithoutBody.appliedQuery.sort, "date");
+  assert.equal(listedWithoutBody.appliedQuery.order, "desc");
   assert.equal(listedWithoutBody.appliedQuery.includeBody, false);
   assert.equal(listedWithBody.appliedQuery.includeBody, true);
   assert.equal(listedWithoutBody.documents.length, 1);
@@ -357,11 +427,24 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
   createDecision(
     {
       project: "acme-app",
-      topic: "older active decision",
-      date: "2026-03-10",
-      context: "Need one older backlog item.",
-      decision: "Keep the older item visible.",
-      consequences: ["Shows sorted order"],
+      topic: "untimed same day decision",
+      date: "2026-03-12",
+      context: "Need one same-day document without explicit recorded_at.",
+      decision: "Keep deterministic fallback ordering for older documents.",
+      consequences: ["Fallback stays usable without migration."],
+    },
+    context,
+  );
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "morning active decision",
+      date: "2026-03-12",
+      recordedAt: "2026-03-12T09:00:00.000Z",
+      context: "Need one same-day morning item.",
+      decision: "Order morning items before fallback-only entries.",
+      consequences: ["Shows timeline ordering"],
       status: "active",
     },
     context,
@@ -370,9 +453,10 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
   createDecision(
     {
       project: "acme-app",
-      topic: "newer draft decision",
+      topic: "evening draft decision",
       date: "2026-03-12",
-      context: "Need one newer backlog item.",
+      recordedAt: "2026-03-12T18:00:00.000Z",
+      context: "Need one same-day evening backlog item.",
       decision: "Keep draft decisions visible too.",
       consequences: ["Shows backlog filtering"],
       status: "draft",
@@ -422,7 +506,7 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
   );
   assert.deepEqual(
     listed.documents.map((document) => document.metadata.topic),
-    ["newer-draft-decision", "older-active-decision"],
+    ["evening-draft-decision", "morning-active-decision", "untimed-same-day-decision"],
   );
 });
 
@@ -501,6 +585,7 @@ test("upsertCanonicalDoc writes a scoped document and keeps it visible to list, 
       topic: "resume policy",
       registryScope: "resume-flow",
       date: "2026-03-11",
+      recordedAt: "2026-03-11T09:30:00.000Z",
       summary: "Canonical guidance for the resume flow scope.",
       guidance: ["Prefer the declared resume-flow scope", "Store only finalized guidance here"],
       references: ["decision: taxonomy-registry-baseline"],
@@ -542,8 +627,126 @@ test("upsertCanonicalDoc writes a scoped document and keeps it visible to list, 
 
   const reread = readDocument(context, initial.relativePath);
   assert.equal(reread.metadata.registry_scope, "resume-flow");
+  assert.equal(reread.metadata.recorded_at, "2026-03-11T09:30:00.000Z");
   assert.match(reread.body, /Updated canonical guidance/);
   assert.doesNotMatch(reread.body, /Store only finalized guidance here/);
+});
+
+test("listDocuments defaults to latest-first timeline ordering within the same day", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "older decision",
+      date: "2026-03-10",
+      context: "Need one older item.",
+      decision: "Keep an older item in the set.",
+      consequences: ["Provides an older baseline."],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "untimed same day decision",
+      date: "2026-03-11",
+      context: "Need one fallback-only item.",
+      decision: "Keep old documents deterministic without explicit recorded_at.",
+      consequences: ["Fallback ordering stays stable."],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "morning decision",
+      date: "2026-03-11",
+      recordedAt: "2026-03-11T09:00:00.000Z",
+      context: "Need one timed morning item.",
+      decision: "Prefer morning before fallback-only items.",
+      consequences: ["Shows same-day ordering."],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "evening decision",
+      date: "2026-03-11",
+      recordedAt: "2026-03-11T18:00:00.000Z",
+      context: "Need one timed evening item.",
+      decision: "Prefer evening before morning.",
+      consequences: ["Shows latest-first default ordering."],
+    },
+    context,
+  );
+
+  const listed = listDocuments({ project: "acme-app", type: "decision" }, context);
+
+  assert.equal(listed.appliedQuery.sort, "date");
+  assert.equal(listed.appliedQuery.order, "desc");
+  assert.deepEqual(
+    listed.documents.map((document) => document.metadata.topic),
+    ["evening-decision", "morning-decision", "untimed-same-day-decision", "older-decision"],
+  );
+});
+
+test("searchDocuments returns latest-first timeline results before applying limit", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "alpha older",
+      date: "2026-03-11",
+      recordedAt: "2026-03-11T08:00:00.000Z",
+      summary: "Timeline search coverage.",
+      actions: ["Keep timeline search coverage available."],
+      followUp: ["Expect older result to fall below the limit."],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "bravo middle",
+      date: "2026-03-11",
+      recordedAt: "2026-03-11T12:00:00.000Z",
+      summary: "Timeline search coverage.",
+      actions: ["Keep middle timeline search coverage available."],
+      followUp: ["Expect middle result to stay visible."],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "aardvark newer",
+      date: "2026-03-11",
+      recordedAt: "2026-03-11T18:00:00.000Z",
+      summary: "Timeline search coverage.",
+      actions: ["Keep newest timeline search coverage available."],
+      followUp: ["Expect newest result to stay first."],
+    },
+    context,
+  );
+
+  const results = searchDocuments(
+    {
+      project: "acme-app",
+      text: "timeline search coverage",
+      limit: 2,
+    },
+    context,
+  );
+
+  assert.deepEqual(
+    results.map((document) => document.metadata.topic),
+    ["aardvark-newer", "bravo-middle"],
+  );
 });
 
 test("bootstrapProject creates the reserved active taxonomy registry document", () => {
@@ -918,6 +1121,57 @@ test("closeWorkItem applies a terminal lifecycle state and removes the item from
         context,
       ),
     /Cannot transition work item from done to canceled/,
+  );
+});
+
+test("readPlanningBacklog uses timeline ordering within the same planning state", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "ready morning slice",
+      date: "2026-03-11",
+      recordedAt: "2026-03-11T09:00:00.000Z",
+      summary: "Keep a same-day ready item from the morning.",
+      outcome: "Planning backlog should place newer ready work later unless timeline ordering is applied.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Ready backlog ordering coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Read planning backlog and inspect ready ordering."],
+      evidence: [],
+    },
+    context,
+  );
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "ready evening slice",
+      date: "2026-03-11",
+      recordedAt: "2026-03-11T18:00:00.000Z",
+      summary: "Keep a same-day ready item from the evening.",
+      outcome: "Planning backlog should prefer the evening item first.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Ready backlog ordering coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Read planning backlog and inspect ready ordering."],
+      evidence: [],
+    },
+    context,
+  );
+
+  const result = readPlanningBacklog({ project: "acme-app" }, context);
+
+  assert.deepEqual(
+    result.documents.map((document) => document.metadata.topic),
+    ["ready-evening-slice", "ready-morning-slice"],
   );
 });
 

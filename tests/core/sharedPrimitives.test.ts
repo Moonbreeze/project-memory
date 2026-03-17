@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   isoDatePattern,
   isoDatePatternSource,
+  isoUtcTimestampPattern,
+  isoUtcTimestampPatternSource,
   isLiteralMember,
   kebabCaseSlugPattern,
   kebabCaseSlugPatternSource,
@@ -38,4 +40,9 @@ test("shared regex pattern sources stay aligned with compiled slug and date vali
   assert.doesNotMatch("2026/03/15", new RegExp(`^${isoDatePatternSource}$`));
   assert.equal(isoDatePattern.test("2026-03-15"), true);
   assert.equal(isoDatePattern.test("2026/03/15"), false);
+
+  assert.match("2026-03-15T14:23:11.482Z", new RegExp(`^${isoUtcTimestampPatternSource}$`));
+  assert.doesNotMatch("2026-03-15T14:23:11Z", new RegExp(`^${isoUtcTimestampPatternSource}$`));
+  assert.equal(isoUtcTimestampPattern.test("2026-03-15T14:23:11.482Z"), true);
+  assert.equal(isoUtcTimestampPattern.test("2026-03-15T14:23:11Z"), false);
 });

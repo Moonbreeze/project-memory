@@ -4,6 +4,8 @@
 export {
   isoDatePattern,
   isoDatePatternSource,
+  isoUtcTimestampPattern,
+  isoUtcTimestampPatternSource,
   kebabCaseSlugPattern,
   kebabCaseSlugPatternSource,
 } from "./patterns.ts";

@@ -63,6 +63,7 @@ export const SortOrder = ["asc", "desc"] as const;
  */
 export const FrontmatterKey = [
   "date",
+  "recorded_at",
   "project",
   "topic",
   "registry_scope",

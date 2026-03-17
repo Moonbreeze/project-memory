@@ -54,6 +54,8 @@ export type TaxonomyRegistryInput = {
   project: string;
   /** Optional explicit date in `YYYY-MM-DD` format. */
   date?: string;
+  /** Optional explicit UTC ISO 8601 timeline timestamp. */
+  recordedAt?: string;
   /** Optional explicit document source. */
   source?: DocumentSource;
   /** Optional summary override for the registry canonical doc. */

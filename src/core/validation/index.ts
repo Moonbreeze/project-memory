@@ -1,5 +1,6 @@
 import {
   isoDatePattern,
+  isoUtcTimestampPattern,
   kebabCaseSlugPattern,
 } from "../shared/index.ts";
 import {
@@ -86,6 +87,18 @@ export const validateFrontmatter = (
 
   if (metadata.date && !isoDatePattern.test(metadata.date)) {
     errors.push("Date must use YYYY-MM-DD format");
+  }
+
+  if (metadata.recorded_at && !isoUtcTimestampPattern.test(metadata.recorded_at)) {
+    errors.push("recorded_at must use UTC ISO 8601 format");
+  }
+
+  if (
+    metadata.date
+    && metadata.recorded_at
+    && metadata.recorded_at.slice(0, 10) !== metadata.date
+  ) {
+    errors.push("recorded_at must stay within the declared UTC date");
   }
 
   if (metadata.registry_scope && !kebabCaseSlugPattern.test(metadata.registry_scope)) {

@@ -42,6 +42,10 @@ const normalizeFrontmatter = (metadata: Record<string, string>): Frontmatter => 
   normalized.source = metadata.source;
   normalized.status = metadata.status;
 
+  if (metadata.recorded_at) {
+    normalized.recorded_at = metadata.recorded_at;
+  }
+
   if (metadata.registry_scope) {
     normalized.registry_scope = metadata.registry_scope;
   }
