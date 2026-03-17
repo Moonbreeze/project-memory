@@ -126,7 +126,6 @@ const normalizeRegistryEntry = (entry: RawTaxonomyRegistryEntry): TaxonomyRegist
   return {
     scope: ensureSlug(entry.scope, "scope"),
     topic: ensureSlug(entry.topic, "topic"),
-    authority: ensureSlug(entry.authority, "authority"),
     state: normalizedState,
     migration: normalizedMigration,
     aliases: [...new Set(entry.aliases.map((alias) => ensureSlug(alias, "alias")))].sort(),
@@ -145,7 +144,6 @@ const serializeRegistryEntry = (entry: TaxonomyRegistryEntry): string => {
     registryEntryPrefix,
     `scope=${entry.scope};`,
     `topic=${entry.topic};`,
-    `authority=${entry.authority};`,
     `state=${entry.state};`,
     `migration=${entry.migration};`,
     `aliases=${aliases};`,
@@ -183,20 +181,18 @@ const parseRegistryEntryLine = (line: string): TaxonomyRegistryEntry => {
 
   const scope = values.get("scope");
   const topic = values.get("topic");
-  const authority = values.get("authority");
   const state = values.get("state");
   const migration = values.get("migration");
   const aliases = values.get("aliases");
   const mappedScopes = values.get("mapped-scopes");
 
-  if (!scope || !topic || !authority || !state || !migration || !aliases || !mappedScopes) {
+  if (!scope || !topic || !state || !migration || !aliases || !mappedScopes) {
     throw new Error("Taxonomy registry entry is missing one or more required fields");
   }
 
   return normalizeRegistryEntry({
     scope,
     topic,
-    authority,
     state,
     migration,
     aliases: normalizeSlugList(aliases, "aliases"),
@@ -254,11 +250,10 @@ const validateRegistryEntries = (entries: TaxonomyRegistryEntry[]): TaxonomyRegi
 
   if (
     reservedEntry.topic !== ReservedTaxonomyRegistryTopic
-    || reservedEntry.authority !== ReservedTaxonomyRegistryTopic
     || reservedEntry.state !== "active"
   ) {
     throw new Error(
-      "Reserved taxonomy-registry entry must keep topic, authority, and state aligned to the bootstrap contract",
+      "Reserved taxonomy-registry entry must keep topic and state aligned to the bootstrap contract",
     );
   }
 

@@ -36,10 +36,6 @@ export const upsertTaxonomyRegistryMcpTool: RegisteredMcpTool = {
               type: "string",
               description: "Registered taxonomy topic slug owning the scope.",
             },
-            authority: {
-              type: "string",
-              description: "Authority owner slug for the scope.",
-            },
             state: {
               type: "string",
               description: "Lifecycle state for the scope.",
@@ -74,7 +70,7 @@ export const upsertTaxonomyRegistryMcpTool: RegisteredMcpTool = {
               },
             },
           },
-          ["scope", "topic", "authority", "state", "migration", "aliases", "mappedScopes"],
+          ["scope", "topic", "state", "migration", "aliases", "mappedScopes"],
         ),
       },
       references: {

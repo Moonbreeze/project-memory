@@ -21,7 +21,6 @@ const parseRegistryEntries = (value: unknown): TaxonomyRegistryEntry[] => {
       !isRecord(entry)
       || typeof entry.scope !== "string"
       || typeof entry.topic !== "string"
-      || typeof entry.authority !== "string"
       || typeof entry.state !== "string"
       || typeof entry.migration !== "string"
       || !Array.isArray(entry.aliases)
@@ -39,7 +38,6 @@ const parseRegistryEntries = (value: unknown): TaxonomyRegistryEntry[] => {
     return {
       scope: entry.scope,
       topic: entry.topic,
-      authority: entry.authority,
       state: entry.state,
       migration: entry.migration,
       aliases: entry.aliases,

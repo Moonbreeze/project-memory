@@ -982,7 +982,6 @@ export const parseTaxonomyRegistryInput = (value: unknown): TaxonomyRegistryInpu
         return {
           scope: readRequiredString(entry.scope, "scope"),
           topic: readRequiredString(entry.topic, "topic"),
-          authority: readRequiredString(entry.authority, "authority"),
           state: readRequiredTaxonomyRegistryEntryState(entry.state),
           migration: readRequiredTaxonomyRegistryMigrationKind(entry.migration),
           aliases: readOptionalStringArray(entry.aliases, "aliases"),

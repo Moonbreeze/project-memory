@@ -424,7 +424,6 @@ test("CLI can upsert and audit the taxonomy registry", async () => {
           {
             scope: "taxonomy-registry",
             topic: "taxonomy-registry",
-            authority: "taxonomy-registry",
             state: "active",
             migration: "create-topic",
             aliases: [],
@@ -433,7 +432,6 @@ test("CLI can upsert and audit the taxonomy registry", async () => {
           {
             scope: "resume-flow",
             topic: "resume-flow",
-            authority: "resume-flow",
             state: "active",
             migration: "create-topic",
             aliases: [],

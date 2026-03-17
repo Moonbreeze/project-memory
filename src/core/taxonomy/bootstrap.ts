@@ -56,7 +56,6 @@ export const bootstrapProject = (
     const bootstrapEntry: TaxonomyRegistryEntry = {
       scope: ReservedTaxonomyRegistryScope,
       topic: ReservedTaxonomyRegistryTopic,
-      authority: ReservedTaxonomyRegistryTopic,
       state: "active",
       migration: "create-topic",
       aliases: [],

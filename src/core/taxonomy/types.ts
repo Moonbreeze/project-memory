@@ -36,8 +36,6 @@ export type TaxonomyRegistryEntry = {
   scope: string;
   /** Registered taxonomy topic slug owning the scope. */
   topic: string;
-  /** Authority owner slug for the scope. */
-  authority: string;
   /** Current lifecycle state for the scope. */
   state: TaxonomyRegistryEntryState;
   /** Explicit alias slugs that are semantically equivalent to the scope. */

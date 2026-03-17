@@ -57,7 +57,6 @@ export const setupTestProjectTaxonomy = (
         {
           scope: ReservedTaxonomyRegistryScope,
           topic: ReservedTaxonomyRegistryTopic,
-          authority: ReservedTaxonomyRegistryTopic,
           state: "active",
           migration: "create-topic",
           aliases: [],
@@ -66,7 +65,6 @@ export const setupTestProjectTaxonomy = (
         ...scopes.map((scope) => ({
           scope,
           topic: scope,
-          authority: scope,
           state: "active" as const,
           migration: "create-topic" as const,
           aliases: [],

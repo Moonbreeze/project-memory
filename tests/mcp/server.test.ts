@@ -193,7 +193,6 @@ test("MCP upsert_taxonomy_registry and audit_taxonomy stay consistent", () => {
         {
           scope: "taxonomy-registry",
           topic: "taxonomy-registry",
-          authority: "taxonomy-registry",
           state: "active",
           migration: "create-topic",
           aliases: [],
@@ -202,7 +201,6 @@ test("MCP upsert_taxonomy_registry and audit_taxonomy stay consistent", () => {
         {
           scope: "resume-flow",
           topic: "resume-flow",
-          authority: "resume-flow",
           state: "active",
           migration: "create-topic",
           aliases: [],

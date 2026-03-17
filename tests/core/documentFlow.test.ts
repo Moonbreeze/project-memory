@@ -633,7 +633,6 @@ test("auditTaxonomyConsistency reports duplicate authority, unknown scope usage,
         {
           scope: "taxonomy-registry",
           topic: "taxonomy-registry",
-          authority: "taxonomy-registry",
           state: "active",
           migration: "create-topic",
           aliases: [],
@@ -642,7 +641,6 @@ test("auditTaxonomyConsistency reports duplicate authority, unknown scope usage,
         {
           scope: "resume-flow",
           topic: "resume-flow",
-          authority: "resume-flow",
           state: "active",
           migration: "create-topic",
           aliases: [],
@@ -651,7 +649,6 @@ test("auditTaxonomyConsistency reports duplicate authority, unknown scope usage,
         {
           scope: "legacy-flow",
           topic: "legacy-flow",
-          authority: "legacy-flow",
           state: "retired",
           migration: "retire-topic",
           aliases: [],
@@ -702,7 +699,6 @@ test("upsertCanonicalDoc accepts alias-backed scopes and audit reports warning-l
         {
           scope: "taxonomy-registry",
           topic: "taxonomy-registry",
-          authority: "taxonomy-registry",
           state: "active",
           migration: "create-topic",
           aliases: [],
@@ -711,7 +707,6 @@ test("upsertCanonicalDoc accepts alias-backed scopes and audit reports warning-l
         {
           scope: "resume-flow",
           topic: "resume-flow",
-          authority: "resume-flow",
           state: "active",
           migration: "alias-add",
           aliases: ["resume-legacy"],
@@ -765,7 +760,6 @@ test("auditTaxonomyConsistency resolves alias-backed docs to their owner scope f
         {
           scope: "taxonomy-registry",
           topic: "taxonomy-registry",
-          authority: "taxonomy-registry",
           state: "active",
           migration: "create-topic",
           aliases: [],
@@ -774,7 +768,6 @@ test("auditTaxonomyConsistency resolves alias-backed docs to their owner scope f
         {
           scope: "resume-flow",
           topic: "resume-flow",
-          authority: "resume-flow",
           state: "active",
           migration: "alias-add",
           aliases: ["resume-legacy"],
@@ -783,7 +776,6 @@ test("auditTaxonomyConsistency resolves alias-backed docs to their owner scope f
         {
           scope: "legacy-flow",
           topic: "legacy-flow",
-          authority: "legacy-flow",
           state: "retired",
           migration: "alias-add",
           aliases: ["legacy-archive"],
