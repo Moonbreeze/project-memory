@@ -3,6 +3,7 @@ import {
   parseList,
   parseOptionalDocumentSource,
   parseOptionalDocumentStatus,
+  parseOptionalStableGuidanceReview,
   printJson,
   requireFlag,
 } from "../commandSupport.ts";
@@ -19,6 +20,8 @@ export const createDecisionCommand: CliCommandHandler = (flags, io) => {
       context: requireFlag(flags, "context"),
       decision: requireFlag(flags, "decision"),
       consequences: parseList(flags.consequences),
+      stableGuidanceReview: parseOptionalStableGuidanceReview(flags["stable-guidance-review"]),
+      stableGuidanceReviewNote: flags["stable-guidance-review-note"],
       source: parseOptionalDocumentSource(flags.source),
       status: parseOptionalDocumentStatus(flags.status),
       date: flags.date,

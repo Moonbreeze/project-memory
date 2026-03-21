@@ -12,7 +12,7 @@ Keeping those boundaries clear is what makes the repository readable for both ag
 | --- | --- | --- | --- |
 | `work-item` | Own one executable backlog slice | There is concrete work to do, track, block, resume, or close | Durable architectural truth or long-form session history |
 | `session-note` | Record what happened during one work session | You want a chronological trace of actions taken, findings, and follow-up | Stable policy, backlog ownership, or repeatable procedures |
-| `decision` | Capture durable rationale and chosen direction | A change sets or revises policy, constraints, or architecture | Ad-hoc progress notes or raw test evidence |
+| `decision` | Capture durable rationale and chosen direction | A change sets or revises policy, constraints, or architecture, and a non-draft record should capture the stable-guidance review outcome explicitly | Ad-hoc progress notes, raw test evidence, or silent replacement of an older durable record |
 | `verification-result` | Capture evidence that something was checked | A test, validation step, smoke check, or review produced a result | Broad narrative context or future planning |
 | `canonical-doc` | State current stable guidance for one scoped topic | A topic has settled enough to need a maintained source of current truth | Session chronology or unresolved exploration |
 | `runbook` | Define a repeatable operational procedure | Someone should be able to execute the same procedure later | One-off implementation notes or policy arguments |
@@ -22,7 +22,7 @@ The intended paradigm is:
 
 1. `work-item` owns the execution slice.
 2. `session-note` records what happened while executing it.
-3. `decision` records durable reasoning when policy changes.
+3. `decision` records durable reasoning when policy changes, while non-draft decisions also capture the explicit stable-guidance review outcome.
 4. `verification-result` records proof that something was checked.
 5. `canonical-doc`, `runbook`, and `provider-note` hold stable reference knowledge after the work settles.
 
@@ -37,8 +37,8 @@ A normal documentation lifecycle is described first as model operations, not as 
 3. Perform the implementation, investigation, or migration work in the relevant repository.
 4. Record session-level progress in a `session-note`.
 5. Record a `verification-result` when a meaningful check completes.
-6. If stable policy or architecture changes, create or update a `decision`.
-7. If long-lived guidance changes, update the relevant `canonical-doc`, `runbook`, or `provider-note`.
+6. If stable policy or architecture changes, create a `decision`. For non-draft decisions, record one explicit stable-guidance review outcome as part of the write.
+7. If long-lived guidance changes, update the relevant `canonical-doc`, `runbook`, or `provider-note`. If guidance does not change, the decision should still record that review outcome explicitly.
 8. Close or archive the `work-item` when the slice is done.
 9. Commit memory-repo changes separately from code-repo changes.
 10. Push the memory-repo branch explicitly when the local commit should sync to a remote.
@@ -68,6 +68,25 @@ The next human or agent should be able to answer:
 - what decisions became durable
 - what evidence supports the current state
 - what remains open
+
+## Decision Write Contract
+
+`decision` has two distinct operating modes:
+
+- `draft` decisions are the idea inbox. They do not require a stable-guidance review outcome and should not be used as the final durable record.
+- non-draft decisions are durable records. They must include an explicit stable-guidance review outcome when written.
+
+For non-draft decisions, the review outcome should make one of these states explicit:
+
+- stable guidance was reviewed and no change was required
+- stable guidance was reviewed and a follow-up update is required
+- stable guidance was reviewed and updated in the same change slice
+- a bootstrap-style exemption was used because no prior stable-guidance surface existed yet
+
+This keeps the handoff between immutable rationale and mutable current guidance explicit instead of relying on a reader to infer whether stable reference docs were checked.
+
+Decision writes are also immutable by path.
+If a durable decision already exists at the same dated topic path, create a new decision record instead of silently overwriting the old one.
 
 ## Example: One Iteration
 
@@ -204,6 +223,7 @@ Example commands:
 ```bash
 ./scripts/run-cli.sh list-documents --project acme-api
 ./scripts/run-cli.sh list-documents --project acme-api --preset ideas
+./scripts/run-cli.sh create-decision --project acme-api --topic repository-split --context "Need a durable repo boundary." --decision "Keep project memory in a separate repository." --consequences "separate git history|explicit memory sync" --stable-guidance-review reviewed-no-change --date 2026-03-14
 ./scripts/run-cli.sh read-document --path projects/acme-api/decisions/2026/2026-03-14-repository-split.md
 ./scripts/run-cli.sh close-work-item --project acme-api --topic bounded-read-follow-up --date 2026-03-14 --state done
 ./scripts/run-cli.sh commit-pending-changes --message "docs(acme-api/session): record setup validation"

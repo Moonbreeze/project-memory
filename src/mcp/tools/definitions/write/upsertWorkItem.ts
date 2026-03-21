@@ -1,7 +1,7 @@
 import { upsertWorkItemTool } from "../../upsertWorkItem.ts";
 import type { RegisteredMcpTool } from "../../toolTypes.ts";
 
-import { createObjectSchema } from "../../schema.ts";
+import { createEnumStringSchema, createObjectSchema } from "../../schema.ts";
 
 import {
   WorkItemDocumentStatusValues,
@@ -36,11 +36,10 @@ export const upsertWorkItemMcpTool: RegisteredMcpTool = {
         type: "string",
         description: "Expected outcome when the work slice is complete.",
       },
-      originKind: {
-        type: "string",
-        description: "Origin kind for the work item.",
-        enum: [...WorkItemOriginKindValues],
-      },
+      originKind: createEnumStringSchema(
+        WorkItemOriginKindValues,
+        "Origin kind for the work item.",
+      ),
       originLocator: {
         type: "string",
         description: "Required for decision or session-note origins. Format: type:project:date:topic.",
@@ -81,23 +80,15 @@ export const upsertWorkItemMcpTool: RegisteredMcpTool = {
         type: "string",
         description: "Optional explicit date in YYYY-MM-DD format.",
       },
-      source: {
-        type: "string",
-        description: "Optional document source.",
-        enum: [...DocumentSourceValues],
-      },
-      status: {
-        type: "string",
-        description:
-          "Optional document lifecycle status controlling managed visibility of the work-item record itself; this is separate from execution progress tracked by workItemState.",
-        enum: [...WorkItemDocumentStatusValues],
-      },
-      workItemState: {
-        type: "string",
-        description:
-          "Optional execution lifecycle state controlling planning progress for the work-item slice; this is separate from document visibility tracked by status.",
-        enum: [...WorkItemStateValues],
-      },
+      source: createEnumStringSchema(DocumentSourceValues, "Optional document source."),
+      status: createEnumStringSchema(
+        WorkItemDocumentStatusValues,
+        "Optional document lifecycle status controlling managed visibility of the work-item record itself; this is separate from execution progress tracked by workItemState.",
+      ),
+      workItemState: createEnumStringSchema(
+        WorkItemStateValues,
+        "Optional execution lifecycle state controlling planning progress for the work-item slice; this is separate from document visibility tracked by status.",
+      ),
     },
     ["project", "topic", "summary", "outcome", "originKind", "verification"],
   ),

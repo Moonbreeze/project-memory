@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { createRepositoryContext } from "../config/index.ts";
 import { assertCanonicalDocWriteAllowed } from "../taxonomy/index.ts";
 import type {
@@ -7,6 +10,7 @@ import type {
   ParsedDocument,
   ProviderNoteInput,
   RunbookInput,
+  StableGuidanceReview,
   SessionNoteInput,
   VerificationResultInput,
 } from "../types/index.ts";
@@ -82,6 +86,62 @@ const withRecordedAt = (
       preferCurrentTime: input.date === undefined,
     }),
   };
+};
+
+const stableGuidanceReviewDescriptions: Record<StableGuidanceReview, string> = {
+  "reviewed-no-change": "Reviewed current stable guidance and determined no update was required.",
+  "update-required": "Reviewed current stable guidance and identified a follow-up update requirement.",
+  updated: "Reviewed current stable guidance and updated the stable guidance in the same change slice.",
+  "bootstrap-exempt": "Bootstrap-style decision write where no prior stable-guidance surface existed yet.",
+};
+
+/**
+ * Renders the persisted stable-guidance review section for one decision.
+ */
+const renderStableGuidanceReview = (
+  input: DecisionInput,
+  metadata: Frontmatter,
+): string => {
+  const note = input.stableGuidanceReviewNote?.trim();
+
+  if (metadata.status === "draft") {
+    if (input.stableGuidanceReview !== undefined) {
+      throw new Error("Draft decisions must not declare stableGuidanceReview");
+    }
+
+    if (note) {
+      throw new Error("Draft decisions must not declare stableGuidanceReviewNote");
+    }
+
+    return "- Outcome: draft-no-review-required";
+  }
+
+  if (!input.stableGuidanceReview) {
+    throw new Error("Non-draft decisions require stableGuidanceReview");
+  }
+
+  if (
+    !note
+    && (
+      input.stableGuidanceReview === "update-required"
+      || input.stableGuidanceReview === "bootstrap-exempt"
+    )
+  ) {
+    throw new Error(
+      `stableGuidanceReviewNote is required when stableGuidanceReview is ${input.stableGuidanceReview}`,
+    );
+  }
+
+  const lines = [
+    `- Outcome: ${input.stableGuidanceReview}`,
+    `- Summary: ${stableGuidanceReviewDescriptions[input.stableGuidanceReview]}`,
+  ];
+
+  if (note) {
+    lines.push(`- Note: ${note}`);
+  }
+
+  return lines.join("\n");
 };
 
 /**
@@ -207,11 +267,18 @@ export const createDecision = (
     baseMetadata.topic,
     baseMetadata.date,
   );
+  const absolutePath = path.join(context.memoryRootDir, relativePath);
+  if (fs.existsSync(absolutePath)) {
+    throw new Error(
+      `Decision already exists at ${relativePath}; decisions are immutable and must use a new dated topic or supersession path`,
+    );
+  }
   const metadata = withRecordedAt(baseMetadata, relativePath, input, context);
   const body = renderTemplate(loadTemplate(context, "decision.md"), {
     context: input.context.trim(),
     decision: input.decision.trim(),
     consequences: renderList(input.consequences),
+    stable_guidance_review: renderStableGuidanceReview(input, metadata),
   });
   return writeDocument(context, relativePath, metadata, body);
 };

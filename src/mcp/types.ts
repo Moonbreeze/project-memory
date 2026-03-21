@@ -1,4 +1,17 @@
 import {
+  DocumentSourceValues,
+  DocumentStatusValues,
+  DocumentTypeValues,
+  ListDocumentsPresetValues,
+  ListDocumentsSortFieldValues,
+  SortOrderValues,
+  StableGuidanceReviewValues,
+  TaxonomyRegistryEntryStateValues,
+  TaxonomyRegistryMigrationKindValues,
+  WorkItemDocumentStatusValues,
+  WorkItemOriginKindValues,
+  WorkItemStateValues,
+  CloseWorkItemStateValues,
   isTaxonomyRegistryEntryState,
   isTaxonomyRegistryMigrationKind,
   isCloseWorkItemState,
@@ -9,6 +22,7 @@ import {
   isLiteralMember,
   isListDocumentsPreset,
   isListDocumentsSortField,
+  isStableGuidanceReview,
   isWorkItemDocumentStatus,
   isWorkItemOriginKind,
   isWorkItemState,
@@ -39,6 +53,7 @@ import type {
   RunbookInput,
   SearchQuery,
   SessionNoteInput,
+  StableGuidanceReview,
   SortOrder,
   TaxonomyAuditInput,
   TaxonomyRegistryEntry,
@@ -295,6 +310,67 @@ const readOptionalString = (value: unknown, fieldName: string): string | undefin
 };
 
 /**
+ * Builds one actionable invalid-enum error with the allowed values surfaced.
+ */
+const createInvalidEnumValueError = (
+  fieldName: string,
+  value: string,
+  allowedValues: readonly string[],
+): Error => {
+  return new Error(
+    `Invalid ${fieldName}: ${value}. Allowed values: ${allowedValues.join(", ")}`,
+  );
+};
+
+/**
+ * Reads one required enum-constrained string field from unknown input.
+ */
+const readRequiredEnumString = <T extends string>(
+  value: unknown,
+  fieldName: string,
+  isAllowedValue: (value: unknown) => value is T,
+  allowedValues: readonly T[],
+): T => {
+  const parsedValue = readRequiredString(value, fieldName);
+  if (!isAllowedValue(parsedValue)) {
+    throw createInvalidEnumValueError(fieldName, parsedValue, allowedValues);
+  }
+
+  return parsedValue;
+};
+
+/**
+ * Reads one optional enum-constrained string field from unknown input.
+ */
+const readOptionalEnumString = <T extends string>(
+  value: unknown,
+  fieldName: string,
+  isAllowedValue: (value: unknown) => value is T,
+  allowedValues: readonly T[],
+): T | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return readRequiredEnumString(value, fieldName, isAllowedValue, allowedValues);
+};
+
+/**
+ * Reads an optional stable-guidance review outcome field from unknown input.
+ */
+const readOptionalStableGuidanceReview = (
+  value: unknown,
+  fieldName: string,
+): StableGuidanceReview | undefined => {
+  return readOptionalEnumString(
+    value,
+    fieldName,
+    isStableGuidanceReview,
+    StableGuidanceReviewValues,
+  );
+};
+
+/**
  * Reads a required string-array field from unknown input.
  */
 const readStringArray = (value: unknown, fieldName: string): string[] => {
@@ -341,12 +417,12 @@ const readOptionalBoolean = (value: unknown, fieldName: string): boolean | undef
 const readRequiredTaxonomyRegistryEntryState = (
   value: unknown,
 ): TaxonomyRegistryEntry["state"] => {
-  const state = readRequiredString(value, "state");
-  if (!isTaxonomyRegistryEntryState(state)) {
-    throw new Error("Invalid taxonomy registry entry state");
-  }
-
-  return state;
+  return readRequiredEnumString(
+    value,
+    "taxonomy registry entry state",
+    isTaxonomyRegistryEntryState,
+    TaxonomyRegistryEntryStateValues,
+  );
 };
 
 /**
@@ -355,99 +431,84 @@ const readRequiredTaxonomyRegistryEntryState = (
 const readRequiredTaxonomyRegistryMigrationKind = (
   value: unknown,
 ): TaxonomyRegistryEntry["migration"] => {
-  const migration = readRequiredString(value, "migration");
-  if (!isTaxonomyRegistryMigrationKind(migration)) {
-    throw new Error("Invalid taxonomy registry migration");
-  }
-
-  return migration;
+  return readRequiredEnumString(
+    value,
+    "taxonomy registry migration",
+    isTaxonomyRegistryMigrationKind,
+    TaxonomyRegistryMigrationKindValues,
+  );
 };
 
 /**
  * Reads an optional validated document source from unknown input.
  */
 const readOptionalDocumentSource = (value: unknown): DocumentSource | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!isDocumentSource(value)) {
-    throw new Error("Invalid document source");
-  }
-
-  return value;
+  return readOptionalEnumString(
+    value,
+    "document source",
+    isDocumentSource,
+    DocumentSourceValues,
+  );
 };
 
 /**
  * Reads an optional validated document status from unknown input.
  */
 const readOptionalDocumentStatus = (value: unknown): DocumentStatus | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!isDocumentStatus(value)) {
-    throw new Error("Invalid document status");
-  }
-
-  return value;
+  return readOptionalEnumString(
+    value,
+    "document status",
+    isDocumentStatus,
+    DocumentStatusValues,
+  );
 };
 
 /**
  * Reads an optional validated document type from unknown input.
  */
 const readOptionalDocumentType = (value: unknown): DocumentType | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!isDocumentType(value)) {
-    throw new Error("Invalid document type");
-  }
-
-  return value;
+  return readOptionalEnumString(
+    value,
+    "document type",
+    isDocumentType,
+    DocumentTypeValues,
+  );
 };
 
 /**
  * Reads an optional validated work-item document status from unknown input.
  */
 const readOptionalWorkItemDocumentStatus = (value: unknown) => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!isWorkItemDocumentStatus(value)) {
-    throw new Error("Invalid work-item document status");
-  }
-
-  return value;
+  return readOptionalEnumString(
+    value,
+    "work-item document status",
+    isWorkItemDocumentStatus,
+    WorkItemDocumentStatusValues,
+  );
 };
 
 /**
  * Reads an optional validated work-item lifecycle state from unknown input.
  */
 const readOptionalWorkItemState = (value: unknown) => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!isWorkItemState(value)) {
-    throw new Error("Invalid work-item state");
-  }
-
-  return value;
+  return readOptionalEnumString(
+    value,
+    "work-item state",
+    isWorkItemState,
+    WorkItemStateValues,
+  );
 };
 
 /**
  * Reads one validated close-work-item target state from unknown input.
  */
 const readCloseWorkItemState = (value: unknown): CloseWorkItemState => {
-  const state = readRequiredString(value, "state");
-  if (!isCloseWorkItemState(state)) {
-    throw new Error("Invalid close-work-item state");
-  }
-
-  return state;
+  return readRequiredEnumString(
+    value,
+    "close-work-item state",
+    isCloseWorkItemState,
+    CloseWorkItemStateValues,
+  );
 };
 
 /**
@@ -461,17 +522,20 @@ const readOptionalDocumentStatusArray = (
     return undefined;
   }
 
-  if (!Array.isArray(value) || value.some((entry) => !isDocumentStatus(entry))) {
+  if (!Array.isArray(value)) {
     throw new Error(`Invalid document status array field: ${fieldName}`);
   }
 
   const statuses: DocumentStatus[] = [];
   for (const entry of value) {
-    if (!isDocumentStatus(entry)) {
-      throw new Error(`Invalid document status array field: ${fieldName}`);
-    }
-
-    statuses.push(entry);
+    statuses.push(
+      readRequiredEnumString(
+        entry,
+        `${fieldName} entry`,
+        isDocumentStatus,
+        DocumentStatusValues,
+      ),
+    );
   }
 
   return statuses;
@@ -483,15 +547,12 @@ const readOptionalDocumentStatusArray = (
 const readOptionalListDocumentsPreset = (
   value: unknown,
 ): ListDocumentsPreset | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!isListDocumentsPreset(value)) {
-    throw new Error("Invalid list_documents preset");
-  }
-
-  return value;
+  return readOptionalEnumString(
+    value,
+    "list_documents preset",
+    isListDocumentsPreset,
+    ListDocumentsPresetValues,
+  );
 };
 
 /**
@@ -500,30 +561,24 @@ const readOptionalListDocumentsPreset = (
 const readOptionalListDocumentsSortField = (
   value: unknown,
 ): ListDocumentsSortField | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!isListDocumentsSortField(value)) {
-    throw new Error("Invalid list_documents sort field");
-  }
-
-  return value;
+  return readOptionalEnumString(
+    value,
+    "list_documents sort field",
+    isListDocumentsSortField,
+    ListDocumentsSortFieldValues,
+  );
 };
 
 /**
  * Reads an optional validated sort order from unknown input.
  */
 const readOptionalSortOrder = (value: unknown): SortOrder | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!isSortOrder(value)) {
-    throw new Error("Invalid sort order");
-  }
-
-  return value;
+  return readOptionalEnumString(
+    value,
+    "sort order",
+    isSortOrder,
+    SortOrderValues,
+  );
 };
 
 /**
@@ -556,10 +611,12 @@ const readOptionalStringArray = (value: unknown, fieldName: string): string[] =>
  * Parses one typed origin payload for a work item.
  */
 const readWorkItemOrigin = (params: Record<string, unknown>): WorkItemOrigin => {
-  const originKind = readRequiredString(params.originKind, "originKind");
-  if (!isWorkItemOriginKind(originKind)) {
-    throw new Error("Invalid work-item origin kind");
-  }
+  const originKind = readRequiredEnumString(
+    params.originKind,
+    "work-item origin kind",
+    isWorkItemOriginKind,
+    WorkItemOriginKindValues,
+  );
 
   if (originKind === "ad-hoc") {
     return {
@@ -902,6 +959,14 @@ export const parseDecisionInput = (value: unknown): DecisionInput => {
     context: readRequiredString(params.context, "context"),
     decision: readRequiredString(params.decision, "decision"),
     consequences: readStringArray(params.consequences, "consequences"),
+    stableGuidanceReview: readOptionalStableGuidanceReview(
+      params.stableGuidanceReview,
+      "stableGuidanceReview",
+    ),
+    stableGuidanceReviewNote: readOptionalString(
+      params.stableGuidanceReviewNote,
+      "stableGuidanceReviewNote",
+    ),
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalDocumentStatus(params.status),

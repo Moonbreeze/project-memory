@@ -141,6 +141,86 @@ test("appendSessionNote writes a structured document to the expected path", () =
   assert.doesNotMatch(fs.readFileSync(document.path, "utf8"), /project_commit:/);
 });
 
+test("createDecision persists stable-guidance review details for non-draft decisions", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  const decision = createDecision(
+    {
+      project: "acme-app",
+      topic: "resume architecture",
+      date: "2026-03-11",
+      context: "Need durable architecture rationale.",
+      decision: "Keep resumable execution stateful.",
+      consequences: ["Bounded reads can follow one exact rationale source."],
+      stableGuidanceReview: "update-required",
+      stableGuidanceReviewNote: "Follow up by updating the resume-flow canonical doc.",
+    },
+    context,
+  );
+
+  const written = fs.readFileSync(decision.path, "utf8");
+  assert.match(written, /## Stable Guidance Review/);
+  assert.match(written, /Outcome: update-required/);
+  assert.match(written, /Follow up by updating the resume-flow canonical doc\./);
+});
+
+test("createDecision rejects non-draft decisions without stable-guidance review", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  assert.throws(
+    () =>
+      createDecision(
+        {
+          project: "acme-app",
+          topic: "resume architecture",
+          date: "2026-03-11",
+          context: "Need durable architecture rationale.",
+          decision: "Keep resumable execution stateful.",
+          consequences: ["Bounded reads can follow one exact rationale source."],
+        },
+        context,
+      ),
+    /Non-draft decisions require stableGuidanceReview/,
+  );
+});
+
+test("createDecision rejects overwriting an existing decision path", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "resume architecture",
+      date: "2026-03-11",
+      context: "Need durable architecture rationale.",
+      decision: "Keep resumable execution stateful.",
+      consequences: ["Bounded reads can follow one exact rationale source."],
+      stableGuidanceReview: "reviewed-no-change",
+    },
+    context,
+  );
+
+  assert.throws(
+    () =>
+      createDecision(
+        {
+          project: "acme-app",
+          topic: "resume architecture",
+          date: "2026-03-11",
+          context: "Need a conflicting second write.",
+          decision: "Try to overwrite the existing decision.",
+          consequences: ["Decision writes should stay immutable."],
+          stableGuidanceReview: "reviewed-no-change",
+        },
+        context,
+      ),
+    /Decision already exists .* immutable/,
+  );
+});
+
 test("readDocument rejects legacy project_commit frontmatter", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
@@ -319,6 +399,7 @@ test("archiveDocument archives decisions in place by updating status", () => {
       context: "Need explicit archive coverage for durable records.",
       decision: "Archive decisions in place instead of moving them.",
       consequences: ["Stable paths remain readable after archival."],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -432,6 +513,7 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
       context: "Need one same-day document without explicit recorded_at.",
       decision: "Keep deterministic fallback ordering for older documents.",
       consequences: ["Fallback stays usable without migration."],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -446,6 +528,7 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
       decision: "Order morning items before fallback-only entries.",
       consequences: ["Shows timeline ordering"],
       status: "active",
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -473,6 +556,7 @@ test("listDocuments backlog preset applies decision-focused sorting and status f
       decision: "Do not show superseded decisions in the backlog preset.",
       consequences: ["Should be filtered out"],
       status: "superseded",
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -549,6 +633,7 @@ test("listDocuments ideas preset returns newest draft decisions only", () => {
       decision: "Do not mix accepted decisions into ideas.",
       consequences: ["Should be filtered out"],
       status: "active",
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -644,6 +729,7 @@ test("listDocuments defaults to latest-first timeline ordering within the same d
       context: "Need one older item.",
       decision: "Keep an older item in the set.",
       consequences: ["Provides an older baseline."],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -655,6 +741,7 @@ test("listDocuments defaults to latest-first timeline ordering within the same d
       context: "Need one fallback-only item.",
       decision: "Keep old documents deterministic without explicit recorded_at.",
       consequences: ["Fallback ordering stays stable."],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -667,6 +754,7 @@ test("listDocuments defaults to latest-first timeline ordering within the same d
       context: "Need one timed morning item.",
       decision: "Prefer morning before fallback-only items.",
       consequences: ["Shows same-day ordering."],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -679,6 +767,7 @@ test("listDocuments defaults to latest-first timeline ordering within the same d
       context: "Need one timed evening item.",
       decision: "Prefer evening before morning.",
       consequences: ["Shows latest-first default ordering."],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -1323,6 +1412,7 @@ test("listDocuments backlog preset uses project work items for planning and keep
       context: "Legacy decision-backed backlog.",
       decision: "Keep the fallback readable outside project-scoped work planning.",
       consequences: ["No-project backlog stays compatible"],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -1447,6 +1537,7 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
       context: "Legacy backlog data still exists.",
       decision: "Dedicated planning reads must not fall back to decisions.",
       consequences: ["Planning reads stay work-item-only"],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -2171,6 +2262,7 @@ test("commitPendingChanges rejects pending managed changes from multiple project
       context: "Prepared a second project change in the same worktree.",
       decision: "Reject multi-project managed commits by default.",
       consequences: ["Commit each project independently"],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -2360,6 +2452,7 @@ test("readColdStart returns a bounded project snapshot with fixed source orderin
       context: "Need older coverage.",
       decision: "Keep the older decision available.",
       consequences: ["Older context remains readable"],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -2371,6 +2464,7 @@ test("readColdStart returns a bounded project snapshot with fixed source orderin
       context: "Need mid-range coverage.",
       decision: "Keep resume behavior explicit.",
       consequences: ["Resume policy stays current"],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -2395,6 +2489,7 @@ test("readColdStart returns a bounded project snapshot with fixed source orderin
       decision: "This decision exceeds the cold-start limit.",
       consequences: ["Ignored for cold start"],
       status: "superseded",
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -2467,6 +2562,7 @@ test("readTopicEntry prefers exact canonical and exact-topic supporting document
       context: "Need current topic context.",
       decision: "Keep resume policy explicit.",
       consequences: ["Agents can read one bounded topic packet"],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -2559,6 +2655,7 @@ test("readTopicEntry falls back to bounded contains matches when exact matches a
       context: "Need a fallback decision.",
       decision: "Use filename contains fallback.",
       consequences: ["Topic reads stay bounded"],
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );
@@ -2650,6 +2747,7 @@ test("readRationaleEntry follows canonical references before generic fallback", 
       decision: "Use explicit resume boundaries.",
       consequences: ["Current rationale stays explicit"],
       status: "superseded",
+      stableGuidanceReview: "reviewed-no-change",
     },
     context,
   );

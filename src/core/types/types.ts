@@ -7,6 +7,7 @@ import {
   FrontmatterKey as FrontmatterKeyValues,
   ListDocumentsPreset as ListDocumentsPresetValues,
   ListDocumentsSortField as ListDocumentsSortFieldValues,
+  StableGuidanceReview as StableGuidanceReviewValues,
   SortOrder as SortOrderValues,
 } from "./constants.ts";
 import { isLiteralMember } from "../shared/index.ts";
@@ -35,6 +36,11 @@ export type DocumentSource = typeof DocumentSourceValues[number];
  * A supported project-memory document lifecycle status.
  */
 export type DocumentStatus = typeof DocumentStatusValues[number];
+
+/**
+ * A supported stable-guidance review outcome for decision writes.
+ */
+export type StableGuidanceReview = typeof StableGuidanceReviewValues[number];
 
 /**
  * A supported list-documents preset.
@@ -204,6 +210,19 @@ export type DecisionInput = CreateDocumentInput & {
   decision: string;
   /** Consequences of the decision. */
   consequences: string[];
+  /**
+   * Explicit stable-guidance review outcome for non-draft decisions.
+   *
+   * Draft decisions are idea-inbox records and do not require this field.
+   */
+  stableGuidanceReview?: StableGuidanceReview;
+  /**
+   * Optional note explaining the stable-guidance review outcome.
+   *
+   * Required when the outcome defers a stable-guidance update or uses the
+   * bootstrap exemption.
+   */
+  stableGuidanceReviewNote?: string;
 };
 
 /**
@@ -519,6 +538,15 @@ export const isDocumentSource = (value: unknown): value is DocumentSource => {
  */
 export const isDocumentStatus = (value: unknown): value is DocumentStatus => {
   return isLiteralMember(DocumentStatusValues, value);
+};
+
+/**
+ * Returns `true` when `value` is a supported stable-guidance review outcome.
+ */
+export const isStableGuidanceReview = (
+  value: unknown,
+): value is StableGuidanceReview => {
+  return isLiteralMember(StableGuidanceReviewValues, value);
 };
 
 /**

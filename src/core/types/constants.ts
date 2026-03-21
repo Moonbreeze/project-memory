@@ -22,6 +22,16 @@ export const DocumentSource = ["agent", "user", "manual", "tool", "imported"] as
 export const DocumentStatus = ["draft", "active", "superseded", "archived"] as const;
 
 /**
+ * Supported stable-guidance review outcomes for decision writes.
+ */
+export const StableGuidanceReview = [
+  "reviewed-no-change",
+  "update-required",
+  "updated",
+  "bootstrap-exempt",
+] as const;
+
+/**
  * Supported list-documents presets.
  */
 export const ListDocumentsPreset = ["backlog", "ideas"] as const;

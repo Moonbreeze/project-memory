@@ -55,6 +55,12 @@ Each document type has:
 - a bounded set of statuses
 - a deterministic body template or parser
 
+For `decision`, the write contract is stricter than "render a markdown file":
+
+- non-draft decisions must persist an explicit stable-guidance review outcome
+- draft decisions remain the lightweight idea-inbox form and skip that requirement
+- bootstrap-style exemptions must still be declared explicitly rather than inferred later
+
 The model is intentionally document-first rather than database-first.
 Files remain inspectable in git, while the tool enforces stable structure and path conventions around them.
 
@@ -66,6 +72,9 @@ It is also how the system separates execution tracking, session chronology, dura
 This separation is what allows bounded reads and agent workflows to retrieve the right kind of context without treating every markdown file as interchangeable.
 
 When the taxonomy is violated, bounded reads become less trustworthy because unrelated semantics start to share the same retrieval surface.
+
+For decision records specifically, the separation between immutable rationale and mutable stable guidance is enforced at write time.
+Non-draft decisions must say whether stable guidance was reviewed, updated, deferred for follow-up, or exempted by bootstrap conditions.
 
 ## Path Model
 
@@ -81,6 +90,9 @@ Representative active paths:
 - `projects/<project>/runbooks/<topic>.md`
 - `projects/<project>/canonical-docs/<registry-scope>/<topic>.md`
 - `projects/<project>/work-items/<year>/<date>-<topic>.md`
+
+Decision paths are part of the durable identity of the record.
+The runtime rejects silent overwrite of an existing `projects/<project>/decisions/<year>/<date>-<topic>.md` path; a new durable decision must be recorded as a new dated topic path or handled through explicit lifecycle semantics such as supersession.
 
 Archive behavior is intentionally split by document role:
 
@@ -179,6 +191,9 @@ Key guardrails:
 The CLI and MCP server expose the same core capabilities over different interaction models.
 Both surfaces ultimately call the shared `src/core/` logic so that validation, parsing, bounded read behavior, and commit rules stay consistent.
 They are parallel surfaces over the same core behavior, not layers that depend on each other.
+
+That shared-core rule also applies to the decision write contract.
+CLI and MCP both forward structured stable-guidance review inputs into the same core enforcement layer, so immutability and non-draft review requirements do not depend on which surface initiated the write.
 
 Contributors should preserve one document model and one retrieval model across both surfaces.
 Human-readable browsing, if added, should remain a projection over the same underlying managed files rather than a separate source of truth.

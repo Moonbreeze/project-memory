@@ -17,7 +17,7 @@ import { readRationaleEntryTool } from "../readRationaleEntry.ts";
 import { readTopicEntryTool } from "../readTopicEntry.ts";
 import { searchDocumentsTool } from "../searchDocuments.ts";
 
-import { createObjectSchema } from "../schema.ts";
+import { createEnumStringSchema, createObjectSchema } from "../schema.ts";
 import type { RegisteredMcpTool } from "../toolTypes.ts";
 
 /**
@@ -53,21 +53,12 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
         type: "string",
         description: "Optional project slug filter.",
       },
-      preset: {
-        type: "string",
-        description: "Optional list preset, such as a project work-item backlog view with legacy decision fallback or a draft-decision ideas inbox.",
-        enum: [...ListDocumentsPresetValues],
-      },
-      type: {
-        type: "string",
-        description: "Optional document type filter.",
-        enum: [...DocumentTypeValues],
-      },
-      status: {
-        type: "string",
-        description: "Optional exact document status filter.",
-        enum: [...DocumentStatusValues],
-      },
+      preset: createEnumStringSchema(
+        ListDocumentsPresetValues,
+        "Optional list preset, such as a project work-item backlog view with legacy decision fallback or a draft-decision ideas inbox.",
+      ),
+      type: createEnumStringSchema(DocumentTypeValues, "Optional document type filter."),
+      status: createEnumStringSchema(DocumentStatusValues, "Optional exact document status filter."),
       excludeStatuses: {
         type: "array",
         description: "Optional document statuses to exclude from the result.",
@@ -75,16 +66,8 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
           type: "string",
         },
       },
-      sort: {
-        type: "string",
-        description: "Optional result sort field.",
-        enum: [...ListDocumentsSortFieldValues],
-      },
-      order: {
-        type: "string",
-        description: "Optional ascending or descending sort order.",
-        enum: [...SortOrderValues],
-      },
+      sort: createEnumStringSchema(ListDocumentsSortFieldValues, "Optional result sort field."),
+      order: createEnumStringSchema(SortOrderValues, "Optional ascending or descending sort order."),
       limit: {
         type: "number",
         description: "Optional maximum number of results.",
@@ -109,11 +92,7 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
         type: "string",
         description: "Optional full-text search term.",
       },
-      type: {
-        type: "string",
-        description: "Optional document type filter.",
-        enum: [...DocumentTypeValues],
-      },
+      type: createEnumStringSchema(DocumentTypeValues, "Optional document type filter."),
       limit: {
         type: "number",
         description: "Optional maximum number of results.",

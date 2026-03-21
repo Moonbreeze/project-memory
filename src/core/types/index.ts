@@ -10,6 +10,7 @@ export {
   FrontmatterKey as FrontmatterKeyValues,
   ListDocumentsPreset as ListDocumentsPresetValues,
   ListDocumentsSortField as ListDocumentsSortFieldValues,
+  StableGuidanceReview as StableGuidanceReviewValues,
   RequiredFrontmatterKey,
   SortOrder as SortOrderValues,
 } from "./constants.ts";
@@ -53,6 +54,7 @@ export type {
   SearchQuery,
   SearchResult,
   SessionNoteInput,
+  StableGuidanceReview,
   SortOrder,
   PlanningTopicEntryInput,
   TopicEntryInput,
@@ -72,5 +74,6 @@ export {
   isFrontmatterKey,
   isListDocumentsPreset,
   isListDocumentsSortField,
+  isStableGuidanceReview,
   isSortOrder,
 } from "./types.ts";

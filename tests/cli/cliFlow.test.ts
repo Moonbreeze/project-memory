@@ -453,6 +453,30 @@ test("CLI can upsert and audit the taxonomy registry", async () => {
   }
 });
 
+test("CLI upsert-taxonomy-registry reports allowed migration values for invalid entries", async () => {
+  await assert.rejects(
+    () => runCli(
+      [
+        "upsert-taxonomy-registry",
+        "--project",
+        "acme-app",
+        "--entries",
+        JSON.stringify([
+          {
+            scope: "resume-flow",
+            topic: "resume-flow",
+            state: "active",
+            migration: "bad-marker",
+            aliases: [],
+            mappedScopes: [],
+          },
+        ]),
+      ],
+    ),
+    /Invalid --entries JSON payload: unsupported migration bad-marker\. Allowed values: .*create-topic.*retire-topic/,
+  );
+});
+
 test("CLI can append, list, read, and archive documents", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
@@ -598,6 +622,8 @@ test("CLI creates decisions through the manual interface", async () => {
       "Store agent memory in project-memory.",
       "--consequences",
       "separate repo|manual commit flow",
+      "--stable-guidance-review",
+      "reviewed-no-change",
       "--date",
       "2026-03-11",
     ],
@@ -610,6 +636,33 @@ test("CLI creates decisions through the manual interface", async () => {
   }
 
   assert.match(result.relativePath, /projects\/acme-app\/decisions\/2026\/2026-03-11-private-docs-boundary\.md/);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("CLI rejects non-draft decisions without stable-guidance review", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  await assert.rejects(
+    () =>
+      runCli([
+        "create-decision",
+        "--project",
+        "acme-app",
+        "--topic",
+        "missing review",
+        "--context",
+        "Need durable rationale coverage.",
+        "--decision",
+        "Reject writes without review outcome.",
+        "--consequences",
+        "create-decision contract stays explicit",
+        "--date",
+        "2026-03-11",
+      ]),
+    /Non-draft decisions require stableGuidanceReview/,
+  );
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });
@@ -671,6 +724,8 @@ test("CLI lists draft-decision ideas through the ideas preset", async () => {
       "Do not include accepted decisions in ideas.",
       "--consequences",
       "should stay out of ideas",
+      "--stable-guidance-review",
+      "reviewed-no-change",
       "--status",
       "active",
       "--date",
@@ -1198,6 +1253,8 @@ test("CLI exposes bounded read entrypoints", async () => {
       "Keep resume architecture explicit.",
       "--consequences",
       "bounded reads can follow a direct rationale source",
+      "--stable-guidance-review",
+      "reviewed-no-change",
       "--date",
       "2026-03-12",
     ],
@@ -1688,6 +1745,8 @@ test("CLI requires mixed scope when archive changes are combined with active doc
       "Require mixed scope when archive and active changes coexist.",
       "--consequences",
       "clearer git history",
+      "--stable-guidance-review",
+      "reviewed-no-change",
       "--date",
       "2026-03-11",
     ],
@@ -1757,6 +1816,8 @@ test("CLI rejects pending managed changes from multiple projects", async () => {
       "Reject multi-project commits by default.",
       "--consequences",
       "commit per project",
+      "--stable-guidance-review",
+      "reviewed-no-change",
       "--date",
       "2026-03-11",
     ],

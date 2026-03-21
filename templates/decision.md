@@ -11,3 +11,7 @@
 ## Consequences
 
 {{consequences}}
+
+## Stable Guidance Review
+
+{{stable_guidance_review}}

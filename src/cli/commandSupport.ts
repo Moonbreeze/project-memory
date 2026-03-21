@@ -5,6 +5,7 @@ import {
   isListDocumentsPreset,
   isListDocumentsSortField,
   parseBooleanString,
+  isStableGuidanceReview,
   isSortOrder,
 } from "../core/index.ts";
 import type {
@@ -13,6 +14,7 @@ import type {
   DocumentType,
   ListDocumentsPreset,
   ListDocumentsSortField,
+  StableGuidanceReview,
   SortOrder,
 } from "../core/index.ts";
 import type { CliIo, ParsedArgs } from "./types.ts";
@@ -114,6 +116,23 @@ export const parseOptionalDocumentStatus = (
 
   if (!isDocumentStatus(value)) {
     throw new Error(`Invalid --status value: ${value}`);
+  }
+
+  return value;
+};
+
+/**
+ * Parses an optional decision stable-guidance review outcome flag.
+ */
+export const parseOptionalStableGuidanceReview = (
+  value: string | undefined,
+): StableGuidanceReview | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isStableGuidanceReview(value)) {
+    throw new Error(`Invalid --stable-guidance-review value: ${value}`);
   }
 
   return value;

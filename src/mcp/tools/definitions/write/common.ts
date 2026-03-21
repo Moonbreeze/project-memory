@@ -3,6 +3,7 @@ import {
   DocumentStatusValues,
 } from "../../../../core/types/index.ts";
 import type { JsonSchemaObject } from "../../../types.ts";
+import { createEnumStringSchema } from "../../schema.ts";
 
 /**
  * Shared optional metadata properties for managed write tools.
@@ -12,14 +13,6 @@ export const optionalDocumentMetadataProperties: JsonSchemaObject["properties"] 
     type: "string",
     description: "Optional explicit date in YYYY-MM-DD format.",
   },
-  source: {
-    type: "string",
-    description: "Optional document source.",
-    enum: [...DocumentSourceValues],
-  },
-  status: {
-    type: "string",
-    description: "Optional document status.",
-    enum: [...DocumentStatusValues],
-  },
+  source: createEnumStringSchema(DocumentSourceValues, "Optional document source."),
+  status: createEnumStringSchema(DocumentStatusValues, "Optional document status."),
 };

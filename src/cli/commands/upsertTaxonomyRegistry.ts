@@ -2,11 +2,26 @@ import {
   isTaxonomyRegistryEntryState,
   isTaxonomyRegistryMigrationKind,
   isRecord,
+  TaxonomyRegistryEntryStateValues,
+  TaxonomyRegistryMigrationKindValues,
   upsertTaxonomyRegistry,
 } from "../../core/index.ts";
 import type { TaxonomyRegistryEntry } from "../../core/index.ts";
 import { parseList, parseOptionalDocumentSource, parseRequiredJson, printJson, requireFlag } from "../commandSupport.ts";
 import type { CliCommandHandler } from "../types.ts";
+
+/**
+ * Builds one actionable enum error for the `--entries` payload.
+ */
+const createInvalidEntriesEnumError = (
+  fieldName: "state" | "migration",
+  value: string,
+  allowedValues: readonly string[],
+): Error => {
+  return new Error(
+    `Invalid --entries JSON payload: unsupported ${fieldName} ${value}. Allowed values: ${allowedValues.join(", ")}`,
+  );
+};
 
 /**
  * Parses the `--entries` registry payload from JSON.
@@ -31,8 +46,16 @@ const parseRegistryEntries = (value: unknown): TaxonomyRegistryEntry[] => {
       throw new Error("Invalid --entries JSON payload");
     }
 
-    if (!isTaxonomyRegistryEntryState(entry.state) || !isTaxonomyRegistryMigrationKind(entry.migration)) {
-      throw new Error("Invalid --entries JSON payload");
+    if (!isTaxonomyRegistryEntryState(entry.state)) {
+      throw createInvalidEntriesEnumError("state", entry.state, TaxonomyRegistryEntryStateValues);
+    }
+
+    if (!isTaxonomyRegistryMigrationKind(entry.migration)) {
+      throw createInvalidEntriesEnumError(
+        "migration",
+        entry.migration,
+        TaxonomyRegistryMigrationKindValues,
+      );
     }
 
     return {

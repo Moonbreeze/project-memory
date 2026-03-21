@@ -1,7 +1,11 @@
 import { upsertTaxonomyRegistryTool } from "../../upsertTaxonomyRegistry.ts";
 import type { RegisteredMcpTool } from "../../toolTypes.ts";
 
-import { createObjectSchema } from "../../schema.ts";
+import { createEnumStringSchema, createObjectSchema } from "../../schema.ts";
+import {
+  TaxonomyRegistryEntryStateValues,
+  TaxonomyRegistryMigrationKindValues,
+} from "../../../../core/index.ts";
 
 import { optionalDocumentMetadataProperties } from "./common.ts";
 
@@ -36,25 +40,14 @@ export const upsertTaxonomyRegistryMcpTool: RegisteredMcpTool = {
               type: "string",
               description: "Registered taxonomy topic slug owning the scope.",
             },
-            state: {
-              type: "string",
-              description: "Lifecycle state for the scope.",
-              enum: ["active", "transitional", "retired"],
-            },
-            migration: {
-              type: "string",
-              description: "Explicit migration marker for the scope.",
-              enum: [
-                "none",
-                "alias-add",
-                "rename",
-                "split",
-                "merge",
-                "boundary-change",
-                "create-topic",
-                "retire-topic",
-              ],
-            },
+            state: createEnumStringSchema(
+              TaxonomyRegistryEntryStateValues,
+              "Lifecycle state for the scope.",
+            ),
+            migration: createEnumStringSchema(
+              TaxonomyRegistryMigrationKindValues,
+              "Explicit migration marker for the scope.",
+            ),
             aliases: {
               type: "array",
               description: "Equivalent alias slugs for the scope.",

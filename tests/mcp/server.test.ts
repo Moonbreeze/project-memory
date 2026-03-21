@@ -6,6 +6,10 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
+import {
+  TaxonomyRegistryEntryStateValues,
+  TaxonomyRegistryMigrationKindValues,
+} from "../../src/core/index.ts";
 import { createMcpResponse } from "../../src/mcp/dispatch.ts";
 import { formatResponsePayload, readMessage } from "../../src/mcp/stdio.ts";
 import {
@@ -225,6 +229,29 @@ test("MCP upsert_taxonomy_registry and audit_taxonomy stay consistent", () => {
   } finally {
     delete process.env.PROJECT_MEMORY_ROOT;
   }
+});
+
+test("MCP upsert_taxonomy_registry reports allowed migration values for invalid input", () => {
+  const response = callTool("taxonomy-upsert-invalid", "upsert_taxonomy_registry", {
+    project: "acme-app",
+    entries: [
+      {
+        scope: "resume-flow",
+        topic: "resume-flow",
+        state: "active",
+        migration: "bad-marker",
+        aliases: [],
+        mappedScopes: [],
+      },
+    ],
+  });
+  const toolResult = readToolResult(response);
+
+  assert.equal(toolResult.isError, true);
+  assert.match(toolResult.content[0]?.text ?? "", /Invalid taxonomy registry migration: bad-marker/);
+  assert.match(toolResult.content[0]?.text ?? "", /Allowed values:/);
+  assert.match(toolResult.content[0]?.text ?? "", /create-topic/);
+  assert.match(toolResult.content[0]?.text ?? "", /retire-topic/);
 });
 
 test("MCP server negotiates down for newer unsupported protocol versions during initialize", () => {
@@ -472,6 +499,33 @@ test("MCP server completes initialize and tools/list handshake", () => {
     throw new Error("Expected upsert_work_item schema in tools/list");
   }
 
+  const upsertTaxonomyRegistryTool = toolsByName.get("upsert_taxonomy_registry");
+  if (
+    !isRecord(upsertTaxonomyRegistryTool)
+    || !isRecord(upsertTaxonomyRegistryTool.inputSchema)
+    || !isRecord(upsertTaxonomyRegistryTool.inputSchema.properties)
+  ) {
+    throw new Error("Expected upsert_taxonomy_registry schema in tools/list");
+  }
+
+  const entriesProperty = upsertTaxonomyRegistryTool.inputSchema.properties.entries;
+  if (
+    !isRecord(entriesProperty)
+    || !isRecord(entriesProperty.items)
+    || !isRecord(entriesProperty.items.properties)
+  ) {
+    throw new Error("Expected upsert_taxonomy_registry entries schema in tools/list");
+  }
+
+  const taxonomyStateProperty = entriesProperty.items.properties.state;
+  const taxonomyMigrationProperty = entriesProperty.items.properties.migration;
+  if (!isRecord(taxonomyStateProperty) || !isRecord(taxonomyMigrationProperty)) {
+    throw new Error("Expected taxonomy enum properties in tools/list schema");
+  }
+
+  assert.deepEqual(taxonomyStateProperty.enum, [...TaxonomyRegistryEntryStateValues]);
+  assert.deepEqual(taxonomyMigrationProperty.enum, [...TaxonomyRegistryMigrationKindValues]);
+
   const statusProperty = upsertWorkItemTool.inputSchema.properties.status;
   const workItemStateProperty = upsertWorkItemTool.inputSchema.properties.workItemState;
   if (!isRecord(statusProperty) || !isRecord(workItemStateProperty)) {
@@ -638,6 +692,7 @@ test("MCP list_documents backlog preset returns newest current decisions first",
     decision: "Keep older decisions visible.",
     consequences: ["Older item stays in backlog"],
     status: "active",
+    stableGuidanceReview: "reviewed-no-change",
   });
 
   callTool("11", "create_decision", {
@@ -658,6 +713,7 @@ test("MCP list_documents backlog preset returns newest current decisions first",
     decision: "Superseded decisions should stay out of backlog.",
     consequences: ["Should be filtered"],
     status: "superseded",
+    stableGuidanceReview: "reviewed-no-change",
   });
 
   const response = callTool("13", "list_documents", {
@@ -723,6 +779,7 @@ test("MCP list_documents ideas preset returns newest draft decisions only", () =
     decision: "Accepted decisions should stay out of the ideas inbox.",
     consequences: ["Should be filtered"],
     status: "active",
+    stableGuidanceReview: "reviewed-no-change",
   });
 
   const response = callTool("ideas-13", "list_documents", {
@@ -1148,6 +1205,7 @@ test("MCP server rejects pending managed changes from multiple projects", () => 
     context: "Prepared a second project change in the same worktree.",
     decision: "Reject multi-project commits by default.",
     consequences: ["Commit per project"],
+    stableGuidanceReview: "reviewed-no-change",
   });
 
   const response = callTool("multi-project-3", "commit_pending_changes", {
@@ -1228,6 +1286,26 @@ test("MCP server upserts canonical docs and returns them through list_documents"
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
+test("MCP server rejects non-draft decisions without stable-guidance review", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const response = callTool("missing-review", "create_decision", {
+    project: "acme-app",
+    topic: "missing review",
+    date: "2026-03-11",
+    context: "Need durable rationale coverage.",
+    decision: "Reject writes without review outcome.",
+    consequences: ["create_decision contract stays explicit"],
+  });
+  const toolResult = readToolResult(response);
+
+  assert.equal(toolResult.isError, true);
+  assert.match(toolResult.content[0]?.text ?? "", /Non-draft decisions require stableGuidanceReview/);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+});
+
 test("MCP server rejects env-style content for create_decision", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
@@ -1239,6 +1317,7 @@ test("MCP server rejects env-style content for create_decision", () => {
     context: "Need a storage policy.",
     decision: "FEATURE_FLAG=enabled",
     consequences: ["rotate credentials"],
+    stableGuidanceReview: "reviewed-no-change",
   });
   const toolResult = readToolResult(response);
 
@@ -1297,6 +1376,7 @@ test("MCP server exposes bounded read entrypoints", () => {
     context: "Need rationale coverage.",
     decision: "Keep resume architecture explicit.",
     consequences: ["Bounded reads can follow the rationale source"],
+    stableGuidanceReview: "reviewed-no-change",
   });
   callTool("bounded-evidence-session", "append_session_note", {
     project: "acme-app",

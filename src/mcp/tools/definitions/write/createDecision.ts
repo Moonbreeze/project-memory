@@ -1,8 +1,9 @@
 import { createDecisionTool } from "../../createDecision.ts";
 import type { RegisteredMcpTool } from "../../toolTypes.ts";
 
-import { createObjectSchema } from "../../schema.ts";
+import { createEnumStringSchema, createObjectSchema } from "../../schema.ts";
 
+import { StableGuidanceReviewValues } from "../../../../core/types/index.ts";
 import { optionalDocumentMetadataProperties } from "./common.ts";
 
 /**
@@ -12,7 +13,7 @@ export const createDecisionMcpTool: RegisteredMcpTool = {
   name: "create_decision",
   resultMode: "compact-document",
   description:
-    "Create one managed decision record for durable rationale, chosen direction, and lasting constraints. In the normal lifecycle this happens when policy or architecture changes after execution or investigation, not to track day-to-day execution progress.",
+    "Create one managed decision record for durable rationale, chosen direction, and lasting constraints. Non-draft decisions must include an explicit stable-guidance review outcome. In the normal lifecycle this happens when policy or architecture changes after execution or investigation, not to track day-to-day execution progress.",
   inputSchema: createObjectSchema(
     {
       project: {
@@ -37,6 +38,15 @@ export const createDecisionMcpTool: RegisteredMcpTool = {
         items: {
           type: "string",
         },
+      },
+      stableGuidanceReview: createEnumStringSchema(
+        StableGuidanceReviewValues,
+        "Explicit stable-guidance review outcome for non-draft decisions. Draft decisions omit this field.",
+      ),
+      stableGuidanceReviewNote: {
+        type: "string",
+        description:
+          "Optional note explaining the stable-guidance review outcome. Required for update-required and bootstrap-exempt outcomes.",
       },
       ...optionalDocumentMetadataProperties,
     },

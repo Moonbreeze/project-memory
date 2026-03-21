@@ -5,7 +5,7 @@ import { archiveWorkItemTool } from "../archiveWorkItem.ts";
 import { closeWorkItemTool } from "../closeWorkItem.ts";
 import { commitPendingChangesTool } from "../commitPendingChanges.ts";
 import { pushPendingChangesTool } from "../pushPendingChanges.ts";
-import { createObjectSchema } from "../schema.ts";
+import { createEnumStringSchema, createObjectSchema } from "../schema.ts";
 
 import type { RegisteredMcpTool } from "../toolTypes.ts";
 
@@ -72,11 +72,10 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
           type: "string",
           description: "Exact work-item date in YYYY-MM-DD format.",
         },
-        state: {
-          type: "string",
-          description: "Terminal lifecycle state to apply.",
-          enum: [...CloseWorkItemStateValues],
-        },
+        state: createEnumStringSchema(
+          CloseWorkItemStateValues,
+          "Terminal lifecycle state to apply.",
+        ),
       },
       ["project", "topic", "date", "state"],
     ),
