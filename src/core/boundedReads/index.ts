@@ -7,6 +7,7 @@ import {
   ensureKebabCaseProject,
   ensureSlug,
   readDocument,
+  readDocumentsSkippingInvalidWorkItems,
   sortRelativePathsByDocumentTimeline,
 } from "../documents/index.ts";
 import { ReservedTaxonomyRegistryScope } from "../taxonomy/index.ts";
@@ -24,6 +25,7 @@ import type {
   ColdStartInput,
   DocumentStatus,
   DocumentType,
+  InvalidDocumentDiagnostic,
   PlanningBacklogInput,
   PlanningTopicEntryInput,
   ParsedDocument,
@@ -486,6 +488,7 @@ const createBoundedReadResult = (
   notes: string[],
   topic?: string,
   planningExplainability?: BoundedReadPlanningExplainability[],
+  invalidDocuments: InvalidDocumentDiagnostic[] = [],
 ): BoundedReadResult => {
   return {
     entrypoint,
@@ -494,6 +497,7 @@ const createBoundedReadResult = (
     documents,
     stages,
     planningExplainability,
+    invalidDocuments,
     notes,
   };
 };
@@ -505,13 +509,18 @@ const listProjectWorkItemPlanningEntries = (
   context: RepositoryContext,
   project: string,
 ) => {
-  const workItemDocuments = collectProjectWorkItemPaths(context, project)
-    .map((relativePath) => readDocument(context, relativePath))
-    .filter((document) => {
-      return document.type === "work-item" && document.metadata.status === "active";
-    });
+  const { documents, invalidDocuments } = readDocumentsSkippingInvalidWorkItems(
+    context,
+    collectProjectWorkItemPaths(context, project),
+  );
+  const workItemDocuments = documents.filter((document) => {
+    return document.type === "work-item" && document.metadata.status === "active";
+  });
 
-  return buildWorkItemPlanningEntries(workItemDocuments);
+  return {
+    planningEntries: buildWorkItemPlanningEntries(workItemDocuments),
+    invalidDocuments,
+  };
 };
 
 /**
@@ -775,8 +784,17 @@ export const readPlanningBacklog = (
     "Planning backlog stays bounded to ready, in-progress, and blocked work-item states only.",
   ];
   const seenRelativePaths = new Set<string>();
-  const allPlanningEntries = listProjectWorkItemPlanningEntries(context, project);
+  const { planningEntries: allPlanningEntries, invalidDocuments } = listProjectWorkItemPlanningEntries(
+    context,
+    project,
+  );
   const planningEntries = listPlanningBacklogEntries(allPlanningEntries);
+
+  if (invalidDocuments.length > 0) {
+    notes.push(
+      `Skipped ${invalidDocuments.length} invalid work-item document${invalidDocuments.length === 1 ? "" : "s"} during planning aggregation; inspect invalidDocuments for details.`,
+    );
+  }
 
   appendStage(
     stages,
@@ -844,6 +862,7 @@ export const readPlanningBacklog = (
     notes,
     undefined,
     buildPlanningExplainability(allPlanningEntries, documents),
+    invalidDocuments,
   );
 };
 
@@ -867,7 +886,10 @@ export const readPlanningTopicEntry = (
     "Planning topic entry follows only explicit same-project evidence locators from the selected work items, with fixed per-type limits and no fallback expansion.",
   ];
   const seenRelativePaths = new Set<string>();
-  const allPlanningEntries = listProjectWorkItemPlanningEntries(context, project);
+  const { planningEntries: allPlanningEntries, invalidDocuments } = listProjectWorkItemPlanningEntries(
+    context,
+    project,
+  );
   const planningEntryByPath = new Map(
     allPlanningEntries.map((entry) => [entry.document.relativePath, entry] as const),
   );
@@ -1035,6 +1057,12 @@ export const readPlanningTopicEntry = (
     notes.push("No bounded planning topic work items were found for this topic.");
   }
 
+  if (invalidDocuments.length > 0) {
+    notes.push(
+      `Skipped ${invalidDocuments.length} invalid work-item document${invalidDocuments.length === 1 ? "" : "s"} during planning aggregation; inspect invalidDocuments for details.`,
+    );
+  }
+
   return createBoundedReadResult(
     "planning-topic-entry",
     project,
@@ -1043,6 +1071,7 @@ export const readPlanningTopicEntry = (
     notes,
     topic,
     buildPlanningExplainability(allPlanningEntries, selectedWorkItemDocuments),
+    invalidDocuments,
   );
 };
 
@@ -1213,7 +1242,8 @@ export const readTopicEntry = (
   if (exactMatchCount === 0) {
     notes.push("No exact topic matches were found; returned bounded filename contains matches instead.");
 
-    const hasExactTopicWorkItem = listProjectWorkItemPlanningEntries(context, project).some((entry) => {
+    const { planningEntries } = listProjectWorkItemPlanningEntries(context, project);
+    const hasExactTopicWorkItem = planningEntries.some((entry) => {
       return entry.definition.metadata.topic === topic && activeStatuses.includes(entry.document.metadata.status);
     });
 

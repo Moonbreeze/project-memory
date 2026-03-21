@@ -9,7 +9,11 @@ export {
   resolveManagedDocumentPathInfo,
 } from "./pathLayout.ts";
 
-export { listAllActiveDocumentPaths, readDocument } from "./storage.ts";
+export {
+  listAllActiveDocumentPaths,
+  readDocument,
+  readDocumentsSkippingInvalidWorkItems,
+} from "./storage.ts";
 export { writeDocument } from "./storage.ts";
 
 export { loadTemplate, renderList, renderTemplate } from "./content.ts";

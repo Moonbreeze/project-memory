@@ -36,6 +36,7 @@ export type {
   DocumentStatus,
   DocumentType,
   Frontmatter,
+  InvalidDocumentDiagnostic,
   FrontmatterKey,
   ListDocumentsPreset,
   ListDocumentsQuery,

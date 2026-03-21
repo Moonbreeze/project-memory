@@ -101,6 +101,18 @@ export type ParsedDocument = {
 };
 
 /**
+ * Diagnostic returned when one managed document is skipped during a mass-read flow.
+ */
+export type InvalidDocumentDiagnostic = {
+  /** Repository-relative path that could not be read successfully. */
+  relativePath: string;
+  /** Document kind inferred from the managed path. */
+  documentType: DocumentType;
+  /** Validation or parse error raised while reading the document. */
+  message: string;
+};
+
+/**
  * Parsed layout details for one managed document path.
  */
 export type ManagedDocumentPathInfo = {
@@ -381,6 +393,8 @@ export type ListDocumentsResult = {
   documents: ListedDocument[];
   /** Effective query after presets and defaults are applied. */
   appliedQuery: AppliedListDocumentsQuery;
+  /** Invalid managed documents skipped during the mass-read aggregation. */
+  invalidDocuments: InvalidDocumentDiagnostic[];
 };
 
 /**
@@ -456,6 +470,8 @@ export type BoundedReadResult = {
   stages: BoundedReadStage[];
   /** Optional work-item planning explainability for returned documents. */
   planningExplainability?: BoundedReadPlanningExplainability[];
+  /** Invalid managed documents skipped during the bounded aggregation. */
+  invalidDocuments: InvalidDocumentDiagnostic[];
   /** Notes describing fallbacks or intentional omissions. */
   notes: string[];
 };

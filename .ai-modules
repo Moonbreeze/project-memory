@@ -5,3 +5,4 @@ targets: CLAUDE.md AGENTS.md
 workflow
 typescript
 project-documentation-workflow
+testing

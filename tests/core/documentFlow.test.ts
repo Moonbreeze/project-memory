@@ -35,6 +35,7 @@ import {
   createTestRepositoryContext,
   setupTestProjectTaxonomy,
   setupTestRepo,
+  writeRawInvalidDoneWorkItem,
 } from "../fixtures/setupTestRepo.ts";
 
 const setupAcmeTaxonomy = (
@@ -1333,6 +1334,58 @@ test("readPlanningBacklog uses timeline ordering within the same planning state"
     result.documents.map((document) => document.metadata.topic),
     ["ready-evening-slice", "ready-morning-slice"],
   );
+});
+
+// Bug #1: invalid done work-items must not abort planning backlog reads.
+test("readPlanningBacklog skips invalid done work-items and reports diagnostics", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "ready slice",
+      date: "2026-03-11",
+      summary: "Keep one valid ready item in the backlog.",
+      outcome: "Planning backlog should still return this item even if another work-item is invalid.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Fail-soft planning backlog coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Read planning backlog and inspect invalid-document diagnostics."],
+      evidence: [],
+    },
+    context,
+  );
+
+  const invalidRelativePath = writeRawInvalidDoneWorkItem(
+    rootDir,
+    "acme-app",
+    "broken-done-slice",
+    "2026-03-11",
+  );
+
+  assert.throws(
+    () => readDocument(context, invalidRelativePath),
+    /Done work items must include at least one session-note locator in evidence/,
+  );
+
+  const result = readPlanningBacklog({ project: "acme-app" }, context);
+
+  assert.deepEqual(
+    result.documents.map((document) => document.metadata.topic),
+    ["ready-slice"],
+  );
+  assert.equal(result.invalidDocuments.length, 1);
+  assert.equal(result.invalidDocuments[0]?.relativePath, invalidRelativePath);
+  assert.equal(result.invalidDocuments[0]?.documentType, "work-item");
+  assert.match(
+    result.invalidDocuments[0]?.message ?? "",
+    /Done work items must include at least one session-note locator in evidence/,
+  );
+  assert.match(result.notes.join("\n"), /Skipped 1 invalid work-item document during planning aggregation/);
 });
 
 test("archiveWorkItem archives terminal work items without moving them into the archive tree", () => {

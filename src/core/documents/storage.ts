@@ -5,7 +5,12 @@ import { createRepositoryContext } from "../config/index.ts";
 import { isDocumentSource, isDocumentStatus } from "../types/index.ts";
 import { validateBody, validateFrontmatter } from "../validation/index.ts";
 import { validateStoredWorkItemDocument } from "../workItems/index.ts";
-import type { Frontmatter, ParsedDocument, RepositoryContext } from "../types/index.ts";
+import type {
+  Frontmatter,
+  InvalidDocumentDiagnostic,
+  ParsedDocument,
+  RepositoryContext,
+} from "../types/index.ts";
 
 import { buildFrontmatter, parseFrontmatter } from "./content.ts";
 import {
@@ -136,6 +141,42 @@ export const readDocument = (
   }
 
   return parsedDocument;
+};
+
+/**
+ * Reads many managed documents while skipping invalid work-item records.
+ */
+export const readDocumentsSkippingInvalidWorkItems = (
+  context: RepositoryContext,
+  relativePaths: string[],
+): {
+  documents: ParsedDocument[];
+  invalidDocuments: InvalidDocumentDiagnostic[];
+} => {
+  const documents: ParsedDocument[] = [];
+  const invalidDocuments: InvalidDocumentDiagnostic[] = [];
+
+  for (const relativePath of relativePaths) {
+    try {
+      documents.push(readDocument(context, relativePath));
+    } catch (error) {
+      const documentType = resolveDocumentTypeFromRelativePath(relativePath);
+      if (documentType !== "work-item") {
+        throw error;
+      }
+
+      invalidDocuments.push({
+        relativePath,
+        documentType,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return {
+    documents,
+    invalidDocuments,
+  };
 };
 
 /**

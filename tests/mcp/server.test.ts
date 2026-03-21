@@ -16,6 +16,7 @@ import {
   createTestRepositoryContext,
   setupTestProjectTaxonomy,
   setupTestRepo,
+  writeRawInvalidDoneWorkItem,
 } from "../fixtures/setupTestRepo.ts";
 
 const rawDumpText = Array.from({ length: 18 }, (_value, index) => `$ command ${index + 1}`).join("\n");
@@ -770,6 +771,78 @@ test("MCP list_documents backlog preset returns newest current decisions first",
   assert.equal(toolResult.structuredContent.appliedQuery.order, "desc");
 
   delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+// Bug #1: invalid done work-items must not abort backlog-facing MCP list reads.
+test("MCP list_documents returns invalid work-item diagnostics instead of aborting backlog reads", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+  try {
+    const createResponse = callTool("work-bug-1", "upsert_work_item", {
+      project: "acme-app",
+      topic: "ready-slice",
+      summary: "Keep one valid backlog item visible.",
+      outcome: "Backlog reads should still return this item.",
+      originKind: "ad-hoc",
+      originNote: "Fail-soft backlog diagnostics coverage.",
+      verification: ["Read backlog with one unrelated invalid done work-item present."],
+      date: "2026-03-11",
+    });
+    assert.equal(readToolResult(createResponse).isError, false);
+
+    const invalidRelativePath = writeRawInvalidDoneWorkItem(
+      rootDir,
+      "acme-app",
+      "broken-done-slice",
+      "2026-03-11",
+    );
+
+    const response = callTool("work-bug-2", "list_documents", {
+      project: "acme-app",
+      preset: "backlog",
+    });
+    const toolResult = readToolResult(response);
+
+    assert.notEqual(toolResult.isError, true);
+    if (
+      !isRecord(toolResult.structuredContent)
+      || !Array.isArray(toolResult.structuredContent.documents)
+      || !Array.isArray(toolResult.structuredContent.invalidDocuments)
+    ) {
+      throw new Error("Expected structured backlog result with invalidDocuments diagnostics");
+    }
+
+    assert.deepEqual(
+      toolResult.structuredContent.documents.map((document) => {
+        if (!isRecord(document) || !isRecord(document.metadata) || typeof document.metadata.topic !== "string") {
+          throw new Error("Expected listed work-item metadata");
+        }
+
+        return document.metadata.topic;
+      }),
+      ["ready-slice"],
+    );
+    assert.equal(toolResult.structuredContent.invalidDocuments.length, 1);
+
+    const invalidDocument = toolResult.structuredContent.invalidDocuments[0];
+    if (
+      !isRecord(invalidDocument)
+      || typeof invalidDocument.relativePath !== "string"
+      || typeof invalidDocument.documentType !== "string"
+      || typeof invalidDocument.message !== "string"
+    ) {
+      throw new Error("Expected invalid document diagnostic shape");
+    }
+
+    assert.equal(invalidDocument.relativePath, invalidRelativePath);
+    assert.equal(invalidDocument.documentType, "work-item");
+    assert.match(
+      invalidDocument.message,
+      /Done work items must include at least one session-note locator in evidence/,
+    );
+  } finally {
+    delete process.env.PROJECT_MEMORY_ROOT;
+  }
 });
 
 test("MCP list_documents ideas preset returns newest draft decisions only", () => {

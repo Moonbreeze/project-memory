@@ -36,6 +36,69 @@ export const createTestRepositoryContext = (memoryRootDir: string): RepositoryCo
 };
 
 /**
+ * Writes one raw invalid done work-item fixture that violates the session-note evidence invariant.
+ */
+export const writeRawInvalidDoneWorkItem = (
+  memoryRootDir: string,
+  project: string,
+  topic: string,
+  date: string,
+): string => {
+  const year = date.slice(0, 4);
+  const relativePath = path.join("projects", project, "work-items", year, `${date}-${topic}.md`);
+  const absolutePath = path.join(memoryRootDir, relativePath);
+
+  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+  fs.writeFileSync(
+    absolutePath,
+    [
+      "---",
+      `date: ${date}`,
+      `project: ${project}`,
+      `topic: ${topic}`,
+      "source: agent",
+      "status: active",
+      "work_item_state: done",
+      "---",
+      "",
+      "# Work Item",
+      "",
+      "## Summary",
+      "",
+      "Invalid done work-item fixture.",
+      "",
+      "## Outcome",
+      "",
+      "Mass-read paths should not abort because of this fixture.",
+      "",
+      "## Provenance",
+      "",
+      "- ad-hoc: Test fixture for fail-soft mass-read coverage.",
+      "",
+      "## Dependencies",
+      "",
+      "- none",
+      "",
+      "## Context",
+      "",
+      "- none",
+      "",
+      "## Verification",
+      "",
+      "- Confirm invalid work-item handling stays diagnostic-only for mass reads.",
+      "",
+      "## Evidence",
+      "",
+      "- none",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  return relativePath;
+};
+
+/**
  * Bootstraps one managed test project and optionally seeds additional taxonomy scopes.
  */
 export const setupTestProjectTaxonomy = (

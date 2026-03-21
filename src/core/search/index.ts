@@ -3,6 +3,7 @@ import {
   compareDocumentsByTimeline,
   listAllActiveDocumentPaths,
   readDocument,
+  readDocumentsSkippingInvalidWorkItems,
 } from "../documents/index.ts";
 import { buildWorkItemPlanningEntries } from "../workItems/index.ts";
 import type {
@@ -266,7 +267,10 @@ export const listDocuments = (
   query: ListDocumentsQuery = {},
   context = createRepositoryContext(),
 ): ListDocumentsResult => {
-  const documents = listAllActiveDocumentPaths(context).map((relativePath) => readDocument(context, relativePath));
+  const { documents, invalidDocuments } = readDocumentsSkippingInvalidWorkItems(
+    context,
+    listAllActiveDocumentPaths(context),
+  );
   const planningMetadataByPath = buildWorkItemPlanningMetadata(documents);
   const appliedQuery = normalizeListDocumentsQuery(query, documents);
 
@@ -292,6 +296,7 @@ export const listDocuments = (
         );
       }),
     appliedQuery,
+    invalidDocuments,
   };
 };
 
