@@ -288,6 +288,13 @@ export const validateWorkItemDefinition = (
     validateRequiredText(errors, verificationItem, "verification item");
   }
 
+  if (
+    metadata.workItemState === "done"
+    && !evidence.some((locator) => locator.type === "session-note")
+  ) {
+    errors.push("Done work items must include at least one session-note locator in evidence");
+  }
+
   if (metadata.status === "draft" && metadata.workItemState !== "open") {
     errors.push("Draft work items must stay in the open execution state");
   }

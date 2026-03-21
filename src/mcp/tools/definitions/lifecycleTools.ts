@@ -33,7 +33,7 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
     name: "archive_work_item",
     resultMode: "compact-document",
     description:
-      "Archive one existing work-item after it already reached a terminal lifecycle state and no longer needs to stay visible in the active planning surface. In the normal lifecycle this is one of the final steps after execution, evidence, and any durable guidance updates are already captured.",
+      "Archive one existing work-item after it already reached a terminal lifecycle state and no longer needs to stay visible in the active planning surface. In the normal lifecycle this is one of the final steps after execution, evidence updates, and any durable guidance changes are already captured. This tool does not add evidence or change terminal execution state.",
     inputSchema: createObjectSchema(
       {
         project: {
@@ -57,7 +57,7 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
     name: "close_work_item",
     resultMode: "compact-document",
     description:
-      "Close one existing work-item by applying a terminal lifecycle state after the execution slice is actually done or canceled, typically once the relevant session notes, verification evidence, and durable guidance updates are already recorded. This is the normal lifecycle step before the memory-repo commit.",
+      "Close one existing work-item by applying a terminal lifecycle state after the execution slice is actually done or canceled, typically once the relevant session notes, verification records, work-item evidence links, and durable guidance updates are already recorded. This tool applies terminal state only: it does not create session notes, create verification results, or add evidence links. This is the normal lifecycle step before the memory-repo commit.",
     inputSchema: createObjectSchema(
       {
         project: {

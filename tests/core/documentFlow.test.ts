@@ -44,6 +44,32 @@ const setupAcmeTaxonomy = (
   setupTestProjectTaxonomy(context, "acme-app", scopes);
 };
 
+const createSessionNoteEvidence = (
+  context: ReturnType<typeof createTestRepositoryContext>,
+  project: string,
+  topic: string,
+  date: string,
+) => {
+  appendSessionNote(
+    {
+      project,
+      topic,
+      date,
+      summary: `Captured ${topic} session progress.`,
+      actions: [`Recorded ${topic} execution chronology.`],
+      followUp: [`Keep ${topic} linked from the owning work-item.`],
+    },
+    context,
+  );
+
+  return {
+    type: "session-note" as const,
+    project,
+    date,
+    topic,
+  };
+};
+
 /**
  * Creates a temporary git wrapper that records `push` invocations and delegates all other commands.
  */
@@ -430,7 +456,7 @@ test("archiveDocument rejects work-item paths and requires the dedicated lifecyc
       dependencies: [],
       context: [],
       verification: ["Expect archiveDocument to reject work-item paths."],
-      evidence: [],
+      evidence: [createSessionNoteEvidence(context, "acme-app", "archive-via-wrong-helper-session", "2026-03-11")],
       workItemState: "done",
     },
     context,
@@ -1161,6 +1187,12 @@ test("upsertWorkItem writes a managed work item and exposes planning metadata th
 test("closeWorkItem applies a terminal lifecycle state and removes the item from backlog planning", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  const sessionEvidence = createSessionNoteEvidence(
+    context,
+    "acme-app",
+    "closeable-slice-session",
+    "2026-03-11",
+  );
 
   upsertWorkItem(
     {
@@ -1176,7 +1208,7 @@ test("closeWorkItem applies a terminal lifecycle state and removes the item from
       dependencies: [],
       context: [],
       verification: ["Confirm the close helper updates only lifecycle metadata."],
-      evidence: [],
+      evidence: [sessionEvidence],
       workItemState: "in_progress",
     },
     context,
@@ -1210,6 +1242,45 @@ test("closeWorkItem applies a terminal lifecycle state and removes the item from
         context,
       ),
     /Cannot transition work item from done to canceled/,
+  );
+});
+
+test("closeWorkItem rejects done when the work item lacks session-note evidence", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "missing-session-evidence",
+      date: "2026-03-11",
+      summary: "Try to close without linked chronology.",
+      outcome: "Done should be rejected without a session note in evidence.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Close helper validation coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Attempt closure without session-note evidence."],
+      evidence: [],
+      workItemState: "in_progress",
+    },
+    context,
+  );
+
+  assert.throws(
+    () =>
+      closeWorkItem(
+        {
+          project: "acme-app",
+          topic: "missing-session-evidence",
+          date: "2026-03-11",
+          state: "done",
+        },
+        context,
+      ),
+    /Done work items must include at least one session-note locator in evidence/,
   );
 });
 
@@ -1267,6 +1338,12 @@ test("readPlanningBacklog uses timeline ordering within the same planning state"
 test("archiveWorkItem archives terminal work items without moving them into the archive tree", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
+  const sessionEvidence = createSessionNoteEvidence(
+    context,
+    "acme-app",
+    "archivable-slice-session",
+    "2026-03-11",
+  );
 
   upsertWorkItem(
     {
@@ -1282,7 +1359,7 @@ test("archiveWorkItem archives terminal work items without moving them into the 
       dependencies: [],
       context: [],
       verification: ["Confirm archival updates only the document status."],
-      evidence: [],
+      evidence: [sessionEvidence],
       workItemState: "done",
     },
     context,
@@ -1496,7 +1573,7 @@ test("listDocuments backlog preset uses project work items for planning and keep
       dependencies: [],
       context: [],
       verification: ["Confirm completed work is filtered out."],
-      evidence: [],
+      evidence: [createSessionNoteEvidence(context, "acme-app", "done-slice-session", "2026-03-11")],
       workItemState: "done",
     },
     context,
@@ -1547,6 +1624,23 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
     date: string,
     overrides: Partial<Parameters<typeof upsertWorkItem>[0]> = {},
   ) => {
+    const { evidence: overrideEvidence = [], ...restOverrides } = overrides;
+    const evidence = [...overrideEvidence];
+
+    if (
+      overrides.workItemState === "done"
+      && !evidence.some((locator) => locator.type === "session-note")
+    ) {
+      evidence.unshift(
+        createSessionNoteEvidence(
+          context,
+          "acme-app",
+          `${topic.replaceAll(" ", "-")}-session`,
+          date,
+        ),
+      );
+    }
+
     upsertWorkItem(
       {
         project: "acme-app",
@@ -1561,8 +1655,8 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
         dependencies: [],
         context: [],
         verification: [`Confirm ${topic} appears in the bounded planning read.`],
-        evidence: [],
-        ...overrides,
+        ...restOverrides,
+        evidence,
       },
       context,
     );
@@ -1683,6 +1777,23 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
     date: string,
     overrides: Partial<Parameters<typeof upsertWorkItem>[0]> = {},
   ) => {
+    const { evidence: overrideEvidence = [], ...restOverrides } = overrides;
+    const evidence = [...overrideEvidence];
+
+    if (
+      overrides.workItemState === "done"
+      && !evidence.some((locator) => locator.type === "session-note")
+    ) {
+      evidence.unshift(
+        createSessionNoteEvidence(
+          context,
+          project,
+          `${topic.replaceAll(" ", "-")}-session`,
+          date,
+        ),
+      );
+    }
+
     upsertWorkItem(
       {
         project,
@@ -1697,8 +1808,8 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
         dependencies: [],
         context: [],
         verification: [`Confirm ${topic} appears in the bounded planning topic read.`],
-        evidence: [],
-        ...overrides,
+        ...restOverrides,
+        evidence,
       },
       context,
     );

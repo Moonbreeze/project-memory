@@ -118,7 +118,7 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
   read_cold_start: {
     name: "read_cold_start",
     description:
-      "Read the bounded cold-start startup package for one project using only a fixed runbook, canonical-doc, and decision source set. Use this as the default first read when you need project context without scanning the repository. A normal execution flow is: read bounded context, open or update the work-item, implement in the code repo, append a session note, record verification evidence, capture durable decisions if policy changed, update stable guidance, close or archive the work-item, then commit memory-repo changes separately from code-repo changes.",
+      "Read the bounded cold-start startup package for one project using only a fixed runbook, canonical-doc, and decision source set. Use this as the default first read when you need project context without scanning the repository. A normal execution flow is: read bounded context, open or update the work-item, implement in the code repo, append a session note, record verification evidence, capture durable decisions if policy changed, update stable guidance, update the work-item evidence with the relevant session-note and verification-result locators, close or archive the work-item, then commit memory-repo changes separately from code-repo changes.",
     inputSchema: createObjectSchema(
       {
         project: {

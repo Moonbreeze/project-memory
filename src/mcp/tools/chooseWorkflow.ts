@@ -41,12 +41,13 @@ const lifecycleGuide = [
   "2. Read bounded context for the topic, rationale, and dependencies that matter.",
   "3. Perform the implementation, investigation, or migration work in the relevant repository.",
   "4. Record session-level progress in a session-note.",
-  "5. Record a verification-result when a meaningful check completes.",
+  "5. Record a verification-result when a meaningful check completes; if the slice changed code, do this before done and describe the checks that actually ran.",
   "6. If stable policy or architecture changes, create or update a decision.",
   "7. If long-lived guidance changes, update the relevant canonical-doc, runbook, or provider-note.",
-  "8. Close or archive the work-item when the slice is done.",
-  "9. Commit memory-repo changes separately from code-repo changes.",
-  "10. Push the memory-repo branch explicitly when the local commit should sync to a remote.",
+  "8. Update the work-item evidence with the relevant session-note and verification-result locators before closure.",
+  "9. Close or archive the work-item when the slice is done.",
+  "10. Commit memory-repo changes separately from code-repo changes.",
+  "11. Push the memory-repo branch explicitly when the local commit should sync to a remote.",
 ] as const;
 
 /**
@@ -202,6 +203,7 @@ const chooseLifecycleRecommendation = (
       alternatives: [],
       notes: [
         "If no meaningful check has completed yet, stop after the session note and record verification later.",
+        "If the slice changed code, record a verification-result describing the checks that actually ran before treating the work-item as done.",
       ],
     };
   }
@@ -225,6 +227,7 @@ const chooseLifecycleRecommendation = (
       alternatives: [],
       notes: [
         "Verification results record evidence, not broad narrative context.",
+        "If the slice changed code, the verification-result should describe the checks that actually ran before closure.",
       ],
     };
   }
@@ -250,7 +253,7 @@ const chooseLifecycleRecommendation = (
       lifecycleGuide: [...lifecycleGuide],
       alternatives: [],
       notes: [
-        "Use a decision only when policy or architecture changed; otherwise skip directly to stable guidance or closure.",
+        "Use a decision only when policy or architecture changed; otherwise skip directly to updating work-item evidence or closure.",
       ],
     };
   }
@@ -272,20 +275,103 @@ const chooseLifecycleRecommendation = (
       why: "The durable records are already updated, so the slice should move toward closure.",
       recommendedTools: [
         createRecommendation(
+          "upsert_work_item",
+          "Update the work-item evidence so the session-note and verification-result records are linked explicitly before closure.",
+        ),
+        createRecommendation(
           "close_work_item",
-          "Close the executable work slice once evidence and durable guidance are already recorded.",
+          "Close the executable work slice once the work-item evidence and durable guidance are already recorded.",
         ),
         createRecommendation(
           "archive_work_item",
           "Archive later if the finished work-item should leave the active planning surface.",
         ),
       ],
-      nextStep: "Call close_work_item next, then archive_work_item only if the finished slice should disappear from active planning.",
+      nextStep: "Call upsert_work_item next to link the relevant session-note and verification-result locators in evidence, then close_work_item, then archive_work_item only if the finished slice should disappear from active planning.",
       lifecyclePosition: "pre-close",
       lifecycleGuide: [...lifecycleGuide],
       alternatives: [],
       notes: [
         "Closing changes execution state; archiving changes managed visibility.",
+        "close_work_item does not create evidence records or add their locators to the work-item.",
+      ],
+    };
+  }
+
+  if (
+    includesAny(combined, [
+      "verification-result",
+      "record_verification_result",
+      "verification recorded",
+      "evidence recorded",
+    ])
+    && !includesAny(combined, [
+      "work-item evidence updated",
+      "updated work-item evidence",
+      "evidence linked",
+      "linked the evidence",
+      "upsert_work_item",
+    ])
+  ) {
+    return {
+      goal,
+      currentStep,
+      route: "lifecycle-next-step",
+      why: "The checks are already recorded, but the work-item still needs explicit evidence links before it should move to a terminal state.",
+      recommendedTools: [
+        createRecommendation(
+          "upsert_work_item",
+          "Link the relevant session-note and verification-result locators through the work-item evidence field before closure.",
+        ),
+        createRecommendation(
+          "close_work_item",
+          "Apply the terminal work-item state after the evidence links are in place.",
+        ),
+      ],
+      nextStep: "Call upsert_work_item next to add the relevant session-note and verification-result locators to evidence, then close_work_item when the slice is actually done.",
+      lifecyclePosition: "post-verification-pre-evidence-update",
+      lifecycleGuide: [...lifecycleGuide],
+      alternatives: [
+        createRecommendation(
+          "archive_work_item",
+          "Archive later if the finished work-item should leave the active planning surface after closure.",
+        ),
+      ],
+      notes: [
+        "Done work-items require at least one session-note locator in evidence.",
+        "If the slice changed code, record a verification-result describing the checks that actually ran before closure.",
+      ],
+    };
+  }
+
+  if (includesAny(combined, [
+    "work-item evidence updated",
+    "updated work-item evidence",
+    "evidence linked",
+    "linked the evidence",
+    "upsert_work_item",
+  ])) {
+    return {
+      goal,
+      currentStep,
+      route: "lifecycle-next-step",
+      why: "The work-item evidence is already linked, so the remaining lifecycle action is terminal closure and optional later archival.",
+      recommendedTools: [
+        createRecommendation(
+          "close_work_item",
+          "Apply the terminal state once the work-item itself reflects the recorded evidence.",
+        ),
+        createRecommendation(
+          "archive_work_item",
+          "Archive later if the finished work-item should disappear from active planning.",
+        ),
+      ],
+      nextStep: "Call close_work_item next, then archive_work_item only if the finished slice should disappear from active planning.",
+      lifecyclePosition: "post-evidence-update-pre-close",
+      lifecycleGuide: [...lifecycleGuide],
+      alternatives: [],
+      notes: [
+        "close_work_item changes execution state only; it does not add evidence locators for you.",
       ],
     };
   }

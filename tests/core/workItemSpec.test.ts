@@ -234,3 +234,40 @@ test("validateWorkItemDefinition rejects invalid lifecycle combinations and cros
   assert(result.errors.includes("context must not contain duplicate locators"));
   assert(result.errors.includes("evidence must stay within project project-memory"));
 });
+
+test("validateWorkItemDefinition requires session-note evidence for done work items", () => {
+  const result = validateWorkItemDefinition({
+    metadata: {
+      project: "project-memory",
+      topic: "session-6-close-flow",
+      date: "2026-03-21",
+      status: "active",
+      workItemState: "done",
+    },
+    summary: "Finalize the done-state evidence invariant.",
+    outcome: "Done work items keep at least one execution chronology link.",
+    origin: {
+      kind: "ad-hoc",
+      note: "Validation coverage.",
+    },
+    dependencies: [],
+    context: [],
+    verification: ["Run work-item validation coverage."],
+    evidence: [
+      {
+        type: "verification-result",
+        project: "project-memory",
+        date: "2026-03-21",
+        topic: "session-6-close-flow-checks",
+      },
+    ],
+  });
+
+  assert.equal(result.ok, false);
+
+  if (result.ok) {
+    throw new Error("Expected validation failure");
+  }
+
+  assert(result.errors.includes("Done work items must include at least one session-note locator in evidence"));
+});

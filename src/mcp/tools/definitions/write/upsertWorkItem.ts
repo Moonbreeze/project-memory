@@ -17,7 +17,7 @@ export const upsertWorkItemMcpTool: RegisteredMcpTool = {
   name: "upsert_work_item",
   resultMode: "compact-document",
   description:
-    "Create or replace one managed work-item document for an executable backlog slice. In the normal lifecycle this is the document to open or update before active implementation so origin, dependencies, context, verification targets, evidence, visibility status, and execution progress stay explicit instead of leaking into decisions or session prose.",
+    "Create or replace one managed work-item document for an executable backlog slice. In the normal lifecycle this is the document to open before active implementation and to update again before closure so origin, dependencies, context, verification targets, evidence, visibility status, and execution progress stay explicit instead of leaking into decisions or session prose.",
   inputSchema: createObjectSchema(
     {
       project: {
@@ -71,7 +71,7 @@ export const upsertWorkItemMcpTool: RegisteredMcpTool = {
       },
       evidence: {
         type: "array",
-        description: "Optional evidence locator strings. Format: type:project:date:topic.",
+        description: "Optional evidence locator strings for session-note or verification-result records. Format: type:project:date:topic. Update this before closure so the work item links its execution chronology and checks explicitly; work items written as done must include at least one session-note locator here.",
         items: {
           type: "string",
         },

@@ -1014,6 +1014,24 @@ test("CLI closes work items through the dedicated lifecycle command", async () =
 
   await runCli(
     [
+      "append-session-note",
+      "--project",
+      "acme-app",
+      "--topic",
+      "closeable-slice-session",
+      "--summary",
+      "Captured closeable slice progress.",
+      "--actions",
+      "Implemented the closeable slice",
+      "--follow-up",
+      "Link the session note from the work-item",
+      "--date",
+      "2026-03-11",
+    ],
+  );
+
+  await runCli(
+    [
       "upsert-work-item",
       "--project",
       "acme-app",
@@ -1029,6 +1047,8 @@ test("CLI closes work items through the dedicated lifecycle command", async () =
       "CLI close coverage.",
       "--verification",
       "Run CLI close coverage",
+      "--evidence",
+      "session-note:acme-app:2026-03-11:closeable-slice-session",
       "--date",
       "2026-03-11",
       "--work-item-state",
@@ -1080,6 +1100,24 @@ test("CLI archives terminal work items through the dedicated lifecycle command",
 
   await runCli(
     [
+      "append-session-note",
+      "--project",
+      "acme-app",
+      "--topic",
+      "archivable-slice-session",
+      "--summary",
+      "Captured archivable slice progress.",
+      "--actions",
+      "Finished the archivable slice",
+      "--follow-up",
+      "Archive the finished work-item",
+      "--date",
+      "2026-03-11",
+    ],
+  );
+
+  await runCli(
+    [
       "upsert-work-item",
       "--project",
       "acme-app",
@@ -1095,6 +1133,8 @@ test("CLI archives terminal work items through the dedicated lifecycle command",
       "CLI archive coverage.",
       "--verification",
       "Run CLI archive coverage",
+      "--evidence",
+      "session-note:acme-app:2026-03-11:archivable-slice-session",
       "--date",
       "2026-03-11",
       "--work-item-state",
@@ -1145,6 +1185,24 @@ test("CLI archive-document rejects work-item paths", async () => {
 
   await runCli(
     [
+      "append-session-note",
+      "--project",
+      "acme-app",
+      "--topic",
+      "archive-via-wrong-cli-session",
+      "--summary",
+      "Captured the negative archive coverage session.",
+      "--actions",
+      "Prepared the done work-item fixture",
+      "--follow-up",
+      "Use archive-work-item instead",
+      "--date",
+      "2026-03-11",
+    ],
+  );
+
+  await runCli(
+    [
       "upsert-work-item",
       "--project",
       "acme-app",
@@ -1160,6 +1218,8 @@ test("CLI archive-document rejects work-item paths", async () => {
       "CLI negative archive coverage.",
       "--verification",
       "Expect archive-document to fail",
+      "--evidence",
+      "session-note:acme-app:2026-03-11:archive-via-wrong-cli-session",
       "--date",
       "2026-03-11",
       "--work-item-state",
@@ -1310,6 +1370,8 @@ test("CLI exposes bounded read entrypoints", async () => {
       "CLI bounded planning dependency coverage.",
       "--verification",
       "Confirm the prerequisite stays readable",
+      "--evidence",
+      "session-note:acme-app:2026-03-13:resume-evidence",
       "--date",
       "2026-03-12",
       "--work-item-state",

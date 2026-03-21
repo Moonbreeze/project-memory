@@ -240,7 +240,7 @@ export type WorkItemDefinition = {
   context: WorkItemContextLocator[];
   /** Verification targets promised by the work item. */
   verification: string[];
-  /** Same-project evidence documents recorded during or after execution. */
+  /** Same-project evidence documents recorded during or after execution; `done` work items must include at least one session-note locator here. */
   evidence: WorkItemEvidenceLocator[];
 };
 
@@ -254,6 +254,8 @@ export type WorkItemInput = {
   topic: string;
   /** Optional explicit work-item date in `YYYY-MM-DD` format. */
   date?: string;
+  /** Optional explicit timeline timestamp in UTC ISO 8601 format. */
+  recordedAt?: string;
   /** Optional explicit document source. */
   source?: DocumentSource;
   /** Optional explicit document status. */

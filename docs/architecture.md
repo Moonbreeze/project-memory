@@ -99,6 +99,9 @@ Archive behavior is intentionally split by document role:
 - `session-note` and `verification-result` archive by moving into `archives/` because they are append-only historical records once retired from active read surfaces
 - `provider-note`, `decision`, `runbook`, `canonical-doc`, and `work-item` archive in place by switching to `status: archived`
 
+For work items, archive is not the normal moment of completion.
+Completion is represented first through `work_item_state` such as `done` or `canceled`; archive is a later visibility decision for slices that should leave the active planning surface.
+
 The in-place archive rule is part of the domain model, not just an implementation shortcut.
 For these document types, the `projects/` path is part of the document's stable identity and, for some types, part of its authority boundary.
 Moving them into a second tree would conflate semantic lifecycle with storage relocation, destabilize stable references, and make partial migration or authority reasoning harder than a status transition.
@@ -124,6 +127,15 @@ Work items can store:
 - explicit same-project context locators
 - verification targets
 - explicit same-project evidence locators
+
+The evidence field is part of the model, not incidental annotation.
+It is the structured link between execution chronology and checks:
+
+- `session-note` locators explain what happened during execution
+- `verification-result` locators record what was checked
+
+The runtime now treats that relationship as part of closure semantics.
+A `work-item` written as `done` must include at least one `session-note` locator in `evidence`.
 
 The current runtime model keeps those relationships same-project by default.
 
@@ -167,6 +179,9 @@ The planning entrypoints are work-item aware:
 
 - `planning-backlog` reads active same-project work items in planning-ranked order
 - `planning-topic-entry` starts from exact-topic same-project work items and can follow explicit dependency, context, and evidence references with fixed limits
+
+That explicit evidence surface is part of why the closure invariant matters.
+Bounded reads stay explainable because a finished work-item can point directly to its own execution chronology and checks instead of expecting a reader to rediscover them elsewhere.
 
 This is the core architectural tradeoff of the project.
 The tool does less than a fully open retrieval system on purpose so callers can trust scope, ordering, and explainability.

@@ -26,6 +26,14 @@ The intended paradigm is:
 4. `verification-result` records proof that something was checked.
 5. `canonical-doc`, `runbook`, and `provider-note` hold stable reference knowledge after the work settles.
 
+For `work-item` specifically, `evidence` is where the execution slice links back to the documents that justify closure.
+In normal practice that means:
+
+- at least one `session-note` locator for execution chronology
+- zero or more `verification-result` locators for checks that completed
+
+If a `work-item` is marked `done`, it must have at least one `session-note` in `evidence`.
+
 Use `list-documents --preset backlog` for executable work only and `list-documents --preset ideas` for the draft-decision inbox that still needs triage.
 
 ## Model Lifecycle
@@ -36,12 +44,21 @@ A normal documentation lifecycle is described first as model operations, not as 
 2. Read bounded context for the topic, rationale, and dependencies that matter.
 3. Perform the implementation, investigation, or migration work in the relevant repository.
 4. Record session-level progress in a `session-note`.
-5. Record a `verification-result` when a meaningful check completes.
+5. Record a `verification-result` when a meaningful check completes. If the slice included code changes, do this before `done` and describe the checks that actually ran.
 6. If stable policy or architecture changes, create a `decision`. For non-draft decisions, record one explicit stable-guidance review outcome as part of the write.
 7. If long-lived guidance changes, update the relevant `canonical-doc`, `runbook`, or `provider-note`. If guidance does not change, the decision should still record that review outcome explicitly.
-8. Close or archive the `work-item` when the slice is done.
-9. Commit memory-repo changes separately from code-repo changes.
-10. Push the memory-repo branch explicitly when the local commit should sync to a remote.
+8. Update the `work-item` so its `evidence` links to the relevant `session-note` and `verification-result` records.
+9. Close the `work-item` when the slice is done.
+10. Archive the `work-item` later only if the finished slice should leave the active planning surface.
+11. Commit memory-repo changes separately from code-repo changes.
+12. Push the memory-repo branch explicitly when the local commit should sync to a remote.
+
+The important closure rule is explicit:
+
+- `close_work_item` changes terminal execution state
+- it does not create `session-note` or `verification-result` records for you
+- it does not add their locators to `evidence`
+- a `done` `work-item` must already include at least one `session-note` locator in `evidence`
 
 For feature and change work, the lifecycle usually looks like this:
 
@@ -56,8 +73,12 @@ flowchart TD
     decision --> verify[Record verification result]
     verify --> stable{Stable guidance<br/>changed?}
     stable -- yes --> reference[Update stable guidance]
-    stable -- no --> close
-    reference --> close[Close or archive<br/>the work-item]
+    stable -- no --> evidence[Update work-item<br/>evidence]
+    reference --> evidence[Update work-item<br/>evidence]
+    evidence --> close[Close the<br/>work-item]
+    close --> archive{Hide finished slice<br/>from active planning?}
+    archive -- yes --> archiveDone[Archive the<br/>work-item later]
+    archive -- no --> finish[Leave the done<br/>work-item active]
 ```
 
 This process keeps the memory repo understandable after the session ends.
@@ -116,7 +137,11 @@ sequenceDiagram
         Agent->>Memory: Create or update decision
         Agent->>Memory: Update canonical-doc
     end
-    Agent->>Memory: Close or archive work-item
+    Agent->>Memory: Update work-item evidence
+    Agent->>Memory: Close work-item
+    opt The finished slice should leave active planning
+        Agent->>Memory: Archive work-item
+    end
     Agent-->>Human: Return result and follow-up
 ```
 
@@ -164,7 +189,15 @@ Use planning reads as a short operational sequence:
 1. Read the backlog to identify what is ready, in progress, or blocked right now.
 2. Open one planning topic entry to inspect its explicit dependency, context, and evidence surfaces.
 3. Decide whether the `work-item` should be started, resumed, blocked, or closed.
-4. Update the `work-item` and related documents so the next planning read reflects the new state.
+4. Update the `work-item` and related documents so the next planning read reflects both the new state and the explicit evidence links that justify it.
+
+For closure specifically, the shortest safe pattern is:
+
+1. append or identify the `session-note`
+2. record the `verification-result` if meaningful checks completed
+3. update the `work-item` `evidence`
+4. close the `work-item`
+5. archive later only if the finished slice should disappear from active planning
 
 `read-planning-topic-entry` starts from exact-topic same-project work items and then follows only explicit same-project references:
 

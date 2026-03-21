@@ -475,11 +475,12 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert.match(toolDescriptions.get("search_documents") ?? "", /do not use this as the default startup path/i);
   assert.match(toolDescriptions.get("read_document") ?? "", /direct maintenance primitive/i);
   assert.match(toolDescriptions.get("read_cold_start") ?? "", /normal execution flow/i);
+  assert.match(toolDescriptions.get("read_cold_start") ?? "", /update the work-item evidence/i);
   assert.match(toolDescriptions.get("read_cold_start") ?? "", /commit memory-repo changes separately from code-repo changes/i);
   assert.match(toolDescriptions.get("read_planning_backlog") ?? "", /after cold-start/i);
   assert.match(toolDescriptions.get("bootstrap_project") ?? "", /reserved active taxonomy registry/i);
   assert.match(toolDescriptions.get("upsert_work_item") ?? "", /executable backlog slice/i);
-  assert.match(toolDescriptions.get("upsert_work_item") ?? "", /visibility status, and execution progress/i);
+  assert.match(toolDescriptions.get("upsert_work_item") ?? "", /update again before closure/i);
   assert.match(toolDescriptions.get("append_session_note") ?? "", /chronological execution/i);
   assert.match(toolDescriptions.get("create_decision") ?? "", /durable rationale/i);
   assert.match(toolDescriptions.get("record_verification_result") ?? "", /concrete evidence/i);
@@ -490,7 +491,8 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert.match(toolDescriptions.get("read_topic_entry") ?? "", /same-project topic/i);
   assert.match(toolDescriptions.get("read_rationale_entry") ?? "", /same-project topic/i);
   assert.match(toolDescriptions.get("archive_document") ?? "", /archive one existing managed document/i);
-  assert.match(toolDescriptions.get("close_work_item") ?? "", /before the memory-repo commit/i);
+  assert.match(toolDescriptions.get("close_work_item") ?? "", /applies terminal state only/i);
+  assert.match(toolDescriptions.get("close_work_item") ?? "", /add evidence links/i);
   assert.match(toolDescriptions.get("commit_pending_changes") ?? "", /explicit remote push step/i);
   assert.match(toolDescriptions.get("push_pending_changes") ?? "", /post-commit remote sync step/i);
 
@@ -536,6 +538,14 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert.match(String(statusProperty.description ?? ""), /separate from execution progress/i);
   assert.match(String(workItemStateProperty.description ?? ""), /execution lifecycle state controlling planning progress/i);
   assert.match(String(workItemStateProperty.description ?? ""), /separate from document visibility/i);
+
+  const evidenceProperty = upsertWorkItemTool.inputSchema.properties.evidence;
+  if (!isRecord(evidenceProperty)) {
+    throw new Error("Expected work-item evidence property in tools/list schema");
+  }
+
+  assert.match(String(evidenceProperty.description ?? ""), /session-note or verification-result/i);
+  assert.match(String(evidenceProperty.description ?? ""), /done must include at least one session-note locator/i);
 });
 
 test("MCP choose_workflow recommends bounded startup reads and lifecycle next steps", () => {
@@ -553,7 +563,7 @@ test("MCP choose_workflow recommends bounded startup reads and lifecycle next st
   assert.equal(startupResult.structuredContent.recommendedTools[0]?.name, "read_cold_start");
   assert.match(String(startupResult.structuredContent.nextStep ?? ""), /read_cold_start/);
   assert(Array.isArray(startupResult.structuredContent.lifecycleGuide));
-  assert.equal(startupResult.structuredContent.lifecycleGuide.length, 10);
+  assert.equal(startupResult.structuredContent.lifecycleGuide.length, 11);
 
   const nextStepResponse = callTool("workflow-2", "choose_workflow", {
     goal: "I implemented the fix and I already appended the session note. What should I do next?",
@@ -569,6 +579,21 @@ test("MCP choose_workflow recommends bounded startup reads and lifecycle next st
   assert.equal(nextStepResult.structuredContent.lifecyclePosition, "post-session-note-pre-verification");
   assert.equal(nextStepResult.structuredContent.recommendedTools[0]?.name, "record_verification_result");
   assert.match(String(nextStepResult.structuredContent.nextStep ?? ""), /record_verification_result/);
+
+  const evidenceUpdateResponse = callTool("workflow-4", "choose_workflow", {
+    goal: "What should I do next?",
+    currentStep: "I recorded the verification-result after changing code, but I have not updated the work-item evidence yet.",
+  });
+  const evidenceUpdateResult = readToolResult(evidenceUpdateResponse);
+
+  if (!isRecord(evidenceUpdateResult.structuredContent) || !Array.isArray(evidenceUpdateResult.structuredContent.recommendedTools)) {
+    throw new Error("Expected choose_workflow evidence-update payload");
+  }
+
+  assert.equal(evidenceUpdateResult.structuredContent.lifecyclePosition, "post-verification-pre-evidence-update");
+  assert.equal(evidenceUpdateResult.structuredContent.recommendedTools[0]?.name, "upsert_work_item");
+  assert.match(String(evidenceUpdateResult.structuredContent.nextStep ?? ""), /upsert_work_item/);
+  assert.match(String(evidenceUpdateResult.structuredContent.nextStep ?? ""), /close_work_item/);
 
   const postCommitResponse = callTool("workflow-3", "choose_workflow", {
     goal: "What should I do next?",
@@ -860,6 +885,18 @@ test("MCP close_work_item closes a work item and removes it from the active back
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
 
+  assert.equal(
+    readToolResult(callTool("work-close-note", "append_session_note", {
+      project: "acme-app",
+      topic: "closeable-slice-session",
+      date: "2026-03-11",
+      summary: "Captured closeable slice progress.",
+      actions: ["Implemented the closeable slice"],
+      followUp: ["Link the session note from the work-item"],
+    })).isError,
+    false,
+  );
+
   const createResponse = callTool("work-close-1", "upsert_work_item", {
     project: "acme-app",
     topic: "closeable slice",
@@ -868,6 +905,7 @@ test("MCP close_work_item closes a work item and removes it from the active back
     originKind: "ad-hoc",
     originNote: "MCP close coverage.",
     verification: ["Run MCP close coverage."],
+    evidence: ["session-note:acme-app:2026-03-11:closeable-slice-session"],
     date: "2026-03-11",
     workItemState: "in_progress",
   });
@@ -909,6 +947,18 @@ test("MCP archive_work_item archives a terminal work item and removes it from th
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
 
+  assert.equal(
+    readToolResult(callTool("work-archive-note", "append_session_note", {
+      project: "acme-app",
+      topic: "archivable-slice-session",
+      date: "2026-03-11",
+      summary: "Captured archivable slice progress.",
+      actions: ["Finished the archivable slice"],
+      followUp: ["Archive the finished work-item"],
+    })).isError,
+    false,
+  );
+
   const createResponse = callTool("work-archive-1", "upsert_work_item", {
     project: "acme-app",
     topic: "archivable slice",
@@ -917,6 +967,7 @@ test("MCP archive_work_item archives a terminal work item and removes it from th
     originKind: "ad-hoc",
     originNote: "MCP archive coverage.",
     verification: ["Run MCP archive coverage."],
+    evidence: ["session-note:acme-app:2026-03-11:archivable-slice-session"],
     date: "2026-03-11",
     workItemState: "done",
   });
@@ -1008,6 +1059,18 @@ test("MCP archive_document rejects work-item paths", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
 
+  assert.equal(
+    readToolResult(callTool("doc-archive-work-item-note", "append_session_note", {
+      project: "acme-app",
+      topic: "archive-via-wrong-mcp-session",
+      date: "2026-03-11",
+      summary: "Captured the negative archive coverage session.",
+      actions: ["Prepared the done work-item fixture"],
+      followUp: ["Use the dedicated archive_work_item helper instead"],
+    })).isError,
+    false,
+  );
+
   const createResponse = callTool("doc-archive-work-item-1", "upsert_work_item", {
     project: "acme-app",
     topic: "archive via wrong mcp",
@@ -1016,6 +1079,7 @@ test("MCP archive_document rejects work-item paths", () => {
     originKind: "ad-hoc",
     originNote: "MCP negative archive coverage.",
     verification: ["Expect archive_document to reject work-item paths."],
+    evidence: ["session-note:acme-app:2026-03-11:archive-via-wrong-mcp-session"],
     date: "2026-03-11",
     workItemState: "done",
   });
@@ -1402,6 +1466,7 @@ test("MCP server exposes bounded read entrypoints", () => {
     outcome: "Main planning work can depend on a bounded prerequisite.",
     originKind: "ad-hoc",
     originNote: "MCP bounded planning dependency coverage.",
+    evidence: ["session-note:acme-app:2026-03-13:resume-evidence"],
     verification: ["Confirm the prerequisite stays readable."],
     workItemState: "done",
   });
