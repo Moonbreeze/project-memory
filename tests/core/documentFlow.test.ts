@@ -1388,6 +1388,90 @@ test("readPlanningBacklog skips invalid done work-items and reports diagnostics"
   assert.match(result.notes.join("\n"), /Skipped 1 invalid work-item document during planning aggregation/);
 });
 
+// Bug #2: upsertWorkItem must repair invalid done work-items before strict stored validation would block the rewrite.
+test("upsertWorkItem repairs invalid done work-items by adding evidence or changing state", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  const evidenceRepairPath = writeRawInvalidDoneWorkItem(
+    rootDir,
+    "acme-app",
+    "repair-done-with-evidence",
+    "2026-03-11",
+    "2026-03-11T08:30:00.000Z",
+  );
+  const stateRepairPath = writeRawInvalidDoneWorkItem(
+    rootDir,
+    "acme-app",
+    "repair-done-with-state-change",
+    "2026-03-11",
+    "2026-03-11T09:45:00.000Z",
+  );
+  const sessionEvidence = createSessionNoteEvidence(
+    context,
+    "acme-app",
+    "repair-done-with-evidence-session",
+    "2026-03-11",
+  );
+
+  assert.throws(
+    () => readDocument(context, evidenceRepairPath),
+    /Done work items must include at least one session-note locator in evidence/,
+  );
+  assert.throws(
+    () => readDocument(context, stateRepairPath),
+    /Done work items must include at least one session-note locator in evidence/,
+  );
+
+  const repairedDoneItem = upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "repair-done-with-evidence",
+      date: "2026-03-11",
+      summary: "Repair the invalid done work-item by adding chronology evidence.",
+      outcome: "The work-item becomes valid without losing its existing timeline key.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Bug #2 evidence repair coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Repair the invalid done work-item through upsertWorkItem."],
+      evidence: [sessionEvidence],
+      workItemState: "done",
+    },
+    context,
+  );
+
+  const repairedOpenItem = upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "repair-done-with-state-change",
+      date: "2026-03-11",
+      summary: "Repair the invalid done work-item by moving it back to open.",
+      outcome: "The work-item becomes valid without requiring done-only evidence.",
+      origin: {
+        kind: "ad-hoc",
+        note: "Bug #2 state repair coverage.",
+      },
+      dependencies: [],
+      context: [],
+      verification: ["Repair the invalid done work-item by changing workItemState."],
+      evidence: [],
+      workItemState: "open",
+    },
+    context,
+  );
+
+  assert.equal(repairedDoneItem.metadata.recorded_at, "2026-03-11T08:30:00.000Z");
+  assert.equal(repairedDoneItem.metadata.work_item_state, "done");
+  assert.equal(readDocument(context, evidenceRepairPath).metadata.work_item_state, "done");
+
+  assert.equal(repairedOpenItem.metadata.recorded_at, "2026-03-11T09:45:00.000Z");
+  assert.equal(repairedOpenItem.metadata.work_item_state, "open");
+  assert.equal(readDocument(context, stateRepairPath).metadata.work_item_state, "open");
+});
+
 test("archiveWorkItem archives terminal work items without moving them into the archive tree", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);

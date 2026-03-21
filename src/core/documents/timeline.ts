@@ -9,7 +9,7 @@ import type {
 } from "../types/index.ts";
 
 import { currentDate } from "./pathLayout.ts";
-import { readDocument } from "./storage.ts";
+import { readDocument, readDocumentFrontmatter } from "./storage.ts";
 
 /**
  * Returns the deterministic fallback timeline timestamp for one day bucket.
@@ -91,8 +91,8 @@ export const resolveRecordedAtForWrite = (
 
   const absolutePath = path.join(input.context.memoryRootDir, input.relativePath);
   if (fs.existsSync(absolutePath)) {
-    const existingDocument = readDocument(input.context, input.relativePath);
-    const existingRecordedAt = resolveDocumentRecordedAt(existingDocument.metadata);
+    const existingMetadata = readDocumentFrontmatter(input.context, input.relativePath);
+    const existingRecordedAt = resolveDocumentRecordedAt(existingMetadata);
     if (existingRecordedAt.slice(0, 10) === input.date) {
       return existingRecordedAt;
     }

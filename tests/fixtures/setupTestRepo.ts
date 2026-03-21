@@ -43,6 +43,7 @@ export const writeRawInvalidDoneWorkItem = (
   project: string,
   topic: string,
   date: string,
+  recordedAt?: string,
 ): string => {
   const year = date.slice(0, 4);
   const relativePath = path.join("projects", project, "work-items", year, `${date}-${topic}.md`);
@@ -54,6 +55,7 @@ export const writeRawInvalidDoneWorkItem = (
     [
       "---",
       `date: ${date}`,
+      ...(recordedAt ? [`recorded_at: ${recordedAt}`] : []),
       `project: ${project}`,
       `topic: ${topic}`,
       "source: agent",

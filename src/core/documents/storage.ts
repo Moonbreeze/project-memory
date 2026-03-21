@@ -63,6 +63,34 @@ const normalizeFrontmatter = (metadata: Record<string, string>): Frontmatter => 
 };
 
 /**
+ * Reads one stored document from disk after frontmatter validation only.
+ */
+const readStoredDocument = (
+  context: RepositoryContext,
+  relativePath: string,
+): ParsedDocument => {
+  assertManagedDocumentRelativePath(relativePath);
+
+  const absolutePath = path.join(context.memoryRootDir, relativePath);
+  const raw = fs.readFileSync(absolutePath, "utf8");
+  const { metadata, body } = parseFrontmatter(raw);
+  const type = resolveDocumentTypeFromRelativePath(relativePath);
+  const frontmatterValidation = validateFrontmatter(context, metadata, type);
+
+  if (!frontmatterValidation.ok) {
+    throw new Error(frontmatterValidation.errors.join("; "));
+  }
+
+  return {
+    path: absolutePath,
+    relativePath,
+    type,
+    metadata: normalizeFrontmatter(metadata),
+    body,
+  };
+};
+
+/**
  * Validates and writes one Markdown document to disk.
  */
 export const writeDocument = (
@@ -116,31 +144,23 @@ export const readDocument = (
   context: RepositoryContext,
   relativePath: string,
 ): ParsedDocument => {
-  assertManagedDocumentRelativePath(relativePath);
+  const parsedDocument = readStoredDocument(context, relativePath);
 
-  const absolutePath = path.join(context.memoryRootDir, relativePath);
-  const raw = fs.readFileSync(absolutePath, "utf8");
-  const { metadata, body } = parseFrontmatter(raw);
-  const type = resolveDocumentTypeFromRelativePath(relativePath);
-  const frontmatterValidation = validateFrontmatter(context, metadata, type);
-
-  if (!frontmatterValidation.ok) {
-    throw new Error(frontmatterValidation.errors.join("; "));
-  }
-
-  const parsedDocument = {
-    path: absolutePath,
-    relativePath,
-    type,
-    metadata: normalizeFrontmatter(metadata),
-    body,
-  };
-
-  if (type === "work-item") {
+  if (parsedDocument.type === "work-item") {
     validateStoredWorkItemDocument(parsedDocument);
   }
 
   return parsedDocument;
+};
+
+/**
+ * Reads validated frontmatter for one stored document without body-specific validation.
+ */
+export const readDocumentFrontmatter = (
+  context: RepositoryContext,
+  relativePath: string,
+): Frontmatter => {
+  return readStoredDocument(context, relativePath).metadata;
 };
 
 /**

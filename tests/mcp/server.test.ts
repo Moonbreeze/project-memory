@@ -845,6 +845,88 @@ test("MCP list_documents returns invalid work-item diagnostics instead of aborti
   }
 });
 
+// Bug #2: MCP upsert_work_item must repair invalid done work-items before strict stored validation would block the rewrite.
+test("MCP upsert_work_item repairs invalid done work-items by adding evidence or changing state", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+  try {
+    const evidenceRepairPath = writeRawInvalidDoneWorkItem(
+      rootDir,
+      "acme-app",
+      "repair-done-with-evidence",
+      "2026-03-11",
+      "2026-03-11T08:30:00.000Z",
+    );
+    const stateRepairPath = writeRawInvalidDoneWorkItem(
+      rootDir,
+      "acme-app",
+      "repair-done-with-state-change",
+      "2026-03-11",
+      "2026-03-11T09:45:00.000Z",
+    );
+
+    assert.equal(
+      readToolResult(callTool("work-bug-2-note", "append_session_note", {
+        project: "acme-app",
+        topic: "repair-done-with-evidence-session",
+        date: "2026-03-11",
+        summary: "Captured Bug #2 repair chronology.",
+        actions: ["Prepared a session-note evidence locator for repair."],
+        followUp: ["Link the session note from the repaired work-item."],
+      })).isError,
+      false,
+    );
+
+    const evidenceRepairResponse = callTool("work-bug-2-evidence", "upsert_work_item", {
+      project: "acme-app",
+      topic: "repair-done-with-evidence",
+      summary: "Repair the invalid done work-item by adding chronology evidence.",
+      outcome: "The stored work-item becomes valid without losing recorded_at.",
+      originKind: "ad-hoc",
+      originNote: "Bug #2 MCP evidence repair coverage.",
+      verification: ["Repair the invalid done work-item through MCP upsert_work_item."],
+      evidence: ["session-note:acme-app:2026-03-11:repair-done-with-evidence-session"],
+      date: "2026-03-11",
+      workItemState: "done",
+    });
+    const evidenceRepairResult = readToolResult(evidenceRepairResponse);
+
+    const stateRepairResponse = callTool("work-bug-2-state", "upsert_work_item", {
+      project: "acme-app",
+      topic: "repair-done-with-state-change",
+      summary: "Repair the invalid done work-item by moving it back to open.",
+      outcome: "The stored work-item becomes valid without done-only evidence.",
+      originKind: "ad-hoc",
+      originNote: "Bug #2 MCP state repair coverage.",
+      verification: ["Repair the invalid done work-item by changing workItemState."],
+      date: "2026-03-11",
+      workItemState: "open",
+    });
+    const stateRepairResult = readToolResult(stateRepairResponse);
+
+    assert.equal(evidenceRepairResult.isError, false);
+    assert.equal(stateRepairResult.isError, false);
+
+    if (
+      !isRecord(evidenceRepairResult.structuredContent)
+      || !isRecord(evidenceRepairResult.structuredContent.metadata)
+      || !isRecord(stateRepairResult.structuredContent)
+      || !isRecord(stateRepairResult.structuredContent.metadata)
+    ) {
+      throw new Error("Expected structured upsert_work_item results");
+    }
+
+    assert.equal(evidenceRepairResult.structuredContent.metadata.recorded_at, "2026-03-11T08:30:00.000Z");
+    assert.equal(evidenceRepairResult.structuredContent.metadata.work_item_state, "done");
+    assert.equal(stateRepairResult.structuredContent.metadata.recorded_at, "2026-03-11T09:45:00.000Z");
+    assert.equal(stateRepairResult.structuredContent.metadata.work_item_state, "open");
+    assert.match(fs.readFileSync(path.join(rootDir, evidenceRepairPath), "utf8"), /repair-done-with-evidence-session/);
+    assert.match(fs.readFileSync(path.join(rootDir, stateRepairPath), "utf8"), /work_item_state: open/);
+  } finally {
+    delete process.env.PROJECT_MEMORY_ROOT;
+  }
+});
+
 test("MCP list_documents ideas preset returns newest draft decisions only", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
