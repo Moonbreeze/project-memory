@@ -11,6 +11,7 @@ import {
   SortOrder as SortOrderValues,
 } from "./constants.ts";
 import { isLiteralMember } from "../shared/index.ts";
+import type { WorkItemState } from "../workItems/types.ts";
 
 /**
  * A supported project-memory document kind.
@@ -81,7 +82,7 @@ export type Frontmatter = {
   /** Current document lifecycle status. */
   status: DocumentStatus;
   /** Optional work-item lifecycle state stored only on work-item documents. */
-  work_item_state?: string;
+  work_item_state?: WorkItemState;
 };
 
 /**

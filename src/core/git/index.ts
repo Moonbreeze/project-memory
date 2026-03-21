@@ -98,21 +98,6 @@ const runGit = (args: string[], cwd: string): string => {
 };
 
 /**
- * Reads one git path list command and normalizes blank output to an empty array.
- */
-const readGitPathList = (args: string[], cwd: string): string[] => {
-  const output = runGit(args, cwd);
-  if (!output) {
-    return [];
-  }
-
-  return output
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-};
-
-/**
  * Reads one git line-list command and normalizes blank output to an empty array.
  */
 const readGitLineList = (args: string[], cwd: string): string[] => {
@@ -139,7 +124,7 @@ const collectChangedPaths = (cwd: string): string[] => {
   ];
 
   for (const command of gitCommands) {
-    for (const changedPath of readGitPathList(command, cwd)) {
+    for (const changedPath of readGitLineList(command, cwd)) {
       changedPaths.add(path.normalize(changedPath));
     }
   }
@@ -189,6 +174,9 @@ const inferCommitScope = (approvedPaths: EligibleManagedPath[]): CommitScope => 
     case "work-item":
       return "work-item";
   }
+
+  const unsupportedType: never = documentType;
+  throw new Error(`Unsupported document type for commit scope inference: ${unsupportedType}`);
 };
 
 /**
@@ -245,7 +233,7 @@ export const commitPendingChanges = (
 
   runGit(["add", "--", ...approvedRelativePaths], context.memoryRootDir);
 
-  const staged = readGitPathList(
+  const staged = readGitLineList(
     ["diff", "--cached", "--name-only", "--", ...approvedRelativePaths],
     context.memoryRootDir,
   );

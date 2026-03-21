@@ -10,6 +10,7 @@ import {
   readDocumentsSkippingInvalidWorkItems,
   sortRelativePathsByDocumentTimeline,
 } from "../documents/index.ts";
+import { isRecord } from "../shared/index.ts";
 import { ReservedTaxonomyRegistryScope } from "../taxonomy/index.ts";
 import {
   buildWorkItemPlanningEntries,
@@ -41,6 +42,13 @@ import type {
 type PathMatchMode = "all" | "exact" | "contains";
 
 type DatedDirectoryShape = "flat" | "year-month";
+
+/**
+ * Returns `true` when one caught error represents a missing file on disk.
+ */
+const isMissingFileError = (error: unknown): boolean => {
+  return isRecord(error) && error.code === "ENOENT";
+};
 
 /**
  * Selected documents returned from one bounded-read stage.
@@ -396,7 +404,17 @@ const readStageDocuments = (
       continue;
     }
 
-    const document = readDocument(context, candidatePath);
+    let document: ParsedDocument;
+    try {
+      document = readDocument(context, candidatePath);
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        continue;
+      }
+
+      throw error;
+    }
+
     if (!input.allowedStatuses.includes(document.metadata.status)) {
       continue;
     }
@@ -422,6 +440,7 @@ const collectReferenceTopics = (
 ): string[] => {
   const lines = document.body.split("\n");
   const topics: string[] = [];
+  const referencePattern = new RegExp(`^\\s*-\\s*${prefix}:\\s*(.+?)\\s*$`);
   let inReferences = false;
 
   for (const line of lines) {
@@ -434,7 +453,7 @@ const collectReferenceTopics = (
       continue;
     }
 
-    const match = line.match(new RegExp(`^\\s*-\\s*${prefix}:\\s*(.+?)\\s*$`));
+    const match = line.match(referencePattern);
     if (!match) {
       continue;
     }
@@ -553,7 +572,7 @@ const sortPlanningEntries = (
 /**
  * Returns `true` when a planning state belongs to the backlog read surface.
  */
-const isPlanningBacklogState = (planningState: string): boolean => {
+const isPlanningBacklogState = (planningState: WorkItemPlanningState): boolean => {
   return planningState === "ready" || planningState === "in_progress" || planningState === "blocked";
 };
 

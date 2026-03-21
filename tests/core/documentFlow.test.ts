@@ -865,6 +865,49 @@ test("searchDocuments returns latest-first timeline results before applying limi
   );
 });
 
+// Bug #3: invalid done work-items must not abort active search queries.
+test("searchDocuments skips invalid done work-items and keeps valid matches", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "search survives invalid work items",
+      date: "2026-03-11",
+      summary: "Timeline search coverage.",
+      actions: ["Keep search results available despite unrelated invalid work-item records."],
+      followUp: ["Verify invalid done work-items are skipped during search aggregation."],
+    },
+    context,
+  );
+
+  const invalidRelativePath = writeRawInvalidDoneWorkItem(
+    rootDir,
+    "acme-app",
+    "broken-done-search-slice",
+    "2026-03-11",
+  );
+
+  assert.throws(
+    () => readDocument(context, invalidRelativePath),
+    /Done work items must include at least one session-note locator in evidence/,
+  );
+
+  const results = searchDocuments(
+    {
+      project: "acme-app",
+      text: "timeline search coverage",
+    },
+    context,
+  );
+
+  assert.deepEqual(
+    results.map((document) => document.metadata.topic),
+    ["search-survives-invalid-work-items"],
+  );
+});
+
 test("bootstrapProject creates the reserved active taxonomy registry document", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);

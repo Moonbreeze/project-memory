@@ -2,7 +2,6 @@ import { createRepositoryContext } from "../config/index.ts";
 import {
   compareDocumentsByTimeline,
   listAllActiveDocumentPaths,
-  readDocument,
   readDocumentsSkippingInvalidWorkItems,
 } from "../documents/index.ts";
 import { buildWorkItemPlanningEntries } from "../workItems/index.ts";
@@ -197,12 +196,8 @@ const toListedDocument = (
   includeBody: boolean,
   planningMetadata?: WorkItemPlanningMetadata,
 ): ListedDocument => {
-  const listedDocument: ListedDocument = includeBody
-    ? { ...document }
-    : (() => {
-        const { body: _body, ...withoutBody } = document;
-        return withoutBody;
-      })();
+  const { body: _body, ...documentWithoutBody } = document;
+  const listedDocument: ListedDocument = includeBody ? { ...document } : documentWithoutBody;
 
   if (planningMetadata) {
     listedDocument.planningState = planningMetadata.planningState;
@@ -307,7 +302,10 @@ export const searchDocuments = (
   query: SearchQuery,
   context = createRepositoryContext(),
 ): SearchResult[] => {
-  const documents = listAllActiveDocumentPaths(context).map((relativePath) => readDocument(context, relativePath));
+  const { documents } = readDocumentsSkippingInvalidWorkItems(
+    context,
+    listAllActiveDocumentPaths(context),
+  );
 
   return documents
     .filter((document) => matchesQuery(document, query))

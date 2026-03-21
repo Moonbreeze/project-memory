@@ -4,7 +4,7 @@ import path from "node:path";
 import { createRepositoryContext } from "../config/index.ts";
 import { isDocumentSource, isDocumentStatus } from "../types/index.ts";
 import { validateBody, validateFrontmatter } from "../validation/index.ts";
-import { validateStoredWorkItemDocument } from "../workItems/index.ts";
+import { isWorkItemState, validateStoredWorkItemDocument } from "../workItems/index.ts";
 import type {
   Frontmatter,
   InvalidDocumentDiagnostic,
@@ -56,6 +56,10 @@ const normalizeFrontmatter = (metadata: Record<string, string>): Frontmatter => 
   }
 
   if (metadata.work_item_state) {
+    if (!isWorkItemState(metadata.work_item_state)) {
+      throw new Error(`Unsupported work_item_state: ${metadata.work_item_state}`);
+    }
+
     normalized.work_item_state = metadata.work_item_state;
   }
 
