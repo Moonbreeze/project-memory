@@ -82,7 +82,7 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
   search_documents: {
     name: "search_documents",
     description:
-      "Search active managed project-memory documents by text, project, and type when you already need broad keyword recall beyond the bounded read entrypoints. Do not use this as the default startup path; prefer read_cold_start, read_planning_backlog, read_planning_topic_entry, read_topic_entry, or read_rationale_entry first. Unmanaged or schema-invalid files stay outside this surface.",
+      "Search active managed project-memory documents by text, project, and type when you already need broad keyword recall beyond the bounded read entrypoints. By default this returns excerpt-centered candidate hits with managed relative paths rather than full document bodies; use read_document to open one exact document, or includeBody for opt-in full body retrieval. Do not use this as the default startup path; prefer read_cold_start, read_planning_backlog, read_planning_topic_entry, read_topic_entry, or read_rationale_entry first. Unmanaged or schema-invalid files stay outside this surface.",
     inputSchema: createObjectSchema({
       project: {
         type: "string",
@@ -97,13 +97,17 @@ export const queryMcpTools: Record<string, RegisteredMcpTool> = {
         type: "number",
         description: "Optional maximum number of results.",
       },
+      includeBody: {
+        type: "boolean",
+        description: "Includes full Markdown bodies in hits when true; otherwise returns excerpt-centered candidate hits.",
+      },
     }),
     handler: searchDocumentsTool,
   },
   read_document: {
     name: "read_document",
     description:
-      "Read one managed project-memory document by repository-relative path when you already know the exact file to inspect. This is a direct maintenance primitive, not the default startup path; unmanaged paths or schema-invalid files are outside this validated surface.",
+      "Read one managed project-memory document by repository-relative path when you already know the exact file to inspect. This is the explicit full-document retrieval surface and a direct maintenance primitive, not the default startup path; unmanaged paths or schema-invalid files are outside this validated surface.",
     inputSchema: createObjectSchema(
       {
         path: {

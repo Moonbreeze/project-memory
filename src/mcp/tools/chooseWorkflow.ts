@@ -419,10 +419,14 @@ const chooseReadRecommendation = (goal: string): WorkflowChoiceResult => {
       recommendedTools: [
         createRecommendation(
           "search_documents",
-          "Search is the maintenance primitive for broad text recall across managed documents.",
+          "Use search first to get compact candidate hits with relative paths and excerpts.",
+        ),
+        createRecommendation(
+          "read_document",
+          "After search identifies the right candidate, open that exact path for full document retrieval.",
         ),
       ],
-      nextStep: "Call search_documents with the project and search text.",
+      nextStep: "Call search_documents with the project and search text, then read_document with the chosen hit's relativePath when you need the full document.",
       lifecyclePosition: "bounded-context",
       lifecycleGuide: [...lifecycleGuide],
       alternatives: [
@@ -433,6 +437,7 @@ const chooseReadRecommendation = (goal: string): WorkflowChoiceResult => {
       ],
       notes: [
         "Prefer bounded reads before search when the request maps cleanly to startup, planning, topic, or rationale lookup.",
+        "search_documents is recall-first by default; read_document is the explicit full-retrieval step.",
       ],
     };
   }

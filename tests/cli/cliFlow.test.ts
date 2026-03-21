@@ -528,6 +528,29 @@ test("CLI can append, list, read, and archive documents", async () => {
 
   assert.match(readResult.body, /Validated CLI document flow/);
 
+  const searchBeforeArchiveCapture = createCapturedIo();
+  await runCli(["search-documents", "--project", "acme-app", "--text", "Validated"], searchBeforeArchiveCapture.io);
+  const searchBeforeArchiveResult = parseLastJson(searchBeforeArchiveCapture.captured.stdout);
+  if (!Array.isArray(searchBeforeArchiveResult) || !isRecord(searchBeforeArchiveResult[0])) {
+    throw new Error("Unexpected default search-documents result shape");
+  }
+
+  assert.equal("body" in searchBeforeArchiveResult[0], false);
+  assert.equal("path" in searchBeforeArchiveResult[0], false);
+  assert.match(String(searchBeforeArchiveResult[0].excerpt ?? ""), /Validated CLI document flow/);
+
+  const fullSearchCapture = createCapturedIo();
+  await runCli(
+    ["search-documents", "--project", "acme-app", "--text", "Validated", "--include-body", "true"],
+    fullSearchCapture.io,
+  );
+  const fullSearchResult = parseLastJson(fullSearchCapture.captured.stdout);
+  if (!Array.isArray(fullSearchResult) || !isRecord(fullSearchResult[0])) {
+    throw new Error("Unexpected full search-documents result shape");
+  }
+
+  assert.match(String(fullSearchResult[0].body ?? ""), /Validated CLI document flow/);
+
   const archiveCapture = createCapturedIo();
   await runCli(["archive-document", "--path", appended.relativePath], archiveCapture.io);
   const archived = parseLastJson(archiveCapture.captured.stdout);

@@ -1153,6 +1153,7 @@ export const parseSearchDocumentsQuery = (value: unknown): SearchQuery => {
     text: readOptionalString(params.text, "text"),
     type: readOptionalDocumentType(params.type),
     limit: readOptionalNumber(params.limit, "limit"),
+    includeBody: readOptionalBoolean(params.includeBody, "includeBody"),
   };
 };
 

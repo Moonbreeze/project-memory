@@ -474,7 +474,10 @@ test("MCP server completes initialize and tools/list handshake", () => {
   assert.match(toolDescriptions.get("choose_workflow") ?? "", /does not route, mutate data/i);
   assert.match(toolDescriptions.get("list_documents") ?? "", /read_planning_backlog/i);
   assert.match(toolDescriptions.get("search_documents") ?? "", /do not use this as the default startup path/i);
+  assert.match(toolDescriptions.get("search_documents") ?? "", /excerpt-centered candidate hits/i);
+  assert.match(toolDescriptions.get("search_documents") ?? "", /use read_document to open one exact document/i);
   assert.match(toolDescriptions.get("read_document") ?? "", /direct maintenance primitive/i);
+  assert.match(toolDescriptions.get("read_document") ?? "", /explicit full-document retrieval surface/i);
   assert.match(toolDescriptions.get("read_cold_start") ?? "", /normal execution flow/i);
   assert.match(toolDescriptions.get("read_cold_start") ?? "", /update the work-item evidence/i);
   assert.match(toolDescriptions.get("read_cold_start") ?? "", /commit memory-repo changes separately from code-repo changes/i);
@@ -501,6 +504,18 @@ test("MCP server completes initialize and tools/list handshake", () => {
   if (!isRecord(upsertWorkItemTool) || !isRecord(upsertWorkItemTool.inputSchema) || !isRecord(upsertWorkItemTool.inputSchema.properties)) {
     throw new Error("Expected upsert_work_item schema in tools/list");
   }
+
+  const searchDocumentsTool = toolsByName.get("search_documents");
+  if (!isRecord(searchDocumentsTool) || !isRecord(searchDocumentsTool.inputSchema) || !isRecord(searchDocumentsTool.inputSchema.properties)) {
+    throw new Error("Expected search_documents schema in tools/list");
+  }
+
+  const includeBodyProperty = searchDocumentsTool.inputSchema.properties.includeBody;
+  if (!isRecord(includeBodyProperty)) {
+    throw new Error("Expected search_documents includeBody schema");
+  }
+
+  assert.match(String(includeBodyProperty.description ?? ""), /excerpt-centered candidate hits/i);
 
   const upsertTaxonomyRegistryTool = toolsByName.get("upsert_taxonomy_registry");
   if (
@@ -581,6 +596,21 @@ test("MCP choose_workflow recommends bounded startup reads and lifecycle next st
   assert.equal(nextStepResult.structuredContent.recommendedTools[0]?.name, "record_verification_result");
   assert.match(String(nextStepResult.structuredContent.nextStep ?? ""), /record_verification_result/);
 
+  const searchResponse = callTool("workflow-search", "choose_workflow", {
+    goal: "I need to search for keyword recall across documents.",
+  });
+  const searchResult = readToolResult(searchResponse);
+
+  if (!isRecord(searchResult.structuredContent) || !Array.isArray(searchResult.structuredContent.recommendedTools)) {
+    throw new Error("Expected choose_workflow search payload");
+  }
+
+  assert.equal(searchResult.structuredContent.route, "maintenance-search");
+  assert.equal(searchResult.structuredContent.recommendedTools[0]?.name, "search_documents");
+  assert.equal(searchResult.structuredContent.recommendedTools[1]?.name, "read_document");
+  assert.match(String(searchResult.structuredContent.nextStep ?? ""), /search_documents/);
+  assert.match(String(searchResult.structuredContent.nextStep ?? ""), /read_document/);
+
   const evidenceUpdateResponse = callTool("workflow-4", "choose_workflow", {
     goal: "What should I do next?",
     currentStep: "I recorded the verification-result after changing code, but I have not updated the work-item evidence yet.",
@@ -609,6 +639,58 @@ test("MCP choose_workflow recommends bounded startup reads and lifecycle next st
   assert.equal(postCommitResult.structuredContent.lifecyclePosition, "post-commit-pre-push");
   assert.equal(postCommitResult.structuredContent.recommendedTools[0]?.name, "push_pending_changes");
   assert.match(String(postCommitResult.structuredContent.nextStep ?? ""), /push_pending_changes/);
+});
+
+test("MCP search_documents returns compact hits by default and opt-in bodies", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const appendResponse = callTool("search-note", "append_session_note", {
+    project: "acme-app",
+    topic: "search payload",
+    date: "2026-03-11",
+    summary: "Compact MCP search coverage.",
+    actions: ["Create one searchable document"],
+    followUp: ["Read it fully only when requested"],
+  });
+  const appendResult = readToolResult(appendResponse);
+  assert.notEqual(appendResult.isError, true);
+
+  const compactResponse = callTool("search-compact", "search_documents", {
+    project: "acme-app",
+    text: "compact mcp search coverage",
+  });
+  const compactResult = readToolResult(compactResponse);
+  if (
+    !isRecord(compactResult.structuredContent)
+    || !Array.isArray(compactResult.structuredContent.documents)
+    || !isRecord(compactResult.structuredContent.documents[0])
+  ) {
+    throw new Error("Expected compact search_documents payload");
+  }
+
+  const compactDocument = compactResult.structuredContent.documents[0];
+  assert.equal("body" in compactDocument, false);
+  assert.equal("path" in compactDocument, false);
+  assert.match(String(compactDocument.excerpt ?? ""), /Compact MCP search coverage/);
+
+  const fullResponse = callTool("search-full", "search_documents", {
+    project: "acme-app",
+    text: "compact mcp search coverage",
+    includeBody: true,
+  });
+  const fullResult = readToolResult(fullResponse);
+  if (
+    !isRecord(fullResult.structuredContent)
+    || !Array.isArray(fullResult.structuredContent.documents)
+    || !isRecord(fullResult.structuredContent.documents[0])
+  ) {
+    throw new Error("Expected full search_documents payload");
+  }
+
+  assert.match(String(fullResult.structuredContent.documents[0].body ?? ""), /Compact MCP search coverage/);
+
+  delete process.env.PROJECT_MEMORY_ROOT;
 });
 
 test("MCP stdio framing carries one initialize exchange", () => {

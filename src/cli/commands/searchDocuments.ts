@@ -1,5 +1,6 @@
 import { searchDocuments } from "../../core/index.ts";
 import {
+  parseOptionalBoolean,
   parseOptionalDocumentType,
   parseOptionalLimit,
   printJson,
@@ -16,6 +17,7 @@ export const searchDocumentsCommand: CliCommandHandler = (flags, io) => {
       type: parseOptionalDocumentType(flags.type),
       text: flags.text,
       limit: parseOptionalLimit(flags.limit),
+      includeBody: parseOptionalBoolean(flags["include-body"], "include-body"),
     }),
     io,
   );

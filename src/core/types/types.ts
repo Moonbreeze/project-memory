@@ -322,6 +322,8 @@ export type SearchQuery = {
   type?: DocumentType;
   /** Optional result limit. */
   limit?: number;
+  /** Includes full Markdown bodies in search hits when `true`. */
+  includeBody?: boolean;
 };
 
 /**
@@ -399,11 +401,13 @@ export type ListDocumentsResult = {
 };
 
 /**
- * Search hit with a short excerpt.
+ * Search hit returned from broad keyword recall.
  */
-export type SearchResult = ParsedDocument & {
+export type SearchResult = Omit<ParsedDocument, "path" | "body"> & {
   /** Matched excerpt extracted from the body. */
   excerpt: string;
+  /** Optional full Markdown body, included only when explicitly requested. */
+  body?: string;
 };
 
 /**

@@ -865,6 +865,46 @@ test("searchDocuments returns latest-first timeline results before applying limi
   );
 });
 
+test("searchDocuments returns compact hits by default and includes bodies on request", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "compact search hit",
+      date: "2026-03-11",
+      summary: "Compact search result coverage.",
+      actions: ["Create one searchable session note."],
+      followUp: ["Verify body retrieval stays opt-in."],
+    },
+    context,
+  );
+
+  const compactResults = searchDocuments(
+    {
+      project: "acme-app",
+      text: "compact search result coverage",
+    },
+    context,
+  );
+  const fullResults = searchDocuments(
+    {
+      project: "acme-app",
+      text: "compact search result coverage",
+      includeBody: true,
+    },
+    context,
+  );
+
+  assert.equal(compactResults.length, 1);
+  assert.equal(fullResults.length, 1);
+  assert.equal("body" in (compactResults[0] ?? {}), false);
+  assert.equal("path" in (compactResults[0] ?? {}), false);
+  assert.match(compactResults[0]?.excerpt ?? "", /Compact search result coverage/);
+  assert.match(fullResults[0]?.body ?? "", /Compact search result coverage/);
+});
+
 // Bug #3: invalid done work-items must not abort active search queries.
 test("searchDocuments skips invalid done work-items and keeps valid matches", () => {
   const rootDir = setupTestRepo();

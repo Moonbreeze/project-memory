@@ -229,6 +229,28 @@ const buildExcerpt = (document: ParsedDocument, queryText?: string): string => {
 };
 
 /**
+ * Converts one parsed document into a compact search hit.
+ */
+const toSearchResult = (
+  document: ParsedDocument,
+  includeBody: boolean,
+  queryText?: string,
+): SearchResult => {
+  const searchResult: SearchResult = {
+    relativePath: document.relativePath,
+    type: document.type,
+    metadata: document.metadata,
+    excerpt: buildExcerpt(document, queryText),
+  };
+
+  if (includeBody) {
+    searchResult.body = document.body;
+  }
+
+  return searchResult;
+};
+
+/**
  * Builds planning metadata lookup for active work-item documents by relative path.
  */
 const buildWorkItemPlanningMetadata = (
@@ -311,8 +333,5 @@ export const searchDocuments = (
     .filter((document) => matchesQuery(document, query))
     .sort((left, right) => compareDocumentsByTimeline(left, right, "desc"))
     .slice(0, query.limit ?? 50)
-    .map((document) => ({
-      ...document,
-      excerpt: buildExcerpt(document, query.text),
-    }));
+    .map((document) => toSearchResult(document, query.includeBody ?? false, query.text));
 };
