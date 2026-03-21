@@ -13,7 +13,7 @@ The managed documents themselves live in a separate external repository selected
 - Work-item evidence invariant: a `done` `work-item` must link at least one `session-note` through `evidence` so the execution chronology is explicit rather than implied.
 - Archive semantics: archiving is a lifecycle operation, not always a file move. `session-note` and `verification-result` move into `archives/`, while `decision`, `runbook`, `provider-note`, and `canonical-doc` keep their stable `projects/` paths and switch to `status: archived`. `work-item` uses its dedicated lifecycle helper and also archives in place after the terminal execution state is already recorded.
 
-One of the most important and frequent user-facing workflows is the `work-item` closure flow, because it shows how bounded reads, execution tracking, evidence, and lifecycle semantics fit together. It is not the whole product, though: startup and planning reads are equally central entrypoints for everyday agent use.
+The guides below cover common operating surfaces such as `work-item` closure, startup reads, and planning reads.
 
 ## Quickstart
 

@@ -53,12 +53,7 @@ A normal documentation lifecycle is described first as model operations, not as 
 11. Commit memory-repo changes separately from code-repo changes.
 12. Push the memory-repo branch explicitly when the local commit should sync to a remote.
 
-The important closure rule is explicit:
-
-- `close_work_item` changes terminal execution state
-- it does not create `session-note` or `verification-result` records for you
-- it does not add their locators to `evidence`
-- a `done` `work-item` must already include at least one `session-note` locator in `evidence`
+The important closure rule is operational: `close_work_item` changes terminal execution state, but it does not create supporting records or add their locators to `evidence` for you.
 
 For feature and change work, the lifecycle usually looks like this:
 
@@ -90,24 +85,15 @@ The next human or agent should be able to answer:
 - what evidence supports the current state
 - what remains open
 
-## Decision Write Contract
+## Decision Writes
 
-`decision` has two distinct operating modes:
+`decision` has two operating modes:
 
-- `draft` decisions are the idea inbox. They do not require a stable-guidance review outcome and should not be used as the final durable record.
-- non-draft decisions are durable records. They must include an explicit stable-guidance review outcome when written.
+- `draft` decisions are the idea inbox and do not require a stable-guidance review outcome.
+- non-draft decisions are durable records and must include one explicit stable-guidance review outcome when written.
 
-For non-draft decisions, the review outcome should make one of these states explicit:
-
-- stable guidance was reviewed and no change was required
-- stable guidance was reviewed and a follow-up update is required
-- stable guidance was reviewed and updated in the same change slice
-- a bootstrap-style exemption was used because no prior stable-guidance surface existed yet
-
-This keeps the handoff between immutable rationale and mutable current guidance explicit instead of relying on a reader to infer whether stable reference docs were checked.
-
-Decision writes are also immutable by path.
-If a durable decision already exists at the same dated topic path, create a new decision record instead of silently overwriting the old one.
+Durable decision writes are immutable by path.
+If a non-draft decision already exists at the same dated topic path, create a new decision record instead of silently overwriting the old one.
 
 ## Example: One Iteration
 
@@ -234,31 +220,11 @@ The goal is to re-express the information in the managed taxonomy so future boun
 ## CLI Reference Surface
 
 Use the CLI for exact local maintenance, scripting, and debugging.
-For the overall operating model, see the core concepts in the [README](../README.md).
+For the overall operating model, stay with the model-level workflow above and the core concepts in the [README](../README.md).
 
 Current local entrypoints:
 
 ```bash
 ./scripts/run-cli.sh <command> ...
 ./scripts/run-mcp.sh
-```
-
-Representative CLI operations:
-
-- list or search documents when you already know what you are looking for
-- inspect one exact path directly
-- run lifecycle operations such as close or archive
-- stage and commit managed document changes through the validated commit helper
-- push the committed memory-repo branch through an explicit remote-sync helper
-
-Example commands:
-
-```bash
-./scripts/run-cli.sh list-documents --project acme-api
-./scripts/run-cli.sh list-documents --project acme-api --preset ideas
-./scripts/run-cli.sh create-decision --project acme-api --topic repository-split --context "Need a durable repo boundary." --decision "Keep project memory in a separate repository." --consequences "separate git history|explicit memory sync" --stable-guidance-review reviewed-no-change --date 2026-03-14
-./scripts/run-cli.sh read-document --path projects/acme-api/decisions/2026/2026-03-14-repository-split.md
-./scripts/run-cli.sh close-work-item --project acme-api --topic bounded-read-follow-up --date 2026-03-14 --state done
-./scripts/run-cli.sh commit-pending-changes --message "docs(acme-api/session): record setup validation"
-./scripts/run-cli.sh push-pending-changes --remote origin
 ```

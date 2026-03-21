@@ -38,15 +38,7 @@ Contributors should read the codebase with three goals in mind:
 ## Managed Document Model
 
 The tool works with project-scoped Markdown documents plus frontmatter.
-Current document types:
-
-- `session-note`
-- `verification-result`
-- `provider-note`
-- `decision`
-- `runbook`
-- `canonical-doc`
-- `work-item`
+The runtime supports seven managed document roles: `session-note`, `verification-result`, `provider-note`, `decision`, `runbook`, `canonical-doc`, and `work-item`.
 
 Each document type has:
 
@@ -54,12 +46,6 @@ Each document type has:
 - validated frontmatter
 - a bounded set of statuses
 - a deterministic body template or parser
-
-For `decision`, the write contract is stricter than "render a markdown file":
-
-- non-draft decisions must persist an explicit stable-guidance review outcome
-- draft decisions remain the lightweight idea-inbox form and skip that requirement
-- bootstrap-style exemptions must still be declared explicitly rather than inferred later
 
 The model is intentionally document-first rather than database-first.
 Files remain inspectable in git, while the tool enforces stable structure and path conventions around them.
@@ -73,8 +59,7 @@ This separation is what allows bounded reads and agent workflows to retrieve the
 
 When the taxonomy is violated, bounded reads become less trustworthy because unrelated semantics start to share the same retrieval surface.
 
-For decision records specifically, the separation between immutable rationale and mutable stable guidance is enforced at write time.
-Non-draft decisions must say whether stable guidance was reviewed, updated, deferred for follow-up, or exempted by bootstrap conditions.
+For decision records specifically, the separation between immutable rationale and mutable stable guidance is enforced at write time through the shared core used by both CLI and MCP surfaces.
 
 ## Path Model
 
@@ -134,8 +119,7 @@ It is the structured link between execution chronology and checks:
 - `session-note` locators explain what happened during execution
 - `verification-result` locators record what was checked
 
-The runtime now treats that relationship as part of closure semantics.
-A `work-item` written as `done` must include at least one `session-note` locator in `evidence`.
+The runtime treats that relationship as part of closure semantics rather than as optional annotation on finished work.
 
 The current runtime model keeps those relationships same-project by default.
 
@@ -167,18 +151,9 @@ Each bounded read contains:
 - notes about fallbacks or intentional omissions
 - planning explainability when the entrypoint is work-item planning oriented
 
-Current bounded entrypoints:
+Current bounded entrypoints cover startup context, planning backlog, exact-topic planning context, current-topic truth, and durable rationale lookups.
 
-- `cold-start`
-- `planning-backlog`
-- `planning-topic-entry`
-- `topic-entry`
-- `rationale-entry`
-
-The planning entrypoints are work-item aware:
-
-- `planning-backlog` reads active same-project work items in planning-ranked order
-- `planning-topic-entry` starts from exact-topic same-project work items and can follow explicit dependency, context, and evidence references with fixed limits
+The planning entrypoints are work-item aware and follow only explicit same-project dependency, context, and evidence references with fixed limits.
 
 That explicit evidence surface is part of why the closure invariant matters.
 Bounded reads stay explainable because a finished work-item can point directly to its own execution chronology and checks instead of expecting a reader to rediscover them elsewhere.
