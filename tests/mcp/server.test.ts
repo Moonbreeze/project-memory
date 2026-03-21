@@ -1272,7 +1272,7 @@ test("MCP server rejects reading unmanaged document paths", () => {
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
-test("MCP server rejects commit messages that do not match the enforced format", () => {
+test("MCP server requires a commit summary for commit_pending_changes", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
 
@@ -1290,12 +1290,12 @@ test("MCP server rejects commit messages that do not match the enforced format",
   });
 
   const response = callTool("5", "commit_pending_changes", {
-    message: "invalid commit message",
+    project: "acme-app",
   });
   const toolResult = readToolResult(response);
 
   assert.equal(toolResult.isError, true);
-  assert.match(toolResult.content[0]?.text ?? "", /docs\(<project>\/<scope>\): <summary>/);
+  assert.match(toolResult.content[0]?.text ?? "", /Invalid or missing string field: summary/);
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });
@@ -1318,7 +1318,8 @@ test("MCP server pushes committed memory-repo changes to origin", () => {
   });
 
   const commitResponse = callTool("push-2", "commit_pending_changes", {
-    message: "docs(acme-app/session): mcp push flow validation",
+    project: "acme-app",
+    summary: "mcp push flow validation",
   });
   assert.notEqual(readToolResult(commitResponse).isError, true);
 
@@ -1387,7 +1388,8 @@ test("MCP server rejects push when origin is not configured", () => {
   });
 
   const commitResponse = callTool("push-missing-2", "commit_pending_changes", {
-    message: "docs(acme-app/session): mcp missing push remote",
+    project: "acme-app",
+    summary: "mcp missing push remote",
   });
   assert.notEqual(readToolResult(commitResponse).isError, true);
 
@@ -1400,7 +1402,7 @@ test("MCP server rejects push when origin is not configured", () => {
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
-test("MCP server rejects pending managed changes from multiple projects", () => {
+test("MCP server commits only the selected project when multiple projects have pending managed changes", () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
 
@@ -1422,18 +1424,38 @@ test("MCP server rejects pending managed changes from multiple projects", () => 
     topic: "cross project two",
     date: "2026-03-11",
     context: "Prepared a second project change in the same worktree.",
-    decision: "Reject multi-project commits by default.",
+    decision: "Project-scoped commits should ignore unrelated pending changes.",
     consequences: ["Commit per project"],
     stableGuidanceReview: "reviewed-no-change",
   });
 
   const response = callTool("multi-project-3", "commit_pending_changes", {
-    message: "docs(acme-app/mixed): invalid cross-project batch",
+    project: "acme-app",
+    summary: "selected project commit",
   });
   const toolResult = readToolResult(response);
 
-  assert.equal(toolResult.isError, true);
-  assert.match(toolResult.content[0]?.text ?? "", /multiple projects|one project at a time|special-case path/);
+  assert.notEqual(toolResult.isError, true);
+  if (
+    !isRecord(toolResult.structuredContent)
+    || typeof toolResult.structuredContent.message !== "string"
+    || !Array.isArray(toolResult.structuredContent.committedPaths)
+  ) {
+    throw new Error("Expected selected-project commit structured content");
+  }
+
+  assert.equal(toolResult.structuredContent.message, "docs(acme-app/session): selected project commit");
+  assert(
+    toolResult.structuredContent.committedPaths.every((entry) => {
+      return typeof entry === "string" && entry.includes("projects/acme-app/");
+    }),
+  );
+
+  const status = spawnSync("git", ["status", "--short", "--untracked-files=all"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  });
+  assert.match(status.stdout, /projects\/beta-app\/decisions\//);
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

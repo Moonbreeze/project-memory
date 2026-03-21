@@ -2308,7 +2308,10 @@ test("commitPendingChanges stages and commits approved document paths", () => {
     context,
   );
 
-  const result = commitPendingChanges({ message: "docs(acme-app/session): commit flow validation" }, context);
+  const result = commitPendingChanges(
+    { project: "acme-app", summary: "commit flow validation" },
+    context,
+  );
   const log = spawnSync("git", ["log", "--oneline", "-1"], { cwd: rootDir, encoding: "utf8" });
 
   assert.equal(result.message, "docs(acme-app/session): commit flow validation");
@@ -2341,7 +2344,7 @@ test("commitPendingChanges excludes unmanaged files under projects", () => {
   );
 
   const result = commitPendingChanges(
-    { message: "docs(acme-app/session): enforce managed commit scope" },
+    { project: "acme-app", summary: "enforce managed commit scope" },
     context,
   );
   const committedFiles = spawnSync("git", ["show", "--name-only", "--pretty=format:", "HEAD"], {
@@ -2359,7 +2362,7 @@ test("commitPendingChanges excludes unmanaged files under projects", () => {
   assert.match(status.stdout, /\?\? projects\/acme-app\/scratch\/unmanaged\.txt/);
 });
 
-test("commitPendingChanges rejects a commit message with the wrong scope", () => {
+test("commitPendingChanges rejects a selected project with no pending managed changes", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
 
@@ -2370,22 +2373,22 @@ test("commitPendingChanges rejects a commit message with the wrong scope", () =>
   appendSessionNote(
     {
       project: "acme-app",
-      topic: "scope mismatch",
+      topic: "missing selected project",
       date: "2026-03-11",
-      summary: "Prepared commit scope validation.",
+      summary: "Prepared project-specific commit validation.",
       actions: ["Created a session note"],
-      followUp: ["Reject provider scope"],
+      followUp: ["Reject another project"],
     },
     context,
   );
 
   assert.throws(
-    () => commitPendingChanges({ message: "docs(acme-app/provider): invalid scope" }, context),
-    /docs\(acme-app\/session\)/,
+    () => commitPendingChanges({ project: "beta-app", summary: "invalid selected project" }, context),
+    /No approved document changes are available for project beta-app/,
   );
 });
 
-test("commitPendingChanges rejects a commit message with the wrong project", () => {
+test("commitPendingChanges commits only the selected project when multiple projects have pending managed changes", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
 
@@ -2396,19 +2399,46 @@ test("commitPendingChanges rejects a commit message with the wrong project", () 
   appendSessionNote(
     {
       project: "acme-app",
-      topic: "project mismatch",
+      topic: "first selected project",
       date: "2026-03-11",
       summary: "Prepared project-aware commit validation.",
       actions: ["Created a session note"],
-      followUp: ["Reject another project slug"],
+      followUp: ["Commit only acme changes"],
     },
     context,
   );
 
-  assert.throws(
-    () => commitPendingChanges({ message: "docs(beta-app/session): invalid project" }, context),
-    /docs\(acme-app\/session\)/,
+  createDecision(
+    {
+      project: "beta-app",
+      topic: "second selected project",
+      date: "2026-03-11",
+      context: "Prepared a second project change in the same worktree.",
+      decision: "Project-scoped commits should ignore unrelated pending changes.",
+      consequences: ["Only selected project paths should be committed"],
+      stableGuidanceReview: "reviewed-no-change",
+    },
+    context,
   );
+
+  const result = commitPendingChanges(
+    { project: "acme-app", summary: "selected project commit" },
+    context,
+  );
+  const committedFiles = spawnSync("git", ["show", "--name-only", "--pretty=format:", "HEAD"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  });
+  const status = spawnSync("git", ["status", "--short", "--untracked-files=all"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  });
+
+  assert.equal(result.message, "docs(acme-app/session): selected project commit");
+  assert.deepEqual(result.committedPaths, ["projects/acme-app/session-log/2026/03/2026-03-11-first-selected-project.md"]);
+  assert.match(committedFiles.stdout, /projects\/acme-app\/session-log\//);
+  assert.doesNotMatch(committedFiles.stdout, /projects\/beta-app\//);
+  assert.match(status.stdout, /projects\/beta-app\/decisions\//);
 });
 
 test("commitPendingChanges accepts canonical scope for canonical docs", () => {
@@ -2434,7 +2464,7 @@ test("commitPendingChanges accepts canonical scope for canonical docs", () => {
   );
 
   const result = commitPendingChanges(
-    { message: "docs(acme-app/canonical): resume policy baseline" },
+    { project: "acme-app", summary: "resume policy baseline" },
     context,
   );
   const log = spawnSync("git", ["log", "--oneline", "-1"], { cwd: rootDir, encoding: "utf8" });
@@ -2472,7 +2502,7 @@ test("commitPendingChanges accepts work-item scope for work-item docs", () => {
   );
 
   const result = commitPendingChanges(
-    { message: "docs(acme-app/work-item): work-item planning baseline" },
+    { project: "acme-app", summary: "work-item planning baseline" },
     context,
   );
   const log = spawnSync("git", ["log", "--oneline", "-1"], { cwd: rootDir, encoding: "utf8" });
@@ -2480,45 +2510,6 @@ test("commitPendingChanges accepts work-item scope for work-item docs", () => {
   assert.equal(result.message, "docs(acme-app/work-item): work-item planning baseline");
   assert.equal(result.committedPaths.length, 1);
   assert.match(log.stdout, /docs\(acme-app\/work-item\): work-item planning baseline/);
-});
-
-test("commitPendingChanges rejects pending managed changes from multiple projects", () => {
-  const rootDir = setupTestRepo();
-  const context = createTestRepositoryContext(rootDir);
-
-  spawnSync("git", ["init", "-q"], { cwd: rootDir, encoding: "utf8" });
-  spawnSync("git", ["config", "user.email", "tests@example.com"], { cwd: rootDir, encoding: "utf8" });
-  spawnSync("git", ["config", "user.name", "Project Memory Tests"], { cwd: rootDir, encoding: "utf8" });
-
-  appendSessionNote(
-    {
-      project: "acme-app",
-      topic: "first project commit batch",
-      date: "2026-03-11",
-      summary: "Prepared one project-specific change.",
-      actions: ["Created an acme note"],
-      followUp: ["Commit separately"],
-    },
-    context,
-  );
-
-  createDecision(
-    {
-      project: "beta-app",
-      topic: "second project commit batch",
-      date: "2026-03-11",
-      context: "Prepared a second project change in the same worktree.",
-      decision: "Reject multi-project managed commits by default.",
-      consequences: ["Commit each project independently"],
-      stableGuidanceReview: "reviewed-no-change",
-    },
-    context,
-  );
-
-  assert.throws(
-    () => commitPendingChanges({ message: "docs(acme-app/mixed): invalid multi-project batch" }, context),
-    /multiple projects|one project at a time|special-case path/,
-  );
 });
 
 test("pushPendingChanges pushes the current branch to origin by default", () => {
@@ -2541,7 +2532,7 @@ test("pushPendingChanges pushes the current branch to origin by default", () => 
     context,
   );
 
-  commitPendingChanges({ message: "docs(acme-app/session): push flow validation" }, context);
+  commitPendingChanges({ project: "acme-app", summary: "push flow validation" }, context);
 
   spawnSync("git", ["remote", "add", "origin", "https://example.invalid/project-memory.git"], {
     cwd: rootDir,
@@ -2596,7 +2587,7 @@ test("pushPendingChanges rejects missing origin remote", () => {
     context,
   );
 
-  commitPendingChanges({ message: "docs(acme-app/session): missing remote validation" }, context);
+  commitPendingChanges({ project: "acme-app", summary: "missing remote validation" }, context);
 
   assert.throws(
     () => pushPendingChanges({}, context),

@@ -799,8 +799,10 @@ test("CLI upserts provider notes and commits pending document changes", async ()
   await runCli(
     [
       "commit-pending-changes",
-      "--message",
-      "docs(acme-app/provider): claude working note",
+      "--project",
+      "acme-app",
+      "--summary",
+      "claude working note",
     ],
     commitCapture.io,
   );
@@ -849,8 +851,10 @@ test("CLI pushes committed memory-repo changes to origin", async () => {
 
   await runCli([
     "commit-pending-changes",
-    "--message",
-    "docs(acme-app/session): cli push flow validation",
+    "--project",
+    "acme-app",
+    "--summary",
+    "cli push flow validation",
   ]);
 
   spawnSync("git", ["remote", "add", "origin", "https://example.invalid/project-memory.git"], {
@@ -1504,7 +1508,7 @@ test("CLI exposes bounded read entrypoints", async () => {
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
-test("CLI rejects commit messages that do not match the enforced format", async () => {
+test("CLI requires a commit summary for commit-pending-changes", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
 
@@ -1531,8 +1535,8 @@ test("CLI rejects commit messages that do not match the enforced format", async 
   );
 
   await assert.rejects(
-    () => runCli(["commit-pending-changes", "--message", "invalid commit message"]),
-    /docs\(<project>\/<scope>\): <summary>/,
+    () => runCli(["commit-pending-changes", "--project", "acme-app"]),
+    /Missing required flag --summary/,
   );
 
   delete process.env.PROJECT_MEMORY_ROOT;
@@ -1564,8 +1568,10 @@ test("CLI rejects push when origin is not configured", async () => {
 
   await runCli([
     "commit-pending-changes",
-    "--message",
-    "docs(acme-app/session): cli missing push remote",
+    "--project",
+    "acme-app",
+    "--summary",
+    "cli missing push remote",
   ]);
 
   await assert.rejects(
@@ -1717,7 +1723,13 @@ test("CLI archives multiple documents and commits them with archive scope", asyn
     throw new Error("Unexpected archive seed result shape");
   }
 
-  await runCli(["commit-pending-changes", "--message", "docs(acme-app/mixed): seed archive fixtures"]);
+  await runCli([
+    "commit-pending-changes",
+    "--project",
+    "acme-app",
+    "--summary",
+    "seed archive fixtures",
+  ]);
 
   await runCli(["archive-document", "--path", sessionDocument.relativePath]);
   await runCli(["archive-document", "--path", verificationDocument.relativePath]);
@@ -1726,8 +1738,10 @@ test("CLI archives multiple documents and commits them with archive scope", asyn
   await runCli(
     [
       "commit-pending-changes",
-      "--message",
-      "docs(acme-app/archive): archive stale notes",
+      "--project",
+      "acme-app",
+      "--summary",
+      "archive stale notes",
     ],
     commitCapture.io,
   );
@@ -1792,7 +1806,13 @@ test("CLI requires mixed scope when archive changes are combined with active doc
     throw new Error("Unexpected session seed result shape");
   }
 
-  await runCli(["commit-pending-changes", "--message", "docs(acme-app/session): seed archive source"]);
+  await runCli([
+    "commit-pending-changes",
+    "--project",
+    "acme-app",
+    "--summary",
+    "seed archive source",
+  ]);
   await runCli(["archive-document", "--path", sessionDocument.relativePath]);
   await runCli(
     [
@@ -1814,17 +1834,14 @@ test("CLI requires mixed scope when archive changes are combined with active doc
     ],
   );
 
-  await assert.rejects(
-    () => runCli(["commit-pending-changes", "--message", "docs(acme-app/archive): invalid mixed scope"]),
-    /docs\(acme-app\/mixed\)/,
-  );
-
   const commitCapture = createCapturedIo();
   await runCli(
     [
       "commit-pending-changes",
-      "--message",
-      "docs(acme-app/mixed): archive plus active update",
+      "--project",
+      "acme-app",
+      "--summary",
+      "archive plus active update",
     ],
     commitCapture.io,
   );
@@ -1839,7 +1856,7 @@ test("CLI requires mixed scope when archive changes are combined with active doc
   delete process.env.PROJECT_MEMORY_ROOT;
 });
 
-test("CLI rejects pending managed changes from multiple projects", async () => {
+test("CLI commits only the selected project when multiple projects have pending managed changes", async () => {
   const rootDir = setupTestRepo();
   process.env.PROJECT_MEMORY_ROOT = rootDir;
 
@@ -1875,7 +1892,7 @@ test("CLI rejects pending managed changes from multiple projects", async () => {
       "--context",
       "Prepared a second project change in the same worktree.",
       "--decision",
-      "Reject multi-project commits by default.",
+      "Project-scoped commits should ignore unrelated pending changes.",
       "--consequences",
       "commit per project",
       "--stable-guidance-review",
@@ -1885,10 +1902,39 @@ test("CLI rejects pending managed changes from multiple projects", async () => {
     ],
   );
 
-  await assert.rejects(
-    () => runCli(["commit-pending-changes", "--message", "docs(acme-app/mixed): invalid cross-project batch"]),
-    /multiple projects|one project at a time|special-case path/,
+  const commitCapture = createCapturedIo();
+  await runCli(
+    [
+      "commit-pending-changes",
+      "--project",
+      "acme-app",
+      "--summary",
+      "selected project commit",
+    ],
+    commitCapture.io,
   );
+
+  const commitResult = parseLastJson(commitCapture.captured.stdout);
+  if (
+    !isRecord(commitResult) ||
+    typeof commitResult.message !== "string" ||
+    !Array.isArray(commitResult.committedPaths)
+  ) {
+    throw new Error("Unexpected selected project commit result shape");
+  }
+
+  assert.equal(commitResult.message, "docs(acme-app/session): selected project commit");
+  assert(
+    commitResult.committedPaths.every((entry) => {
+      return typeof entry === "string" && entry.includes("projects/acme-app/");
+    }),
+  );
+
+  const status = spawnSync("git", ["status", "--short", "--untracked-files=all"], {
+    cwd: rootDir,
+    encoding: "utf8",
+  });
+  assert.match(status.stdout, /projects\/beta-app\/decisions\//);
 
   delete process.env.PROJECT_MEMORY_ROOT;
 });

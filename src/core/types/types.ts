@@ -480,8 +480,10 @@ export type BoundedReadResult = {
  * Input used to commit staged project-memory changes.
  */
 export type CommitPendingChangesInput = {
-  /** Commit message to use for the git commit. */
-  message: string;
+  /** Target project whose pending managed-document changes should be committed. */
+  project: string;
+  /** Free-text one-line summary appended after the generated `docs(<project>/<scope>):` prefix. */
+  summary: string;
 };
 
 /**

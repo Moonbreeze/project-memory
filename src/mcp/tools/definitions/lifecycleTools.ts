@@ -87,12 +87,16 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
       "Stage and commit approved pending changes in the external managed memory repository after the document updates for the current slice are complete. Use this for local memory-repo commits separately from code-repo commits before any explicit remote push step.",
     inputSchema: createObjectSchema(
       {
-        message: {
+        project: {
           type: "string",
-          description: "Commit message in docs(<project>/<scope>): <summary> format.",
+          description: "Target project whose pending managed-document changes should be committed.",
+        },
+        summary: {
+          type: "string",
+          description: "Free-text one-line summary appended after the generated docs(<project>/<scope>): prefix.",
         },
       },
-      ["message"],
+      ["project", "summary"],
     ),
     handler: commitPendingChangesTool,
   },

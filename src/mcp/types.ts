@@ -1242,7 +1242,8 @@ export const parseCommitPendingChangesInput = (
   const params = readParams(value);
 
   return {
-    message: readRequiredString(params.message, "message"),
+    project: readRequiredString(params.project, "project"),
+    summary: readRequiredString(params.summary, "summary"),
   };
 };
 

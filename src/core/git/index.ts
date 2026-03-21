@@ -4,7 +4,7 @@ import path from "node:path";
 import { resolveArchiveRelativePath } from "../archive/index.ts";
 import { createRepositoryContext } from "../config/index.ts";
 import { isManagedDocumentRelativePath, resolveManagedDocumentPathInfo } from "../documents/index.ts";
-import { isLiteralMember, kebabCaseSlugPatternSource } from "../shared/index.ts";
+import { kebabCaseSlugPatternSource } from "../shared/index.ts";
 import type {
   CommitPendingChangesInput,
   ManagedDocumentPathInfo,
@@ -47,15 +47,36 @@ type CommitTarget = {
   scope: CommitScope;
 };
 
-const commitMessagePattern = new RegExp(
-  `^docs\\((${kebabCaseSlugPatternSource})\\/(session|verification|provider|decision|runbook|canonical|work-item|archive|mixed)\\): (\\S(?:.*\\S)?)$`,
-);
+/**
+ * Normalizes the selected project slug for one managed commit request.
+ */
+const normalizeCommitProject = (project: string): string => {
+  const normalizedProject = project.trim();
+  if (!normalizedProject) {
+    throw new Error("Commit project must not be empty");
+  }
+
+  if (!new RegExp(`^${kebabCaseSlugPatternSource}$`).test(normalizedProject)) {
+    throw new Error(`Commit project must be a kebab-case slug: ${normalizedProject}`);
+  }
+
+  return normalizedProject;
+};
 
 /**
- * Returns `true` when `value` is one supported commit scope.
+ * Normalizes the free-text summary used to build one commit subject.
  */
-const isCommitScope = (value: unknown): value is CommitScope => {
-  return isLiteralMember(CommitScopeValues, value);
+const normalizeCommitSummary = (summary: string): string => {
+  const normalizedSummary = summary.trim();
+  if (!normalizedSummary) {
+    throw new Error("Commit summary must not be empty");
+  }
+
+  if (/[\r\n]/.test(normalizedSummary)) {
+    throw new Error("Commit summary must be a single line");
+  }
+
+  return normalizedSummary;
 };
 
 /**
@@ -173,7 +194,7 @@ const inferCommitScope = (approvedPaths: EligibleManagedPath[]): CommitScope => 
 /**
  * Collects managed document paths eligible for one project-aware commit.
  */
-const collectApprovedManagedPaths = (cwd: string): EligibleManagedPath[] => {
+const collectApprovedManagedPaths = (cwd: string, project: string): EligibleManagedPath[] => {
   return collectChangedPaths(cwd)
     .filter((changedPath) => {
       return isManagedDocumentRelativePath(changedPath);
@@ -183,53 +204,25 @@ const collectApprovedManagedPaths = (cwd: string): EligibleManagedPath[] => {
         relativePath,
         ...resolveManagedDocumentPathInfo(relativePath),
       };
+    })
+    .filter((approvedPath) => {
+      return approvedPath.project === project;
     });
 };
 
 /**
- * Infers the required project and scope for one managed-document commit batch.
+ * Builds the commit subject for one managed-document commit batch.
  */
-const inferCommitTarget = (approvedPaths: EligibleManagedPath[]): CommitTarget => {
-  const projects = [...new Set(approvedPaths.map((approvedPath) => approvedPath.project))].sort();
-  if (projects.length !== 1) {
-    throw new Error(
-      `Pending managed document changes span multiple projects (${projects.join(", ")}). Commit one project at a time; cross-project commits require an explicit special-case path.`,
-    );
-  }
-
-  const [project] = projects;
-  if (!project) {
-    throw new Error("Pending managed document changes are missing a project slug");
-  }
-
-  return {
+const buildCommitMessage = (
+  approvedPaths: EligibleManagedPath[],
+  project: string,
+  summary: string,
+): string => {
+  const target: CommitTarget = {
     project,
     scope: inferCommitScope(approvedPaths),
   };
-};
-
-/**
- * Validates that one commit message matches the inferred project/scope target.
- */
-const validateCommitMessage = (message: string, expectedTarget: CommitTarget): void => {
-  const match = commitMessagePattern.exec(message);
-  if (!match) {
-    throw new Error(
-      "Commit message must use the format docs(<project>/<scope>): <summary> with scope in session|verification|provider|decision|runbook|canonical|work-item|archive|mixed",
-    );
-  }
-
-  const actualProject = match[1];
-  const actualScope = match[2];
-  if (!isCommitScope(actualScope)) {
-    throw new Error(`Unsupported commit scope: ${actualScope}`);
-  }
-
-  if (actualProject !== expectedTarget.project || actualScope !== expectedTarget.scope) {
-    throw new Error(
-      `Commit message must be docs(${expectedTarget.project}/${expectedTarget.scope}): for the current changes`,
-    );
-  }
+  return `docs(${target.project}/${target.scope}): ${summary}`;
 };
 
 /**
@@ -239,15 +232,16 @@ export const commitPendingChanges = (
   input: CommitPendingChangesInput,
   context = createRepositoryContext(),
 ): { message: string; committedPaths: string[] } => {
-  const approvedPaths = collectApprovedManagedPaths(context.memoryRootDir);
+  const project = normalizeCommitProject(input.project);
+  const summary = normalizeCommitSummary(input.summary);
+  const approvedPaths = collectApprovedManagedPaths(context.memoryRootDir, project);
 
   if (approvedPaths.length === 0) {
-    throw new Error("No approved document changes are available for commit");
+    throw new Error(`No approved document changes are available for project ${project}`);
   }
 
-  const commitTarget = inferCommitTarget(approvedPaths);
+  const message = buildCommitMessage(approvedPaths, project, summary);
   const approvedRelativePaths = approvedPaths.map((approvedPath) => approvedPath.relativePath);
-  validateCommitMessage(input.message, commitTarget);
 
   runGit(["add", "--", ...approvedRelativePaths], context.memoryRootDir);
 
@@ -261,12 +255,12 @@ export const commitPendingChanges = (
   }
 
   runGit(
-    ["commit", "-m", input.message, "--only", "--", ...approvedRelativePaths],
+    ["commit", "-m", message, "--only", "--", ...approvedRelativePaths],
     context.memoryRootDir,
   );
 
   return {
-    message: input.message,
+    message,
     committedPaths: staged.map((entry) => path.normalize(entry)),
   };
 };
