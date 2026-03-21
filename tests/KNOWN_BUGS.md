@@ -9,3 +9,11 @@
 - Covering tests:
   - `tests/core/documentFlow.test.ts`
   - `tests/mcp/server.test.ts`
+
+## Bug #2
+
+- Topic: `fix-upsert-work-item-repair-flow-for-invalid-done-items`
+- Status: open
+- Summary: `upsert_work_item` cannot repair an already-invalid `done` work-item when the fix should add `session-note` evidence or change `workItemState`, because the write path reads and validates the stored work-item while resolving `recorded_at` before the new input is applied.
+- Expected behavior: `upsert_work_item` should validate and write the new input so an invalid stored `done` work-item can be repaired without requiring the old document to already satisfy the done-state evidence invariant.
+- Covering tests: pending regression coverage
