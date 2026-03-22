@@ -9,7 +9,9 @@
     "cli:local": "./scripts/run-cli.sh",
     "mcp": "node --experimental-strip-types src/mcp/server.ts",
     "mcp:local": "./scripts/run-mcp.sh",
-    "test": "node --experimental-strip-types --test tests/core/*.test.ts tests/mcp/*.test.ts tests/cli/*.test.ts tests/e2e/*.test.ts",
+    "web": "node --experimental-strip-types src/web/index.ts",
+    "web:local": "./scripts/run-web.sh",
+    "test": "node --experimental-strip-types --test tests/core/*.test.ts tests/mcp/*.test.ts tests/cli/*.test.ts tests/e2e/*.test.ts tests/web/*.test.ts",
     "test:stdio-integration": "bash scripts/test-stdio-integration.sh"
   },
   "devDependencies": {

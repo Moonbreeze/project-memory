@@ -56,10 +56,24 @@ Today the supported local entrypoints are wrappers:
 ./scripts/run-cli.sh list-documents --project acme-api
 ./scripts/run-cli.sh list-documents --project acme-api --preset ideas
 ./scripts/run-mcp.sh
+./scripts/run-web.sh
 ```
 
 The wrappers source `.project-memory.env` automatically, so you normally do not need to export `PROJECT_MEMORY_ROOT` by hand.
 They are intentionally low-level entrypoints, not polished end-user commands.
+
+The read-only Web shell is also available through npm:
+
+```bash
+npm run web:local
+```
+
+Optional host and port overrides:
+
+- `PROJECT_MEMORY_WEB_HOST` or fallback `HOST`
+- `PROJECT_MEMORY_WEB_PORT` or fallback `PORT`
+
+Project-memory-specific variables take precedence over the generic fallbacks.
 
 ## Install Command
 
