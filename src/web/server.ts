@@ -1,13 +1,7 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
-import {
-  createRepositoryContext,
-  isManagedDocumentRelativePath,
-  listDocuments,
-  readDocument,
-} from "../core/index.ts";
-import type { ListedDocument, ParsedDocument } from "../core/index.ts";
+import { createRepositoryContext } from "../core/index.ts";
 
 import {
   DefaultWebHost,
@@ -17,7 +11,20 @@ import {
   ProjectMemoryWebHostEnvVar,
   ProjectMemoryWebPortEnvVar,
 } from "./constants.ts";
-import type { WebRequestInput, WebResponsePayload, WebRuntimeConfig } from "./types.ts";
+import {
+  isWebReadError,
+  normalizeWebTimelineQuery,
+  readWebDocument,
+  readWebTimeline,
+} from "./readAdapter.ts";
+import type {
+  WebDocumentDetail,
+  WebDocumentSummary,
+  WebReadError,
+  WebRequestInput,
+  WebResponsePayload,
+  WebRuntimeConfig,
+} from "./types.ts";
 
 const getPreferredEnvValue = (preferredName: string, fallbackName: string): string | undefined => {
   const preferredValue = process.env[preferredName]?.trim();
@@ -51,10 +58,6 @@ const escapeHtml = (value: string): string => {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-};
-
-const encodeDocumentRoutePath = (relativePath: string): string => {
-  return `/documents/${encodeURIComponent(relativePath)}`;
 };
 
 const renderHtmlPage = (title: string, content: string): string => {
@@ -96,7 +99,7 @@ const renderHtmlPage = (title: string, content: string): string => {
   ].join("\n");
 };
 
-const renderTimeline = (documents: ListedDocument[]): string => {
+const renderTimeline = (documents: WebDocumentSummary[]): string => {
   const items = documents.length === 0
     ? "<p class=\"panel\">No managed documents found in the configured memory repository.</p>"
     : [
@@ -107,9 +110,9 @@ const renderTimeline = (documents: ListedDocument[]): string => {
           const planningState = document.planningState ? `, planning: ${document.planningState}` : "";
           return [
             "    <li>",
-            `      <a href="${escapeHtml(encodeDocumentRoutePath(document.relativePath))}">${escapeHtml(document.metadata.topic)}</a>`,
-            `      <div class="meta">${escapeHtml(document.type)} · ${escapeHtml(document.metadata.project)} · ${escapeHtml(document.metadata.status)}${escapeHtml(planningState)}</div>`,
-            `      <div class="meta">${escapeHtml(document.metadata.date)} · ${escapeHtml(document.relativePath)}</div>`,
+            `      <a href="${escapeHtml(document.routePath)}">${escapeHtml(document.topic)}</a>`,
+            `      <div class="meta">${escapeHtml(document.type)} · ${escapeHtml(document.project)} · ${escapeHtml(document.status)}${escapeHtml(planningState)}</div>`,
+            `      <div class="meta">${escapeHtml(document.date)} · ${escapeHtml(document.relativePath)}</div>`,
             "    </li>",
           ].join("\n");
         }),
@@ -120,18 +123,18 @@ const renderTimeline = (documents: ListedDocument[]): string => {
   return renderHtmlPage("Project Memory Timeline", items);
 };
 
-const renderDocumentView = (document: ParsedDocument): string => {
+const renderDocumentView = (document: WebDocumentDetail): string => {
   const metadataLines = [
-    `${document.type} · ${document.metadata.project}`,
-    `${document.metadata.date} · ${document.metadata.status}`,
+    `${document.type} · ${document.project}`,
+    `${document.date} · ${document.status}`,
     document.relativePath,
   ];
 
   return renderHtmlPage(
-    document.metadata.topic,
+    document.topic,
     [
       "<section class=\"panel\">",
-      `  <h2>${escapeHtml(document.metadata.topic)}</h2>`,
+      `  <h2>${escapeHtml(document.topic)}</h2>`,
       ...metadataLines.map((line) => `  <div class="meta">${escapeHtml(line)}</div>`),
       "</section>",
       "<section class=\"panel\">",
@@ -187,9 +190,8 @@ const writeResponse = (
   response.end(payload.body);
 };
 
-const normalizePathnameFromInput = (request: WebRequestInput): string => {
-  const url = new URL(request.url ?? "/", "http://127.0.0.1");
-  return url.pathname;
+const normalizeUrlFromInput = (request: WebRequestInput): URL => {
+  return new URL(request.url ?? "/", "http://127.0.0.1");
 };
 
 const decodeDocumentRelativePath = (pathname: string): string | null => {
@@ -210,6 +212,20 @@ const decodeDocumentRelativePath = (pathname: string): string | null => {
   }
 };
 
+const buildReadErrorResponse = (error: WebReadError): WebResponsePayload => {
+  return buildHtmlResponse(
+    error.statusCode,
+    renderErrorPage(
+      error.statusCode === 404
+        ? "Not Found"
+        : error.code === "invalid-query"
+          ? "Invalid Query"
+          : "Read Failed",
+      error.message,
+    ),
+  );
+};
+
 /**
  * Executes one Web request against the thin read-only route layer.
  */
@@ -222,35 +238,39 @@ export const handleWebRequest = async (
     return buildMethodNotAllowedResponse();
   }
 
-  const pathname = normalizePathnameFromInput(request);
+  const requestUrl = normalizeUrlFromInput(request);
+  const pathname = requestUrl.pathname;
 
   if (pathname === "/" || pathname === "/timeline") {
-    const timelineResult = listDocuments({ limit: 50 }, config.context);
-    return buildHtmlResponse(200, renderTimeline(timelineResult.documents));
+    try {
+      const timelineQuery = normalizeWebTimelineQuery({
+        limit: requestUrl.searchParams.get("limit") ?? undefined,
+        project: requestUrl.searchParams.get("project") ?? undefined,
+        status: requestUrl.searchParams.get("status") ?? undefined,
+        type: requestUrl.searchParams.get("type") ?? undefined,
+      });
+      const timelineResult = readWebTimeline(timelineQuery, config.context);
+      return buildHtmlResponse(200, renderTimeline(timelineResult.rows));
+    } catch (error) {
+      if (isWebReadError(error)) {
+        return buildReadErrorResponse(error);
+      }
+
+      throw error;
+    }
   }
 
   const relativePath = decodeDocumentRelativePath(pathname);
   if (relativePath) {
-    if (!isManagedDocumentRelativePath(relativePath)) {
-      return buildHtmlResponse(
-        404,
-        renderErrorPage("Not Found", "Document path is outside managed routes."),
-      );
-    }
-
     try {
-      const document = readDocument(config.context, relativePath);
+      const document = readWebDocument(relativePath, config.context);
       return buildHtmlResponse(200, renderDocumentView(document));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const statusCode = message.includes("ENOENT") ? 404 : 500;
-      return buildHtmlResponse(
-        statusCode,
-        renderErrorPage(
-          statusCode === 404 ? "Not Found" : "Read Failed",
-          statusCode === 404 ? "Managed document was not found." : message,
-        ),
-      );
+      if (isWebReadError(error)) {
+        return buildReadErrorResponse(error);
+      }
+
+      throw error;
     }
   }
 

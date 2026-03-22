@@ -57,6 +57,65 @@ test("Web timeline route lists managed documents using shared core reads", async
   assert.match(response.body, new RegExp(encodeURIComponent(sessionNote.relativePath)));
 });
 
+test("Web timeline route applies normalized query filters through the read adapter", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+  setupTestProjectTaxonomy(context, "beta-app", ["docs"]);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "kept row",
+      date: "2026-03-22",
+      summary: "Seed the row that should survive filtering.",
+      actions: ["Create one matching session note."],
+      followUp: ["Keep filter parsing in the adapter."],
+    },
+    context,
+  );
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "filtered type",
+      date: "2026-03-22",
+      context: "Seed a non-matching type.",
+      decision: "Only session notes should remain under this query.",
+      consequences: ["Type filtering stays visible in the shell."],
+      stableGuidanceReview: "reviewed-no-change",
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "beta-app",
+      topic: "filtered project",
+      date: "2026-03-22",
+      summary: "Seed a non-matching project row.",
+      actions: ["Create one row outside the selected project."],
+      followUp: ["Keep project filters deterministic."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline?project=acme-app&type=session-note",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /kept-row/);
+  assert.doesNotMatch(response.body, /filtered-type/);
+  assert.doesNotMatch(response.body, /filtered-project/);
+});
+
 test("Web document route reads one managed document by relative path", async () => {
   const memoryRootDir = setupTestRepo();
   const context = createTestRepositoryContext(memoryRootDir);
@@ -110,6 +169,27 @@ test("Web document route returns not found for unmanaged paths", async () => {
 
   assert.equal(response.statusCode, 404);
   assert.match(response.body, /outside managed routes/i);
+});
+
+test("Web timeline route returns invalid query for unsupported filters", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline?type=unknown-kind",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body, /Invalid Query/);
+  assert.match(response.body, /Unsupported document type: unknown-kind/);
 });
 
 test("resolveWebRuntimeConfig prefers project-memory-specific host and port overrides", () => {
