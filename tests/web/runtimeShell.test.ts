@@ -54,7 +54,66 @@ test("Web timeline route lists managed documents using shared core reads", async
   assert.match(response.body, /Latest Documents/);
   assert.match(response.body, /web-baseline/);
   assert.match(response.body, /timeline-ordering/);
+  assert.match(response.body, /Type/);
+  assert.match(response.body, /Project/);
+  assert.match(response.body, /Status/);
+  assert.match(response.body, /Path/);
+  assert.match(response.body, /Open document/);
   assert.match(response.body, new RegExp(encodeURIComponent(sessionNote.relativePath)));
+});
+
+test("Web timeline route keeps same-day results in shared-core latest-first order", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "earlier note",
+      date: "2026-03-22",
+      recordedAt: "2026-03-22T09:00:00.000Z",
+      summary: "Seed the older same-day row.",
+      actions: ["Create one same-day timeline row."],
+      followUp: ["Keep later rows ahead of this one."],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "later note",
+      date: "2026-03-22",
+      recordedAt: "2026-03-22T18:00:00.000Z",
+      summary: "Seed the newer same-day row.",
+      actions: ["Create one later same-day timeline row."],
+      followUp: ["Keep shared-core chronology visible in the Web UI."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline?project=acme-app&type=session-note",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Ordered by shared-core latest-first chronology/);
+  assert.match(response.body, /Recorded At/);
+
+  const laterIndex = response.body.indexOf("later-note");
+  const earlierIndex = response.body.indexOf("earlier-note");
+
+  assert.notEqual(laterIndex, -1);
+  assert.notEqual(earlierIndex, -1);
+  assert.ok(laterIndex < earlierIndex);
 });
 
 test("Web timeline route applies normalized query filters through the read adapter", async () => {

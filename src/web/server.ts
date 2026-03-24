@@ -19,11 +19,11 @@ import {
 } from "./readAdapter.ts";
 import type {
   WebDocumentDetail,
-  WebDocumentSummary,
   WebReadError,
   WebRequestInput,
   WebResponsePayload,
   WebRuntimeConfig,
+  WebTimelineView,
 } from "./types.ts";
 
 const getPreferredEnvValue = (preferredName: string, fallbackName: string): string | undefined => {
@@ -60,6 +60,43 @@ const escapeHtml = (value: string): string => {
     .replaceAll("'", "&#39;");
 };
 
+const renderMetadataEntries = (
+  entries: ReadonlyArray<{ label: string; value: string }>,
+): string => {
+  return [
+    '<dl class="metadata-grid">',
+    ...entries.map((entry) => {
+      return [
+        "  <div>",
+        `    <dt>${escapeHtml(entry.label)}</dt>`,
+        `    <dd>${escapeHtml(entry.value)}</dd>`,
+        "  </div>",
+      ].join("\n");
+    }),
+    "</dl>",
+  ].join("\n");
+};
+
+const renderTimelineQuerySummary = (view: WebTimelineView): string => {
+  const summaryParts = [`${view.rows.length} result${view.rows.length === 1 ? "" : "s"}`];
+
+  if (view.appliedQuery.project) {
+    summaryParts.push(`project: ${view.appliedQuery.project}`);
+  }
+
+  if (view.appliedQuery.type) {
+    summaryParts.push(`type: ${view.appliedQuery.type}`);
+  }
+
+  if (view.appliedQuery.status) {
+    summaryParts.push(`status: ${view.appliedQuery.status}`);
+  }
+
+  summaryParts.push(`limit: ${String(view.appliedQuery.limit)}`);
+
+  return summaryParts.join(" · ");
+};
+
 const renderHtmlPage = (title: string, content: string): string => {
   return [
     "<!doctype html>",
@@ -70,10 +107,12 @@ const renderHtmlPage = (title: string, content: string): string => {
     `  <title>${escapeHtml(title)}</title>`,
     "  <style>",
     "    :root { color-scheme: light; font-family: Georgia, 'Times New Roman', serif; }",
-    "    body { margin: 0; background: linear-gradient(180deg, #f7f1e3 0%, #fffdf8 100%); color: #1d1b19; }",
-    "    main { max-width: 960px; margin: 0 auto; padding: 32px 20px 48px; }",
+    "    * { box-sizing: border-box; }",
+    "    body { margin: 0; background: radial-gradient(circle at top, rgba(211, 170, 109, 0.22), transparent 28%), linear-gradient(180deg, #f7f1e3 0%, #fffdf8 100%); color: #1d1b19; }",
+    "    main { max-width: 1040px; margin: 0 auto; padding: 32px 20px 48px; }",
     "    header { margin-bottom: 24px; }",
     "    h1 { margin: 0 0 8px; font-size: 2.2rem; }",
+    "    h2, h3 { margin-top: 0; }",
     "    nav { margin-bottom: 24px; }",
     "    nav a { color: #5d2e0c; text-decoration: none; font-weight: 700; }",
     "    nav a:hover { text-decoration: underline; }",
@@ -81,8 +120,25 @@ const renderHtmlPage = (title: string, content: string): string => {
     "    li { margin-bottom: 16px; }",
     "    .meta { color: #5f564d; font-size: 0.95rem; }",
     "    .panel { background: rgba(255, 255, 255, 0.84); border: 1px solid #d8cfbf; border-radius: 12px; padding: 18px 20px; box-shadow: 0 12px 30px rgba(75, 53, 32, 0.08); }",
+    "    .page-intro { display: grid; gap: 10px; margin-bottom: 18px; }",
+    "    .timeline-list { list-style: none; padding-left: 0; margin: 24px 0 0; display: grid; gap: 16px; }",
+    "    .timeline-item { display: grid; gap: 14px; }",
+    "    .timeline-title { margin-bottom: 0; font-size: 1.35rem; }",
+    "    .timeline-title a { color: #5d2e0c; text-decoration: none; }",
+    "    .timeline-title a:hover { text-decoration: underline; }",
+    "    .timeline-actions { display: flex; gap: 12px; flex-wrap: wrap; }",
+    "    .timeline-actions a { color: #5d2e0c; font-weight: 700; text-decoration: none; }",
+    "    .timeline-actions a:hover { text-decoration: underline; }",
+    "    .metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px 18px; margin: 0; }",
+    "    .metadata-grid dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6a5c; }",
+    "    .metadata-grid dd { margin: 4px 0 0; font-size: 0.98rem; word-break: break-word; }",
     "    pre { overflow-x: auto; background: #201a17; color: #f8f2e9; padding: 16px; border-radius: 10px; }",
     "    code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; }",
+    "    @media (max-width: 640px) {",
+    "      main { padding: 24px 14px 36px; }",
+    "      h1 { font-size: 1.9rem; }",
+    "      .panel { padding: 16px; }",
+    "    }",
     "  </style>",
     "</head>",
     "<body>",
@@ -99,20 +155,41 @@ const renderHtmlPage = (title: string, content: string): string => {
   ].join("\n");
 };
 
-const renderTimeline = (documents: WebDocumentSummary[]): string => {
-  const items = documents.length === 0
-    ? "<p class=\"panel\">No managed documents found in the configured memory repository.</p>"
+const renderTimeline = (view: WebTimelineView): string => {
+  const items = view.rows.length === 0
+    ? "<p class=\"panel\">No managed documents matched the current timeline query.</p>"
     : [
-        "<section class=\"panel\">",
+        '<section class="page-intro panel">',
         "  <h2>Latest Documents</h2>",
-        "  <ul>",
-        ...documents.map((document) => {
-          const planningState = document.planningState ? `, planning: ${document.planningState}` : "";
+        '  <p class="meta">Ordered by shared-core latest-first chronology using date, recorded_at, then relativePath.</p>',
+        `  <p class="meta">${escapeHtml(renderTimelineQuerySummary(view))}</p>`,
+        "</section>",
+        '<section aria-label="Timeline results">',
+        '  <ul class="timeline-list">',
+        ...view.rows.map((document) => {
+          const metadataEntries = [
+            { label: "Type", value: document.type },
+            { label: "Project", value: document.project },
+            { label: "Status", value: document.status },
+            { label: "Date", value: document.date },
+            ...(document.recordedAt ? [{ label: "Recorded At", value: document.recordedAt }] : []),
+            ...(document.planningState ? [{ label: "Planning", value: document.planningState }] : []),
+            ...(document.dependencyCount !== undefined
+              ? [{ label: "Dependencies", value: String(document.dependencyCount) }]
+              : []),
+            ...(document.unresolvedDependencyCount !== undefined
+              ? [{ label: "Unresolved", value: String(document.unresolvedDependencyCount) }]
+              : []),
+            { label: "Path", value: document.relativePath },
+          ];
+
           return [
-            "    <li>",
-            `      <a href="${escapeHtml(document.routePath)}">${escapeHtml(document.topic)}</a>`,
-            `      <div class="meta">${escapeHtml(document.type)} · ${escapeHtml(document.project)} · ${escapeHtml(document.status)}${escapeHtml(planningState)}</div>`,
-            `      <div class="meta">${escapeHtml(document.date)} · ${escapeHtml(document.relativePath)}</div>`,
+            '    <li class="timeline-item panel">',
+            `      <h3 class="timeline-title"><a href="${escapeHtml(document.routePath)}">${escapeHtml(document.topic)}</a></h3>`,
+            renderMetadataEntries(metadataEntries).split("\n").map((line) => `      ${line}`).join("\n"),
+            '      <div class="timeline-actions">',
+            `        <a href="${escapeHtml(document.routePath)}">Open document</a>`,
+            "      </div>",
             "    </li>",
           ].join("\n");
         }),
@@ -250,7 +327,7 @@ export const handleWebRequest = async (
         type: requestUrl.searchParams.get("type") ?? undefined,
       });
       const timelineResult = readWebTimeline(timelineQuery, config.context);
-      return buildHtmlResponse(200, renderTimeline(timelineResult.rows));
+      return buildHtmlResponse(200, renderTimeline(timelineResult));
     } catch (error) {
       if (isWebReadError(error)) {
         return buildReadErrorResponse(error);
