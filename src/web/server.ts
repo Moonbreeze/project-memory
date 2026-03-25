@@ -26,6 +26,8 @@ import type {
   WebTimelineView,
 } from "./types.ts";
 
+const TimelineRoutePath = "/timeline";
+
 const getPreferredEnvValue = (preferredName: string, fallbackName: string): string | undefined => {
   const preferredValue = process.env[preferredName]?.trim();
   if (preferredValue) {
@@ -97,6 +99,33 @@ const renderTimelineQuerySummary = (view: WebTimelineView): string => {
   return summaryParts.join(" · ");
 };
 
+const normalizeTimelinePath = (pathname: string, search: string): string => {
+  if (pathname !== "/" && pathname !== TimelineRoutePath) {
+    return TimelineRoutePath;
+  }
+
+  return search ? `${TimelineRoutePath}${search}` : TimelineRoutePath;
+};
+
+const normalizeTimelineReturnPath = (rawValue: string | null): string => {
+  if (!rawValue) {
+    return TimelineRoutePath;
+  }
+
+  try {
+    const url = new URL(rawValue, "http://127.0.0.1");
+    return normalizeTimelinePath(url.pathname, url.search);
+  } catch {
+    return TimelineRoutePath;
+  }
+};
+
+const createDocumentHref = (routePath: string, timelineReturnPath: string): string => {
+  const documentUrl = new URL(routePath, "http://127.0.0.1");
+  documentUrl.searchParams.set("from", timelineReturnPath);
+  return `${documentUrl.pathname}?${documentUrl.searchParams.toString()}`;
+};
+
 const renderHtmlPage = (title: string, content: string): string => {
   return [
     "<!doctype html>",
@@ -155,7 +184,7 @@ const renderHtmlPage = (title: string, content: string): string => {
   ].join("\n");
 };
 
-const renderTimeline = (view: WebTimelineView): string => {
+const renderTimeline = (view: WebTimelineView, timelineReturnPath: string): string => {
   const items = view.rows.length === 0
     ? "<p class=\"panel\">No managed documents matched the current timeline query.</p>"
     : [
@@ -182,13 +211,14 @@ const renderTimeline = (view: WebTimelineView): string => {
               : []),
             { label: "Path", value: document.relativePath },
           ];
+          const documentHref = createDocumentHref(document.routePath, timelineReturnPath);
 
           return [
             '    <li class="timeline-item panel">',
-            `      <h3 class="timeline-title"><a href="${escapeHtml(document.routePath)}">${escapeHtml(document.topic)}</a></h3>`,
+            `      <h3 class="timeline-title"><a href="${escapeHtml(documentHref)}">${escapeHtml(document.topic)}</a></h3>`,
             renderMetadataEntries(metadataEntries).split("\n").map((line) => `      ${line}`).join("\n"),
             '      <div class="timeline-actions">',
-            `        <a href="${escapeHtml(document.routePath)}">Open document</a>`,
+            `        <a href="${escapeHtml(documentHref)}">Open document</a>`,
             "      </div>",
             "    </li>",
           ].join("\n");
@@ -200,35 +230,57 @@ const renderTimeline = (view: WebTimelineView): string => {
   return renderHtmlPage("Project Memory Timeline", items);
 };
 
-const renderDocumentView = (document: WebDocumentDetail): string => {
-  const metadataLines = [
-    `${document.type} · ${document.project}`,
-    `${document.date} · ${document.status}`,
-    document.relativePath,
+const renderDocumentView = (
+  document: WebDocumentDetail,
+  timelineReturnPath: string,
+): string => {
+  const metadataEntries = [
+    { label: "Topic", value: document.topic },
+    { label: "Type", value: document.type },
+    { label: "Project", value: document.project },
+    { label: "Status", value: document.status },
+    { label: "Date", value: document.date },
+    { label: "Recorded At", value: document.recordedAt ?? "Not recorded" },
+    { label: "Path", value: document.relativePath },
   ];
 
   return renderHtmlPage(
     document.topic,
     [
-      "<section class=\"panel\">",
+      '<section class="page-intro panel">',
       `  <h2>${escapeHtml(document.topic)}</h2>`,
-      ...metadataLines.map((line) => `  <div class="meta">${escapeHtml(line)}</div>`),
+      '  <p class="meta">Exact managed document view resolved through the shared-core read surface.</p>',
+      '  <div class="timeline-actions">',
+      `    <a href="${escapeHtml(timelineReturnPath)}">Back to timeline</a>`,
+      "  </div>",
+      "</section>",
+      "<section class=\"panel\">",
+      "  <h2>Document Metadata</h2>",
+      renderMetadataEntries(metadataEntries).split("\n").map((line) => `  ${line}`).join("\n"),
       "</section>",
       "<section class=\"panel\">",
       "  <h2>Markdown Source</h2>",
+      '  <p class="meta">Rendered as raw Markdown source in the baseline read-only shell.</p>',
       `  <pre><code>${escapeHtml(document.body)}</code></pre>`,
       "</section>",
     ].join("\n"),
   );
 };
 
-const renderErrorPage = (title: string, message: string): string => {
+const renderErrorPage = (
+  title: string,
+  message: string,
+  timelineReturnPath: string = TimelineRoutePath,
+): string => {
   return renderHtmlPage(
     title,
     [
       "<section class=\"panel\">",
       `  <h2>${escapeHtml(title)}</h2>`,
       `  <p>${escapeHtml(message)}</p>`,
+      '  <div class="timeline-actions">',
+      `    <a href="${escapeHtml(timelineReturnPath)}">Back to timeline</a>`,
+      "  </div>",
       "</section>",
     ].join("\n"),
   );
@@ -289,7 +341,10 @@ const decodeDocumentRelativePath = (pathname: string): string | null => {
   }
 };
 
-const buildReadErrorResponse = (error: WebReadError): WebResponsePayload => {
+const buildReadErrorResponse = (
+  error: WebReadError,
+  timelineReturnPath: string = TimelineRoutePath,
+): WebResponsePayload => {
   return buildHtmlResponse(
     error.statusCode,
     renderErrorPage(
@@ -299,6 +354,7 @@ const buildReadErrorResponse = (error: WebReadError): WebResponsePayload => {
           ? "Invalid Query"
           : "Read Failed",
       error.message,
+      timelineReturnPath,
     ),
   );
 };
@@ -318,7 +374,7 @@ export const handleWebRequest = async (
   const requestUrl = normalizeUrlFromInput(request);
   const pathname = requestUrl.pathname;
 
-  if (pathname === "/" || pathname === "/timeline") {
+  if (pathname === "/" || pathname === TimelineRoutePath) {
     try {
       const timelineQuery = normalizeWebTimelineQuery({
         limit: requestUrl.searchParams.get("limit") ?? undefined,
@@ -327,7 +383,10 @@ export const handleWebRequest = async (
         type: requestUrl.searchParams.get("type") ?? undefined,
       });
       const timelineResult = readWebTimeline(timelineQuery, config.context);
-      return buildHtmlResponse(200, renderTimeline(timelineResult));
+      return buildHtmlResponse(
+        200,
+        renderTimeline(timelineResult, normalizeTimelinePath(pathname, requestUrl.search)),
+      );
     } catch (error) {
       if (isWebReadError(error)) {
         return buildReadErrorResponse(error);
@@ -339,19 +398,24 @@ export const handleWebRequest = async (
 
   const relativePath = decodeDocumentRelativePath(pathname);
   if (relativePath) {
+    const timelineReturnPath = normalizeTimelineReturnPath(requestUrl.searchParams.get("from"));
+
     try {
       const document = readWebDocument(relativePath, config.context);
-      return buildHtmlResponse(200, renderDocumentView(document));
+      return buildHtmlResponse(200, renderDocumentView(document, timelineReturnPath));
     } catch (error) {
       if (isWebReadError(error)) {
-        return buildReadErrorResponse(error);
+        return buildReadErrorResponse(error, timelineReturnPath);
       }
 
       throw error;
     }
   }
 
-  return buildHtmlResponse(404, renderErrorPage("Not Found", "No Web route matches this path."));
+  return buildHtmlResponse(
+    404,
+    renderErrorPage("Not Found", "No Web route matches this path."),
+  );
 };
 
 /**

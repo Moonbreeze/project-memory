@@ -7,6 +7,7 @@ import {
   createTestRepositoryContext,
   setupTestProjectTaxonomy,
   setupTestRepo,
+  writeRawInvalidDoneWorkItem,
 } from "../fixtures/setupTestRepo.ts";
 
 test("Web timeline route lists managed documents using shared core reads", async () => {
@@ -173,9 +174,13 @@ test("Web timeline route applies normalized query filters through the read adapt
   assert.match(response.body, /kept-row/);
   assert.doesNotMatch(response.body, /filtered-type/);
   assert.doesNotMatch(response.body, /filtered-project/);
+  assert.match(
+    response.body,
+    /from=%2Ftimeline%3Fproject%3Dacme-app%26type%3Dsession-note/,
+  );
 });
 
-test("Web document route reads one managed document by relative path", async () => {
+test("Web document route renders provenance metadata and preserves timeline context", async () => {
   const memoryRootDir = setupTestRepo();
   const context = createTestRepositoryContext(memoryRootDir);
   setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
@@ -185,6 +190,7 @@ test("Web document route reads one managed document by relative path", async () 
       project: "acme-app",
       topic: "open exact document",
       date: "2026-03-22",
+      recordedAt: "2026-03-22T14:30:00.000Z",
       summary: "Seed exact document routing coverage.",
       actions: ["Create a managed document for route lookup."],
       followUp: ["Retain raw markdown rendering until the markdown slice lands."],
@@ -195,7 +201,7 @@ test("Web document route reads one managed document by relative path", async () 
   const response = await handleWebRequest(
     {
       method: "GET",
-      url: `/documents/${encodeURIComponent(sessionNote.relativePath)}`,
+      url: `/documents/${encodeURIComponent(sessionNote.relativePath)}?from=${encodeURIComponent("/timeline?project=acme-app&type=session-note")}`,
     },
     {
       context,
@@ -206,7 +212,17 @@ test("Web document route reads one managed document by relative path", async () 
 
   assert.equal(response.statusCode, 200);
   assert.match(response.body, /open-exact-document/);
+  assert.match(response.body, /Document Metadata/);
+  assert.match(response.body, /Topic/);
+  assert.match(response.body, /Project/);
+  assert.match(response.body, /Status/);
+  assert.match(response.body, /Date/);
+  assert.match(response.body, /Recorded At/);
+  assert.match(response.body, /2026-03-22T14:30:00.000Z/);
+  assert.match(response.body, /Markdown Source/);
   assert.match(response.body, /Seed exact document routing coverage\./);
+  assert.match(response.body, /Back to timeline/);
+  assert.match(response.body, /href="\/timeline\?project=acme-app&amp;type=session-note"/);
   assert.match(response.body, new RegExp(sessionNote.relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
@@ -228,6 +244,68 @@ test("Web document route returns not found for unmanaged paths", async () => {
 
   assert.equal(response.statusCode, 404);
   assert.match(response.body, /outside managed routes/i);
+  assert.match(response.body, /Back to timeline/);
+});
+
+test("Web document route returns not found for a missing managed document", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  const sessionNote = appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "existing document",
+      date: "2026-03-22",
+      summary: "Seed a valid managed path.",
+      actions: ["Create one managed document."],
+      followUp: ["Use the path shape for a missing-document check."],
+    },
+    context,
+  );
+  const missingRelativePath = sessionNote.relativePath.replace("existing-document", "missing-document");
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: `/documents/${encodeURIComponent(missingRelativePath)}`,
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 404);
+  assert.match(response.body, /Managed document was not found\./);
+});
+
+test("Web document route returns deterministic fallback for invalid managed documents", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  const relativePath = writeRawInvalidDoneWorkItem(
+    memoryRootDir,
+    "acme-app",
+    "broken-work-item",
+    "2026-03-22",
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: `/documents/${encodeURIComponent(relativePath)}`,
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 500);
+  assert.match(response.body, /Read Failed/);
+  assert.match(response.body, /Back to timeline/);
 });
 
 test("Web timeline route returns invalid query for unsupported filters", async () => {
