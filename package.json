@@ -11,6 +11,7 @@
     "mcp:local": "./scripts/run-mcp.sh",
     "web": "node --experimental-strip-types src/web/index.ts",
     "web:local": "./scripts/run-web.sh",
+    "web:public": "PROJECT_MEMORY_WEB_HOST=0.0.0.0 ./scripts/run-web.sh",
     "test": "node --experimental-strip-types --test tests/core/*.test.ts tests/mcp/*.test.ts tests/cli/*.test.ts tests/e2e/*.test.ts tests/web/*.test.ts",
     "test:stdio-integration": "bash scripts/test-stdio-integration.sh"
   },
