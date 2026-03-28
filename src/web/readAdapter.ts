@@ -254,7 +254,7 @@ export const readWebDocument = (
       throw createWebReadError("not-found", "Managed document was not found.", 404);
     }
 
-    throw createWebReadError("invalid-read", message, 500);
+    throw createWebReadError("invalid-document", message, 500);
   }
 };
 

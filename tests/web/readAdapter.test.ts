@@ -80,7 +80,7 @@ test("Web read adapter normalizes timeline filters and maps document summaries",
   );
 });
 
-test("Web read adapter returns a normalized invalid-read error for invalid managed documents", () => {
+test("Web read adapter returns a normalized invalid-document error for invalid managed documents", () => {
   const memoryRootDir = setupTestRepo();
   const context = createTestRepositoryContext(memoryRootDir);
   const relativePath = writeRawInvalidDoneWorkItem(
@@ -99,7 +99,7 @@ test("Web read adapter returns a normalized invalid-read error for invalid manag
       return;
     }
 
-    assert.equal(error.code, "invalid-read");
+    assert.equal(error.code, "invalid-document");
     assert.equal(error.statusCode, 500);
   }
 });

@@ -178,6 +178,102 @@ test("Web timeline route applies normalized query filters through the read adapt
     response.body,
     /from=%2Ftimeline%3Fproject%3Dacme-app%26type%3Dsession-note/,
   );
+  assert.match(response.body, /Project/);
+  assert.match(response.body, /Type/);
+  assert.match(response.body, /Clear filters/);
+});
+
+test("Web timeline route renders a deterministic empty state for unmatched filters", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "existing row",
+      date: "2026-03-22",
+      summary: "Seed one row outside the tested filter combination.",
+      actions: ["Create one timeline row."],
+      followUp: ["Confirm unmatched filters render a deterministic state."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline?project=acme-app&type=decision",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /No Matching Documents/);
+  assert.match(response.body, /project: acme-app/);
+  assert.match(response.body, /type: decision/);
+  assert.match(response.body, /Clear filters/);
+});
+
+test("Web timeline route renders a deterministic empty repository state without filters", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /No Documents Yet/);
+  assert.match(response.body, /No managed documents are available in this repository yet\./);
+  assert.doesNotMatch(response.body, /Clear filters/);
+});
+
+test("Web timeline route reports invalid managed documents skipped during list reads", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "valid row",
+      date: "2026-03-22",
+      summary: "Seed one valid timeline row.",
+      actions: ["Keep one valid document visible."],
+      followUp: ["Report invalid managed documents separately."],
+    },
+    context,
+  );
+  writeRawInvalidDoneWorkItem(memoryRootDir, "acme-app", "broken-work-item", "2026-03-22");
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline?project=acme-app",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Invalid Managed Documents/);
+  assert.match(response.body, /broken-work-item/);
 });
 
 test("Web document route renders provenance metadata and preserves timeline context", async () => {
@@ -223,6 +319,8 @@ test("Web document route renders provenance metadata and preserves timeline cont
   assert.match(response.body, /Seed exact document routing coverage\./);
   assert.match(response.body, /Back to timeline/);
   assert.match(response.body, /href="\/timeline\?project=acme-app&amp;type=session-note"/);
+  assert.match(response.body, /Project<\/span>acme-app/);
+  assert.match(response.body, /Type<\/span>session-note/);
   assert.match(response.body, new RegExp(sessionNote.relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
@@ -243,6 +341,7 @@ test("Web document route returns not found for unmanaged paths", async () => {
   );
 
   assert.equal(response.statusCode, 404);
+  assert.match(response.body, /Not Found/);
   assert.match(response.body, /outside managed routes/i);
   assert.match(response.body, /Back to timeline/);
 });
@@ -304,8 +403,32 @@ test("Web document route returns deterministic fallback for invalid managed docu
   );
 
   assert.equal(response.statusCode, 500);
-  assert.match(response.body, /Read Failed/);
+  assert.match(response.body, /Invalid Document/);
   assert.match(response.body, /Back to timeline/);
+});
+
+test("Web document route returns invalid-document state for malformed route paths", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: `/documents?from=${encodeURIComponent("/timeline?project=acme-app&type=session-note")}`,
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body, /Invalid Document/);
+  assert.match(response.body, /requires an encoded managed relative path/i);
+  assert.match(response.body, /href="\/timeline\?project=acme-app&amp;type=session-note"/);
+  assert.match(response.body, /Project/);
+  assert.match(response.body, /Type/);
 });
 
 test("Web timeline route returns invalid query for unsupported filters", async () => {
@@ -329,6 +452,24 @@ test("Web timeline route returns invalid query for unsupported filters", async (
   assert.match(response.body, /Unsupported document type: unknown-kind/);
 });
 
+test("Web routes return a deterministic configuration error state when repository config is missing", async () => {
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline",
+    },
+    {
+      configurationError: "PROJECT_MEMORY_ROOT is required.",
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 500);
+  assert.match(response.body, /Configuration Error/);
+  assert.match(response.body, /PROJECT_MEMORY_ROOT is required\./);
+});
+
 test("resolveWebRuntimeConfig prefers project-memory-specific host and port overrides", () => {
   const memoryRootDir = setupTestRepo();
   const originalProjectMemoryRoot = process.env.PROJECT_MEMORY_ROOT;
@@ -349,6 +490,35 @@ test("resolveWebRuntimeConfig prefers project-memory-specific host and port over
     assert.equal(config.host, "0.0.0.0");
     assert.equal(config.port, 4510);
     assert.equal(config.context.memoryRootDir, memoryRootDir);
+  } finally {
+    process.env.PROJECT_MEMORY_ROOT = originalProjectMemoryRoot;
+    process.env.PROJECT_MEMORY_WEB_HOST = originalProjectMemoryWebHost;
+    process.env.PROJECT_MEMORY_WEB_PORT = originalProjectMemoryWebPort;
+    process.env.HOST = originalHost;
+    process.env.PORT = originalPort;
+  }
+});
+
+test("resolveWebRuntimeConfig keeps configuration errors in-band for the Web shell", () => {
+  const originalProjectMemoryRoot = process.env.PROJECT_MEMORY_ROOT;
+  const originalProjectMemoryWebHost = process.env.PROJECT_MEMORY_WEB_HOST;
+  const originalProjectMemoryWebPort = process.env.PROJECT_MEMORY_WEB_PORT;
+  const originalHost = process.env.HOST;
+  const originalPort = process.env.PORT;
+
+  delete process.env.PROJECT_MEMORY_ROOT;
+  delete process.env.PROJECT_MEMORY_WEB_HOST;
+  delete process.env.PROJECT_MEMORY_WEB_PORT;
+  delete process.env.HOST;
+  delete process.env.PORT;
+
+  try {
+    const config = resolveWebRuntimeConfig();
+
+    assert.equal(config.host, "127.0.0.1");
+    assert.equal(config.port, 4310);
+    assert.equal(config.context, undefined);
+    assert.match(config.configurationError ?? "", /PROJECT_MEMORY_ROOT is required/);
   } finally {
     process.env.PROJECT_MEMORY_ROOT = originalProjectMemoryRoot;
     process.env.PROJECT_MEMORY_WEB_HOST = originalProjectMemoryWebHost;

@@ -18,8 +18,10 @@ export type WebRuntimeConfig = {
   host: string;
   /** Network port to bind. */
   port: number;
-  /** Shared repository context reused by the Web layer. */
-  context: RepositoryContext;
+  /** Shared repository context reused by the Web layer when configuration is valid. */
+  context?: RepositoryContext;
+  /** Optional configuration failure surfaced as a deterministic route state. */
+  configurationError?: string;
 };
 
 /**
@@ -75,7 +77,11 @@ export type WebTimelineQuery = {
 /**
  * Normalized read error code surfaced by the Web adapter.
  */
-export type WebReadErrorCode = "invalid-query" | "not-found" | "invalid-read";
+export type WebReadErrorCode =
+  | "configuration-error"
+  | "invalid-document"
+  | "invalid-query"
+  | "not-found";
 
 /**
  * Normalized read error surfaced by the Web adapter.

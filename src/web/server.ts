@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
@@ -62,6 +63,49 @@ const escapeHtml = (value: string): string => {
     .replaceAll("'", "&#39;");
 };
 
+type RenderAction = {
+  href: string;
+  label: string;
+};
+
+type RenderBreadcrumb = {
+  href?: string;
+  label: string;
+};
+
+type TimelineContext = {
+  activeFilters: Array<{ label: string; value: string }>;
+  hasFilters: boolean;
+  normalizedPath: string;
+};
+
+const parseTimelineContext = (timelineReturnPath: string): TimelineContext => {
+  const normalizedPath = normalizeTimelineReturnPath(timelineReturnPath);
+  const timelineUrl = new URL(normalizedPath, "http://127.0.0.1");
+  const activeFilters: TimelineContext["activeFilters"] = [];
+
+  const project = timelineUrl.searchParams.get("project")?.trim();
+  if (project) {
+    activeFilters.push({ label: "Project", value: project });
+  }
+
+  const type = timelineUrl.searchParams.get("type")?.trim();
+  if (type) {
+    activeFilters.push({ label: "Type", value: type });
+  }
+
+  const status = timelineUrl.searchParams.get("status")?.trim();
+  if (status) {
+    activeFilters.push({ label: "Status", value: status });
+  }
+
+  return {
+    activeFilters,
+    hasFilters: activeFilters.length > 0,
+    normalizedPath,
+  };
+};
+
 const renderMetadataEntries = (
   entries: ReadonlyArray<{ label: string; value: string }>,
 ): string => {
@@ -76,6 +120,52 @@ const renderMetadataEntries = (
       ].join("\n");
     }),
     "</dl>",
+  ].join("\n");
+};
+
+const renderBreadcrumbs = (breadcrumbs: ReadonlyArray<RenderBreadcrumb>): string => {
+  return [
+    '<nav class="breadcrumbs" aria-label="Breadcrumb">',
+    ...breadcrumbs.map((entry, index) => {
+      const isLast = index === breadcrumbs.length - 1;
+      if (isLast || !entry.href) {
+        return `  <span class="breadcrumbs-current">${escapeHtml(entry.label)}</span>`;
+      }
+
+      return `  <a href="${escapeHtml(entry.href)}">${escapeHtml(entry.label)}</a>`;
+    }),
+    "</nav>",
+  ].join("\n");
+};
+
+const renderActionLinks = (actions: ReadonlyArray<RenderAction>): string => {
+  if (actions.length === 0) {
+    return "";
+  }
+
+  return [
+    '<div class="timeline-actions">',
+    ...actions.map((action) => {
+      return `  <a href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a>`;
+    }),
+    "</div>",
+  ].join("\n");
+};
+
+const renderTagList = (
+  entries: ReadonlyArray<{ label: string; value: string }>,
+  emptyLabel: string,
+): string => {
+  if (entries.length === 0) {
+    return `<p class="meta">${escapeHtml(emptyLabel)}</p>`;
+  }
+
+  return [
+    '<ul class="tag-list" aria-label="Active filters">',
+    ...entries.map((entry) => {
+      return `  <li><span class="tag-label">${escapeHtml(entry.label)}</span>${escapeHtml(entry.value)}</li>`;
+    }),
+    "</ul>",
   ].join("\n");
 };
 
@@ -145,11 +235,15 @@ const renderHtmlPage = (title: string, content: string): string => {
     "    nav { margin-bottom: 24px; }",
     "    nav a { color: #5d2e0c; text-decoration: none; font-weight: 700; }",
     "    nav a:hover { text-decoration: underline; }",
+    "    .breadcrumbs { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; font-size: 0.92rem; }",
+    "    .breadcrumbs a::after { content: '/'; margin-left: 10px; color: #a18b77; }",
+    "    .breadcrumbs-current { color: #5f564d; font-weight: 700; }",
     "    ul { padding-left: 20px; }",
     "    li { margin-bottom: 16px; }",
     "    .meta { color: #5f564d; font-size: 0.95rem; }",
     "    .panel { background: rgba(255, 255, 255, 0.84); border: 1px solid #d8cfbf; border-radius: 12px; padding: 18px 20px; box-shadow: 0 12px 30px rgba(75, 53, 32, 0.08); }",
     "    .page-intro { display: grid; gap: 10px; margin-bottom: 18px; }",
+    "    .page-stack { display: grid; gap: 18px; }",
     "    .timeline-list { list-style: none; padding-left: 0; margin: 24px 0 0; display: grid; gap: 16px; }",
     "    .timeline-item { display: grid; gap: 14px; }",
     "    .timeline-title { margin-bottom: 0; font-size: 1.35rem; }",
@@ -158,6 +252,11 @@ const renderHtmlPage = (title: string, content: string): string => {
     "    .timeline-actions { display: flex; gap: 12px; flex-wrap: wrap; }",
     "    .timeline-actions a { color: #5d2e0c; font-weight: 700; text-decoration: none; }",
     "    .timeline-actions a:hover { text-decoration: underline; }",
+    "    .tag-list { list-style: none; padding-left: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 10px; }",
+    "    .tag-list li { margin: 0; padding: 6px 10px; border-radius: 999px; background: #f1e5d3; color: #4d3424; font-size: 0.92rem; }",
+    "    .tag-label { margin-right: 6px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6a5c; }",
+    "    .state-list { margin: 0; padding-left: 20px; }",
+    "    .state-list li { margin-bottom: 10px; }",
     "    .metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px 18px; margin: 0; }",
     "    .metadata-grid dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6a5c; }",
     "    .metadata-grid dd { margin: 4px 0 0; font-size: 0.98rem; word-break: break-word; }",
@@ -185,14 +284,59 @@ const renderHtmlPage = (title: string, content: string): string => {
 };
 
 const renderTimeline = (view: WebTimelineView, timelineReturnPath: string): string => {
+  const timelineContext = parseTimelineContext(timelineReturnPath);
+  const actions: RenderAction[] = timelineContext.hasFilters
+    ? [{ href: TimelineRoutePath, label: "Clear filters" }]
+    : [];
+  const emptyStateTitle = timelineContext.hasFilters
+    ? "No Matching Documents"
+    : "No Documents Yet";
+  const emptyStateMessage = timelineContext.hasFilters
+    ? "No managed documents matched the current timeline query."
+    : "No managed documents are available in this repository yet.";
+  const invalidDocumentPanel = view.invalidDocuments.length === 0
+    ? ""
+    : [
+        '<section class="panel">',
+        "  <h2>Invalid Managed Documents</h2>",
+        `  <p class="meta">${escapeHtml(`${view.invalidDocuments.length} invalid document${view.invalidDocuments.length === 1 ? "" : "s"} skipped while building the timeline.`)}</p>`,
+        '  <ul class="state-list">',
+        ...view.invalidDocuments.map((document) => {
+          return `    <li><strong>${escapeHtml(document.relativePath)}</strong><br>${escapeHtml(document.message)}</li>`;
+        }),
+        "  </ul>",
+        "</section>",
+      ].join("\n");
   const items = view.rows.length === 0
-    ? "<p class=\"panel\">No managed documents matched the current timeline query.</p>"
+    ? [
+        '<section class="page-intro panel">',
+        renderBreadcrumbs([{ label: "Timeline" }]).split("\n").map((line) => `  ${line}`).join("\n"),
+        "  <h2>Timeline</h2>",
+        '  <p class="meta">Read-only latest-first browsing over managed project-memory documents.</p>',
+        `  <p class="meta">${escapeHtml(renderTimelineQuerySummary(view))}</p>`,
+        `  ${renderTagList(timelineContext.activeFilters, "No project, type, or status filters are active.")}`,
+        "</section>",
+        '<section class="panel">',
+        `  <h2>${escapeHtml(emptyStateTitle)}</h2>`,
+        `  <p>${escapeHtml(emptyStateMessage)}</p>`,
+        ...(actions.length > 0
+          ? [renderActionLinks(actions).split("\n").map((line) => `  ${line}`).join("\n")]
+          : []),
+        "</section>",
+        invalidDocumentPanel,
+      ].filter((section) => section.length > 0).join("\n")
     : [
         '<section class="page-intro panel">',
+        renderBreadcrumbs([{ label: "Timeline" }]).split("\n").map((line) => `  ${line}`).join("\n"),
         "  <h2>Latest Documents</h2>",
         '  <p class="meta">Ordered by shared-core latest-first chronology using date, recorded_at, then relativePath.</p>',
         `  <p class="meta">${escapeHtml(renderTimelineQuerySummary(view))}</p>`,
+        `  ${renderTagList(timelineContext.activeFilters, "No project, type, or status filters are active.")}`,
+        ...(actions.length > 0
+          ? [renderActionLinks(actions).split("\n").map((line) => `  ${line}`).join("\n")]
+          : []),
         "</section>",
+        invalidDocumentPanel,
         '<section aria-label="Timeline results">',
         '  <ul class="timeline-list">',
         ...view.rows.map((document) => {
@@ -227,13 +371,14 @@ const renderTimeline = (view: WebTimelineView, timelineReturnPath: string): stri
         "</section>",
       ].join("\n");
 
-  return renderHtmlPage("Project Memory Timeline", items);
+  return renderHtmlPage("Project Memory Timeline", `<div class="page-stack">${items}</div>`);
 };
 
 const renderDocumentView = (
   document: WebDocumentDetail,
   timelineReturnPath: string,
 ): string => {
+  const timelineContext = parseTimelineContext(timelineReturnPath);
   const metadataEntries = [
     { label: "Topic", value: document.topic },
     { label: "Type", value: document.type },
@@ -248,11 +393,16 @@ const renderDocumentView = (
     document.topic,
     [
       '<section class="page-intro panel">',
+      renderBreadcrumbs([
+        { href: timelineContext.normalizedPath, label: "Timeline" },
+        { label: document.topic },
+      ]).split("\n").map((line) => `  ${line}`).join("\n"),
       `  <h2>${escapeHtml(document.topic)}</h2>`,
       '  <p class="meta">Exact managed document view resolved through the shared-core read surface.</p>',
-      '  <div class="timeline-actions">',
-      `    <a href="${escapeHtml(timelineReturnPath)}">Back to timeline</a>`,
-      "  </div>",
+      `  ${renderTagList(timelineContext.activeFilters, "Opened from the unfiltered timeline view.")}`,
+      renderActionLinks([
+        { href: timelineContext.normalizedPath, label: "Back to timeline" },
+      ]).split("\n").map((line) => `  ${line}`).join("\n"),
       "</section>",
       "<section class=\"panel\">",
       "  <h2>Document Metadata</h2>",
@@ -270,17 +420,27 @@ const renderDocumentView = (
 const renderErrorPage = (
   title: string,
   message: string,
-  timelineReturnPath: string = TimelineRoutePath,
+  options: {
+    actions?: ReadonlyArray<RenderAction>;
+    breadcrumbs?: ReadonlyArray<RenderBreadcrumb>;
+    metadataEntries?: ReadonlyArray<{ label: string; value: string }>;
+  } = {},
 ): string => {
   return renderHtmlPage(
     title,
     [
-      "<section class=\"panel\">",
+      "<section class=\"panel page-intro\">",
+      ...(options.breadcrumbs
+        ? [renderBreadcrumbs(options.breadcrumbs).split("\n").map((line) => `  ${line}`).join("\n")]
+        : []),
       `  <h2>${escapeHtml(title)}</h2>`,
       `  <p>${escapeHtml(message)}</p>`,
-      '  <div class="timeline-actions">',
-      `    <a href="${escapeHtml(timelineReturnPath)}">Back to timeline</a>`,
-      "  </div>",
+      ...(options.metadataEntries && options.metadataEntries.length > 0
+        ? [renderMetadataEntries(options.metadataEntries).split("\n").map((line) => `  ${line}`).join("\n")]
+        : []),
+      ...(options.actions && options.actions.length > 0
+        ? [renderActionLinks(options.actions).split("\n").map((line) => `  ${line}`).join("\n")]
+        : []),
       "</section>",
     ].join("\n"),
   );
@@ -323,39 +483,138 @@ const normalizeUrlFromInput = (request: WebRequestInput): URL => {
   return new URL(request.url ?? "/", "http://127.0.0.1");
 };
 
-const decodeDocumentRelativePath = (pathname: string): string | null => {
+type DecodedDocumentRoute =
+  | {
+      kind: "invalid";
+      message: string;
+    }
+  | {
+      kind: "matched";
+      relativePath: string;
+    }
+  | {
+      kind: "unmatched";
+    };
+
+const decodeDocumentRoute = (pathname: string): DecodedDocumentRoute => {
   const routePrefix = "/documents/";
+  if (pathname === "/documents" || pathname === routePrefix) {
+    return {
+      kind: "invalid",
+      message: "Document route requires an encoded managed relative path.",
+    };
+  }
+
   if (!pathname.startsWith(routePrefix)) {
-    return null;
+    return { kind: "unmatched" };
   }
 
   const encodedRelativePath = pathname.slice(routePrefix.length);
   if (!encodedRelativePath) {
-    return null;
+    return {
+      kind: "invalid",
+      message: "Document route requires an encoded managed relative path.",
+    };
   }
 
   try {
-    return decodeURIComponent(encodedRelativePath);
+    const relativePath = decodeURIComponent(encodedRelativePath);
+    if (!relativePath) {
+      return {
+        kind: "invalid",
+        message: "Document route requires an encoded managed relative path.",
+      };
+    }
+
+    return { kind: "matched", relativePath };
   } catch {
-    return null;
+    return {
+      kind: "invalid",
+      message: "Document route contains an invalid encoded relative path.",
+    };
   }
+};
+
+const validateDirectory = (absolutePath: string, label: string): string | undefined => {
+  if (!fs.existsSync(absolutePath)) {
+    return `${label} is missing: ${absolutePath}`;
+  }
+
+  try {
+    if (!fs.statSync(absolutePath).isDirectory()) {
+      return `${label} is not a directory: ${absolutePath}`;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `${label} could not be validated: ${message}`;
+  }
+
+  return undefined;
+};
+
+const getWebConfigurationError = (config: WebRuntimeConfig): string | undefined => {
+  const configurationError = config.configurationError?.trim();
+  if (configurationError) {
+    return configurationError;
+  }
+
+  if (!config.context) {
+    return "PROJECT_MEMORY_ROOT must resolve to a readable external memory repository before using the Web UI.";
+  }
+
+  const memoryRootError = validateDirectory(
+    config.context.memoryRootDir,
+    "PROJECT_MEMORY_ROOT",
+  );
+  if (memoryRootError) {
+    return memoryRootError;
+  }
+
+  return validateDirectory(config.context.projectsDir, "PROJECT_MEMORY_ROOT/projects");
+};
+
+const buildConfigurationErrorResponse = (
+  message: string,
+  config: WebRuntimeConfig,
+): WebResponsePayload => {
+  const metadataEntries = config.context
+    ? [{ label: "Memory Root", value: config.context.memoryRootDir }]
+    : [];
+
+  return buildHtmlResponse(
+    500,
+    renderErrorPage("Configuration Error", message, {
+      breadcrumbs: [{ label: "Configuration Error" }],
+      metadataEntries,
+    }),
+  );
 };
 
 const buildReadErrorResponse = (
   error: WebReadError,
   timelineReturnPath: string = TimelineRoutePath,
 ): WebResponsePayload => {
+  const timelineContext = parseTimelineContext(timelineReturnPath);
+  const title = error.code === "configuration-error"
+    ? "Configuration Error"
+    : error.code === "invalid-document"
+      ? "Invalid Document"
+      : error.code === "invalid-query"
+        ? "Invalid Query"
+        : "Not Found";
+
   return buildHtmlResponse(
     error.statusCode,
-    renderErrorPage(
-      error.statusCode === 404
-        ? "Not Found"
-        : error.code === "invalid-query"
-          ? "Invalid Query"
-          : "Read Failed",
-      error.message,
-      timelineReturnPath,
-    ),
+    renderErrorPage(title, error.message, {
+      actions: error.code === "configuration-error"
+        ? []
+        : [{ href: timelineContext.normalizedPath, label: "Back to timeline" }],
+      breadcrumbs: [
+        { href: timelineContext.normalizedPath, label: "Timeline" },
+        { label: title },
+      ],
+      metadataEntries: timelineContext.activeFilters,
+    }),
   );
 };
 
@@ -373,6 +632,19 @@ export const handleWebRequest = async (
 
   const requestUrl = normalizeUrlFromInput(request);
   const pathname = requestUrl.pathname;
+  const timelineReturnPath = normalizeTimelineReturnPath(requestUrl.searchParams.get("from"));
+  const configurationError = getWebConfigurationError(config);
+  if (configurationError) {
+    return buildConfigurationErrorResponse(configurationError, config);
+  }
+
+  const context = config.context;
+  if (!context) {
+    return buildConfigurationErrorResponse(
+      "PROJECT_MEMORY_ROOT must resolve to a readable external memory repository before using the Web UI.",
+      config,
+    );
+  }
 
   if (pathname === "/" || pathname === TimelineRoutePath) {
     try {
@@ -382,7 +654,7 @@ export const handleWebRequest = async (
         status: requestUrl.searchParams.get("status") ?? undefined,
         type: requestUrl.searchParams.get("type") ?? undefined,
       });
-      const timelineResult = readWebTimeline(timelineQuery, config.context);
+      const timelineResult = readWebTimeline(timelineQuery, context);
       return buildHtmlResponse(
         200,
         renderTimeline(timelineResult, normalizeTimelinePath(pathname, requestUrl.search)),
@@ -396,12 +668,24 @@ export const handleWebRequest = async (
     }
   }
 
-  const relativePath = decodeDocumentRelativePath(pathname);
-  if (relativePath) {
-    const timelineReturnPath = normalizeTimelineReturnPath(requestUrl.searchParams.get("from"));
+  const documentRoute = decodeDocumentRoute(pathname);
+  if (documentRoute.kind === "invalid") {
+    return buildHtmlResponse(
+      400,
+      renderErrorPage("Invalid Document", documentRoute.message, {
+        actions: [{ href: timelineReturnPath, label: "Back to timeline" }],
+        breadcrumbs: [
+          { href: timelineReturnPath, label: "Timeline" },
+          { label: "Invalid Document" },
+        ],
+        metadataEntries: parseTimelineContext(timelineReturnPath).activeFilters,
+      }),
+    );
+  }
 
+  if (documentRoute.kind === "matched") {
     try {
-      const document = readWebDocument(relativePath, config.context);
+      const document = readWebDocument(documentRoute.relativePath, context);
       return buildHtmlResponse(200, renderDocumentView(document, timelineReturnPath));
     } catch (error) {
       if (isWebReadError(error)) {
@@ -414,7 +698,13 @@ export const handleWebRequest = async (
 
   return buildHtmlResponse(
     404,
-    renderErrorPage("Not Found", "No Web route matches this path."),
+    renderErrorPage("Not Found", "No Web route matches this path.", {
+      actions: [{ href: TimelineRoutePath, label: "Back to timeline" }],
+      breadcrumbs: [
+        { href: TimelineRoutePath, label: "Timeline" },
+        { label: "Not Found" },
+      ],
+    }),
   );
 };
 
@@ -424,12 +714,21 @@ export const handleWebRequest = async (
 export const resolveWebRuntimeConfig = (): WebRuntimeConfig => {
   const host = getPreferredEnvValue(ProjectMemoryWebHostEnvVar, GenericWebHostEnvVar) ?? DefaultWebHost;
   const rawPort = getPreferredEnvValue(ProjectMemoryWebPortEnvVar, GenericWebPortEnvVar);
+  const port = rawPort ? parsePort(rawPort) : DefaultWebPort;
 
-  return {
-    host,
-    port: rawPort ? parsePort(rawPort) : DefaultWebPort,
-    context: createRepositoryContext(),
-  };
+  try {
+    return {
+      context: createRepositoryContext(),
+      host,
+      port,
+    };
+  } catch (error) {
+    return {
+      configurationError: error instanceof Error ? error.message : String(error),
+      host,
+      port,
+    };
+  }
 };
 
 /**
