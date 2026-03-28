@@ -20,7 +20,7 @@ test("Web timeline route lists managed documents using shared core reads", async
       project: "acme-app",
       topic: "web baseline",
       date: "2026-03-22",
-      summary: "Seed Web timeline coverage.",
+      summary: "Seed [Web](https://example.com/web) timeline `coverage`.",
       actions: ["Capture one timeline row for the Web shell."],
       followUp: ["Keep exact document routing reachable from the timeline."],
     },
@@ -58,11 +58,17 @@ test("Web timeline route lists managed documents using shared core reads", async
   assert.match(response.body, /id="timeline-project-filter" name="project"/);
   assert.match(response.body, /Project Memory/);
   assert.match(response.body, /Read-only latest-first browsing over managed project-memory documents\./);
+  assert.match(response.body, /id="timeline-filter-toggle"/);
+  assert.match(response.body, /project: acme-app/);
+  assert.match(response.body, /Seed Web timeline coverage\./);
+  assert.match(response.body, /Capture one timeline row for the Web shell\./);
   assert.match(response.body, /Type/);
   assert.match(response.body, /Project/);
   assert.match(response.body, /Status/);
   assert.match(response.body, /Path/);
   assert.match(response.body, new RegExp(encodeURIComponent(sessionNote.relativePath)));
+  assert.doesNotMatch(response.body, /\[Web\]\(https:\/\/example\.com\/web\)/);
+  assert.doesNotMatch(response.body, /`coverage`/);
 });
 
 test("Web timeline route defaults to the most recent project while keeping an explicit all-projects option", async () => {
@@ -235,6 +241,7 @@ test("Web timeline route applies normalized query filters through the read adapt
   assert.match(response.body, /<option value="acme-app" selected="selected">acme-app<\/option>/);
   assert.match(response.body, /<option value="beta-app">beta-app<\/option>/);
   assert.match(response.body, /<option value="session-note" selected="selected">session-note<\/option>/);
+  assert.match(response.body, /project: acme-app · type: session-note/);
   assert.match(response.body, /Project/);
   assert.match(response.body, /Type/);
   assert.doesNotMatch(response.body, /Apply filters/);

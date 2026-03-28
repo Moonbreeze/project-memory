@@ -33,6 +33,7 @@ import type {
   WebTimelineView,
 } from "./types.ts";
 import { AllProjectsFilterValue } from "./constants.ts";
+import { extractSemanticPreview } from "./preview.ts";
 
 const defaultTimelineLimit = 50;
 const maxTimelineLimit = 200;
@@ -117,6 +118,7 @@ const toWebDocumentSummary = (
     status: document.metadata.status,
     date: document.metadata.date,
     recordedAt: document.metadata.recorded_at,
+    preview: extractSemanticPreview(document.type, document.body ?? ""),
     planningState: getPlanningState(document),
     dependencyCount: getDependencyCount(document),
     unresolvedDependencyCount: getUnresolvedDependencyCount(document),
@@ -244,7 +246,13 @@ export const readWebTimeline = (
   query: WebTimelineQuery,
   context: RepositoryContext,
 ): WebTimelineView => {
-  const result = listDocuments(toListDocumentsQuery(query), context);
+  const result = listDocuments(
+    {
+      ...toListDocumentsQuery(query),
+      includeBody: true,
+    },
+    context,
+  );
 
   return {
     appliedQuery: query,

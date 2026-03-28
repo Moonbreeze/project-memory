@@ -94,6 +94,16 @@ export type WebReadError = Error & {
 };
 
 /**
+ * Compact semantic preview shown for one timeline row.
+ */
+export type WebDocumentPreview = {
+  /** Primary human-readable preview text. */
+  primary: string;
+  /** Optional secondary supporting preview text. */
+  secondary?: string;
+};
+
+/**
  * Minimal document summary shaped for Web navigation.
  */
 export type WebDocumentSummary = {
@@ -113,6 +123,8 @@ export type WebDocumentSummary = {
   date: string;
   /** Optional timeline timestamp for intra-day ordering. */
   recordedAt?: string;
+  /** Type-aware semantic preview extracted from the Markdown body. */
+  preview: WebDocumentPreview;
   /** Optional derived planning state for work-item rows. */
   planningState?: WorkItemPlanningState;
   /** Optional total dependency count for work-item rows. */

@@ -75,6 +75,8 @@ test("Web read adapter normalizes timeline filters and maps document summaries",
   assert.equal(view.rows.length, 1);
   assert.equal(view.rows[0]?.project, "acme-app");
   assert.equal(view.rows[0]?.topic, "timeline-target");
+  assert.equal(view.rows[0]?.preview.primary, "Seed one filtered session note.");
+  assert.equal(view.rows[0]?.preview.secondary, "Create the row that should remain after filtering.");
   assert.equal(
     view.rows[0]?.routePath,
     `/documents/${encodeURIComponent(view.rows[0]?.relativePath ?? "")}`,
@@ -85,6 +87,42 @@ test("Web read adapter normalizes timeline filters and maps document summaries",
   });
 
   assert.equal(allProjectsQuery.project, undefined);
+});
+
+test("Web read adapter derives semantic previews from type-specific Markdown sections", () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  createDecision(
+    {
+      project: "acme-app",
+      topic: "preview decision",
+      date: "2026-03-22",
+      context: "This context should stay out of the primary preview.",
+      decision: "Keep `decision` text ahead of context in timeline previews.",
+      consequences: ["Expose the first consequence as secondary preview text."],
+      stableGuidanceReview: "reviewed-no-change",
+    },
+    context,
+  );
+
+  const query = normalizeWebTimelineQuery({
+    limit: "10",
+    project: "acme-app",
+    type: "decision",
+  });
+  const view = readWebTimeline(query, context);
+
+  assert.equal(view.rows.length, 1);
+  assert.equal(
+    view.rows[0]?.preview.primary,
+    "Keep decision text ahead of context in timeline previews.",
+  );
+  assert.equal(
+    view.rows[0]?.preview.secondary,
+    "Expose the first consequence as secondary preview text.",
+  );
 });
 
 test("Web read adapter returns a normalized invalid-document error for invalid managed documents", () => {

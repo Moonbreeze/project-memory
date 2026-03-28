@@ -319,6 +319,16 @@ const renderTimelineQuerySummary = (view: WebTimelineView): string => {
   return summaryParts.join(" · ");
 };
 
+const renderTimelineFilterSummary = (timelineContext: TimelineContext): string => {
+  if (timelineContext.activeFilters.length === 0) {
+    return "All projects · all document types · all statuses";
+  }
+
+  return timelineContext.activeFilters.map((entry) => {
+    return `${entry.label.toLowerCase()}: ${entry.value}`;
+  }).join(" · ");
+};
+
 const normalizeTimelinePath = (pathname: string, search: string): string => {
   if (pathname !== "/" && pathname !== TimelineRoutePath) {
     return TimelineRoutePath;
@@ -350,6 +360,21 @@ const renderTimelineInlineMetadata = (
     }),
     "</div>",
   ].join("\n");
+};
+
+const renderTimelinePreview = (
+  preview: WebDocumentDetail["preview"],
+): string => {
+  const secondaryLine = preview.secondary
+    ? `  <p class="timeline-preview-secondary">${escapeHtml(preview.secondary)}</p>`
+    : "";
+
+  return [
+    '<div class="timeline-preview" aria-label="Semantic preview">',
+    `  <p class="timeline-preview-primary">${escapeHtml(preview.primary)}</p>`,
+    secondaryLine,
+    "</div>",
+  ].filter((line) => line.length > 0).join("\n");
 };
 
 const createDocumentHref = (routePath: string, timelineReturnPath: string): string => {
@@ -398,6 +423,10 @@ const renderHtmlPage = (
     "    .timeline-title { margin: 0; font-size: 1.18rem; line-height: 1.2; }",
     "    .timeline-title a { color: #5d2e0c; text-decoration: none; }",
     "    .timeline-title a:hover { text-decoration: underline; }",
+    "    .timeline-preview { display: grid; gap: 4px; }",
+    "    .timeline-preview-primary, .timeline-preview-secondary { margin: 0; }",
+    "    .timeline-preview-primary { font-size: 1rem; line-height: 1.45; color: #2b241f; }",
+    "    .timeline-preview-secondary { font-size: 0.94rem; line-height: 1.45; color: #6d6158; }",
     "    .timeline-actions { display: flex; gap: 12px; flex-wrap: wrap; }",
     "    .timeline-actions a { color: #5d2e0c; font-weight: 700; text-decoration: none; }",
     "    .timeline-actions a:hover { text-decoration: underline; }",
@@ -410,6 +439,14 @@ const renderHtmlPage = (
     "    .view-eyebrow { margin: 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a5c; }",
     "    .view-mode { margin: 0; font-size: 1.9rem; }",
     "    .view-shell .meta { margin: 0; }",
+    "    .filter-panel { display: grid; gap: 12px; }",
+    "    .filter-toggle-input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }",
+    "    .filter-toggle-row { display: none; }",
+    "    .filter-toggle-summary { margin: 0; font-size: 0.92rem; color: #5f564d; }",
+    "    .filter-toggle-button { display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(93, 46, 12, 0.16); background: rgba(255, 255, 255, 0.84); color: #5d2e0c; font-weight: 700; cursor: pointer; }",
+    "    .filter-toggle-button::before { content: '+'; font-size: 1rem; line-height: 1; }",
+    "    .filter-toggle-input:checked + .filter-toggle-row .filter-toggle-button::before { content: '-'; }",
+    "    .filter-panel-body { display: block; }",
     "    .filter-form { display: block; }",
     "    .filter-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }",
     "    .filter-field { display: grid; gap: 6px; }",
@@ -439,11 +476,16 @@ const renderHtmlPage = (
     "    .markdown-body li { margin-bottom: 8px; }",
     "    .markdown-body a { color: #7b2f14; }",
     "    @media (max-width: 640px) {",
-      "      main { padding: 24px 14px 36px; }",
+    "      main { padding: 24px 14px 36px; }",
     "      h1 { font-size: 1.9rem; }",
     "      .view-shell { top: 0; padding: 12px; margin-bottom: 14px; }",
     "      .view-shell-bar { gap: 12px; }",
     "      .view-mode { font-size: 1.45rem; }",
+    "      .filter-panel { gap: 10px; }",
+    "      .filter-toggle-row { display: flex; align-items: start; justify-content: space-between; gap: 10px; }",
+    "      .filter-toggle-summary { flex: 1 1 auto; min-width: 0; }",
+    "      .filter-panel-body { display: none; }",
+    "      .filter-toggle-input:checked ~ .filter-panel-body { display: block; }",
     "      .filter-grid { gap: 10px; }",
     "      .filter-field.project-field, .filter-field.type-field, .filter-field.status-field { min-width: min(100%, 180px); flex: 1 1 140px; }",
     "      .filter-actions { min-height: 40px; }",
@@ -510,7 +552,16 @@ const renderTimeline = (
     '      <p class="meta">Read-only latest-first browsing over managed project-memory documents.</p>',
     `      <p class="meta">${escapeHtml(renderTimelineQuerySummary(view))}</p>`,
     "    </div>",
-    filterForm.split("\n").map((line) => `    ${line}`).join("\n"),
+    '    <div class="filter-panel">',
+    '      <input class="filter-toggle-input" type="checkbox" id="timeline-filter-toggle">',
+    '      <div class="filter-toggle-row">',
+    `        <p class="filter-toggle-summary">${escapeHtml(renderTimelineFilterSummary(timelineContext))}</p>`,
+    '        <label class="filter-toggle-button" for="timeline-filter-toggle">Filters</label>',
+    "      </div>",
+    '      <div class="filter-panel-body">',
+    filterForm.split("\n").map((line) => `        ${line}`).join("\n"),
+    "      </div>",
+    "    </div>",
     "  </div>",
     "</section>",
   ].join("\n");
@@ -549,6 +600,7 @@ const renderTimeline = (
           return [
             '    <li class="timeline-item">',
             `      <h3 class="timeline-title"><a href="${escapeHtml(documentHref)}">${escapeHtml(document.topic)}</a></h3>`,
+            renderTimelinePreview(document.preview).split("\n").map((line) => `      ${line}`).join("\n"),
             renderTimelineInlineMetadata(metadataEntries).split("\n").map((line) => `      ${line}`).join("\n"),
             "    </li>",
           ].join("\n");
