@@ -452,7 +452,6 @@ export const upsertTaxonomyRegistry = (
       relativePath,
       date,
       recordedAt: input.recordedAt,
-      preferCurrentTime: input.date === undefined,
     }),
     project,
     topic: ReservedTaxonomyRegistryTopic,

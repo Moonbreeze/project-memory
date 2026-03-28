@@ -76,7 +76,6 @@ type ResolveRecordedAtForWriteInput = {
   relativePath: string;
   date: string;
   recordedAt?: string;
-  preferCurrentTime?: boolean;
 };
 
 /**
@@ -98,7 +97,7 @@ export const resolveRecordedAtForWrite = (
     }
   }
 
-  if (input.preferCurrentTime && input.date === currentDate()) {
+  if (input.date === currentDate()) {
     return currentRecordedAt();
   }
 

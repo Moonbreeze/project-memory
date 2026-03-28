@@ -7,6 +7,7 @@ import {
   DocumentStatusValues,
   DocumentTypeValues,
 } from "../core/index.ts";
+import { fallbackRecordedAtForDate } from "../core/documents/index.ts";
 
 import {
   AllProjectsFilterLabel,
@@ -362,6 +363,28 @@ const renderTimelineInlineMetadata = (
   ].join("\n");
 };
 
+const hasPreciseRecordedAt = (
+  date: string,
+  recordedAt: string | undefined,
+): boolean => {
+  if (!recordedAt) {
+    return false;
+  }
+
+  return recordedAt !== fallbackRecordedAtForDate(date);
+};
+
+const formatRecordedAtForDisplay = (recordedAt: string): string => {
+  const timestampMatch = recordedAt.match(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d{3})?)?Z$/,
+  );
+  if (!timestampMatch) {
+    return recordedAt;
+  }
+
+  return `${timestampMatch[1]} ${timestampMatch[2]} UTC`;
+};
+
 const renderTimelinePreview = (
   preview: WebDocumentDetail["preview"],
 ): string => {
@@ -580,12 +603,15 @@ const renderTimeline = (
         '<section class="timeline-results" aria-label="Timeline results">',
         '  <ul class="timeline-list">',
         ...view.rows.map((document) => {
+          const showRecordedAt = hasPreciseRecordedAt(document.date, document.recordedAt);
           const metadataEntries = [
             { label: "Type", value: document.type },
             { label: "Project", value: document.project },
             { label: "Status", value: document.status },
             { label: "Date", value: document.date },
-            ...(document.recordedAt ? [{ label: "Recorded At", value: document.recordedAt }] : []),
+            ...(showRecordedAt
+              ? [{ label: "Recorded At", value: formatRecordedAtForDisplay(document.recordedAt ?? "") }]
+              : []),
             ...(document.planningState ? [{ label: "Planning", value: document.planningState }] : []),
             ...(document.dependencyCount !== undefined
               ? [{ label: "Dependencies", value: String(document.dependencyCount) }]
@@ -621,13 +647,16 @@ const renderDocumentView = (
   timelineReturnPath: string,
 ): string => {
   const timelineContext = parseTimelineContext(timelineReturnPath);
+  const showRecordedAt = hasPreciseRecordedAt(document.date, document.recordedAt);
   const metadataEntries = [
     { label: "Topic", value: document.topic },
     { label: "Type", value: document.type },
     { label: "Project", value: document.project },
     { label: "Status", value: document.status },
     { label: "Date", value: document.date },
-    { label: "Recorded At", value: document.recordedAt ?? "Not recorded" },
+    ...(showRecordedAt
+      ? [{ label: "Recorded At", value: formatRecordedAtForDisplay(document.recordedAt ?? "") }]
+      : []),
     { label: "Path", value: document.relativePath },
   ];
 

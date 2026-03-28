@@ -83,7 +83,6 @@ const withRecordedAt = (
       relativePath,
       date: metadata.date,
       recordedAt: input.recordedAt,
-      preferCurrentTime: input.date === undefined,
     }),
   };
 };

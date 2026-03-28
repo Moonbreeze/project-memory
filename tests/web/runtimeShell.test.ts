@@ -65,6 +65,7 @@ test("Web timeline route lists managed documents using shared core reads", async
   assert.match(response.body, /Type/);
   assert.match(response.body, /Project/);
   assert.match(response.body, /Status/);
+  assert.doesNotMatch(response.body, /Recorded At/);
   assert.match(response.body, /Path/);
   assert.match(response.body, new RegExp(encodeURIComponent(sessionNote.relativePath)));
   assert.doesNotMatch(response.body, /\[Web\]\(https:\/\/example\.com\/web\)/);
@@ -165,6 +166,9 @@ test("Web timeline route keeps same-day results in shared-core latest-first orde
   assert.equal(response.statusCode, 200);
   assert.match(response.body, /Read-only latest-first browsing over managed project-memory documents\./);
   assert.match(response.body, /Recorded At/);
+  assert.match(response.body, /2026-03-22 18:00 UTC/);
+  assert.match(response.body, /2026-03-22 09:00 UTC/);
+  assert.doesNotMatch(response.body, /2026-03-22T18:00:00.000Z/);
 
   const laterIndex = response.body.indexOf("later-note");
   const earlierIndex = response.body.indexOf("earlier-note");
@@ -429,7 +433,8 @@ test("Web document route renders provenance metadata and preserves timeline cont
   assert.match(response.body, /Status/);
   assert.match(response.body, /Date/);
   assert.match(response.body, /Recorded At/);
-  assert.match(response.body, /2026-03-22T14:30:00.000Z/);
+  assert.match(response.body, /2026-03-22 14:30 UTC/);
+  assert.doesNotMatch(response.body, /2026-03-22T14:30:00.000Z/);
   assert.match(response.body, /Rendered Markdown/);
   assert.doesNotMatch(response.body, /Markdown Source/);
   assert.match(response.body, /Baseline safe Markdown rendering supports headings, paragraphs, lists, links, inline code, and fenced code blocks\./);
@@ -447,6 +452,42 @@ test("Web document route renders provenance metadata and preserves timeline cont
   assert.match(response.body, /Project<\/span>acme-app/);
   assert.match(response.body, /Type<\/span>session-note/);
   assert.match(response.body, new RegExp(sessionNote.relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("Web document route omits Recorded At when only day-level fallback is available", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  const sessionNote = appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "day level document",
+      date: "2026-03-22",
+      summary: "Seed one exact document without precise intra-day recorded_at.",
+      actions: ["Keep day-level fallback out of the Web metadata UI."],
+      followUp: ["Show only the date when no precise time is available."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: `/documents/${encodeURIComponent(sessionNote.relativePath)}`,
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /day-level-document/);
+  assert.match(response.body, /Document Metadata/);
+  assert.match(response.body, /Date/);
+  assert.doesNotMatch(response.body, /Recorded At/);
 });
 
 test("Web document route returns not found for unmanaged paths", async () => {

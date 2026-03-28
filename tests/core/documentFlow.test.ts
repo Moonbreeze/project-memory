@@ -168,6 +168,47 @@ test("appendSessionNote writes a structured document to the expected path", () =
   assert.doesNotMatch(fs.readFileSync(document.path, "utf8"), /project_commit:/);
 });
 
+// Bug #4: explicit current-day dates must not collapse recorded_at to midnight.
+test("appendSessionNote keeps current UTC time when today's date is provided explicitly", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  const beforeWrite = new Date().toISOString();
+  const currentDate = beforeWrite.slice(0, 10);
+
+  const currentDayDocument = appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "explicit current day note",
+      date: currentDate,
+      summary: "Capture one current-day document with an explicit date.",
+      actions: ["Verify that current-day writes keep the current UTC time."],
+      followUp: ["Keep explicit current-day writes chronologically precise."],
+    },
+    context,
+  );
+  const afterWrite = new Date().toISOString();
+
+  assert.ok(typeof currentDayDocument.metadata.recorded_at === "string");
+  assert.equal(currentDayDocument.metadata.recorded_at?.slice(0, 10), currentDate);
+  assert.notEqual(currentDayDocument.metadata.recorded_at, `${currentDate}T00:00:00.000Z`);
+  assert.ok(currentDayDocument.metadata.recorded_at >= beforeWrite);
+  assert.ok(currentDayDocument.metadata.recorded_at <= afterWrite);
+
+  const historicalDocument = appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "explicit historical note",
+      date: "2026-03-11",
+      summary: "Capture one historical document with an explicit date.",
+      actions: ["Verify that historical writes still use deterministic fallback ordering."],
+      followUp: ["Keep historical day buckets deterministic."],
+    },
+    context,
+  );
+
+  assert.equal(historicalDocument.metadata.recorded_at, "2026-03-11T00:00:00.000Z");
+});
+
 test("createDecision persists stable-guidance review details for non-draft decisions", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);

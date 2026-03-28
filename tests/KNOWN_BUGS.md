@@ -19,3 +19,12 @@
 - Covering tests:
   - `tests/core/documentFlow.test.ts`
   - `tests/mcp/server.test.ts`
+
+## Bug #4
+
+- Topic: `preserve-current-time-for-explicit-current-day-recorded-at`
+- Status: fixed by regression coverage in this repository
+- Summary: New managed documents written with an explicit `date` equal to today's UTC day used to collapse `recorded_at` to `T00:00:00.000Z` instead of capturing the actual write time, which made current-day timeline ordering misleading in the Web UI and other chronology-aware reads.
+- Expected behavior: New current-day writes should capture the current UTC timestamp even when the caller passes today's `date` explicitly, while historical explicit dates should keep the deterministic day-level fallback and same-day rewrites should preserve the stored `recorded_at`.
+- Covering tests:
+  - `tests/core/documentFlow.test.ts`
