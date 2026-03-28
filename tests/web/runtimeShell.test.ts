@@ -287,9 +287,21 @@ test("Web document route renders provenance metadata and preserves timeline cont
       topic: "open exact document",
       date: "2026-03-22",
       recordedAt: "2026-03-22T14:30:00.000Z",
-      summary: "Seed exact document routing coverage.",
+      summary: [
+        "Seed exact document routing coverage with [docs](https://example.com/reference).",
+        "",
+        "`inline-code` should survive rendering.",
+        "",
+        "```ts",
+        "const value = 1;",
+        "```",
+        "",
+        "<script>alert('xss')</script>",
+        "",
+        "[unsafe](javascript:alert(1))",
+      ].join("\n"),
       actions: ["Create a managed document for route lookup."],
-      followUp: ["Retain raw markdown rendering until the markdown slice lands."],
+      followUp: ["Ship the safe Markdown renderer in the exact document view."],
     },
     context,
   );
@@ -315,8 +327,18 @@ test("Web document route renders provenance metadata and preserves timeline cont
   assert.match(response.body, /Date/);
   assert.match(response.body, /Recorded At/);
   assert.match(response.body, /2026-03-22T14:30:00.000Z/);
-  assert.match(response.body, /Markdown Source/);
-  assert.match(response.body, /Seed exact document routing coverage\./);
+  assert.match(response.body, /Rendered Markdown/);
+  assert.doesNotMatch(response.body, /Markdown Source/);
+  assert.match(response.body, /Baseline safe Markdown rendering supports headings, paragraphs, lists, links, inline code, and fenced code blocks\./);
+  assert.match(response.body, /<h1>Session Note<\/h1>/);
+  assert.match(response.body, /<h2>Summary<\/h2>/);
+  assert.match(response.body, /<a href="https:\/\/example\.com\/reference">docs<\/a>/);
+  assert.match(response.body, /<code>inline-code<\/code>/);
+  assert.match(response.body, /<pre><code>const value = 1;<\/code><\/pre>/);
+  assert.match(response.body, /<ul>\s*<li>Create a managed document for route lookup\.<\/li>\s*<\/ul>/);
+  assert.match(response.body, /&lt;script&gt;alert\(&#39;xss&#39;\)&lt;\/script&gt;/);
+  assert.doesNotMatch(response.body, /<script>alert\('xss'\)<\/script>/);
+  assert.doesNotMatch(response.body, /href="javascript:alert\(1\)"/);
   assert.match(response.body, /Back to timeline/);
   assert.match(response.body, /href="\/timeline\?project=acme-app&amp;type=session-note"/);
   assert.match(response.body, /Project<\/span>acme-app/);

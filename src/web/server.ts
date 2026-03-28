@@ -12,6 +12,7 @@ import {
   ProjectMemoryWebHostEnvVar,
   ProjectMemoryWebPortEnvVar,
 } from "./constants.ts";
+import { baselineMarkdownRendererNote, renderMarkdownToHtml } from "./markdown.ts";
 import {
   isWebReadError,
   normalizeWebTimelineQuery,
@@ -262,6 +263,12 @@ const renderHtmlPage = (title: string, content: string): string => {
     "    .metadata-grid dd { margin: 4px 0 0; font-size: 0.98rem; word-break: break-word; }",
     "    pre { overflow-x: auto; background: #201a17; color: #f8f2e9; padding: 16px; border-radius: 10px; }",
     "    code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; }",
+    "    .markdown-body > :first-child { margin-top: 0; }",
+    "    .markdown-body > :last-child { margin-bottom: 0; }",
+    "    .markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body pre { margin: 0 0 16px; }",
+    "    .markdown-body ul, .markdown-body ol { padding-left: 24px; }",
+    "    .markdown-body li { margin-bottom: 8px; }",
+    "    .markdown-body a { color: #7b2f14; }",
     "    @media (max-width: 640px) {",
     "      main { padding: 24px 14px 36px; }",
     "      h1 { font-size: 1.9rem; }",
@@ -409,9 +416,9 @@ const renderDocumentView = (
       renderMetadataEntries(metadataEntries).split("\n").map((line) => `  ${line}`).join("\n"),
       "</section>",
       "<section class=\"panel\">",
-      "  <h2>Markdown Source</h2>",
-      '  <p class="meta">Rendered as raw Markdown source in the baseline read-only shell.</p>',
-      `  <pre><code>${escapeHtml(document.body)}</code></pre>`,
+      "  <h2>Rendered Markdown</h2>",
+      `  <p class="meta">${escapeHtml(baselineMarkdownRendererNote)}</p>`,
+      `  <div class="markdown-body">${renderMarkdownToHtml(document.body)}</div>`,
       "</section>",
     ].join("\n"),
   );
