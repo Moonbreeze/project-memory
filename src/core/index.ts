@@ -15,6 +15,7 @@ export {
   isActiveDocumentRelativePath,
   isManagedDocumentRelativePath,
   listAllActiveDocumentPaths,
+  readDocumentsSkippingInvalidWorkItems,
   readDocument,
   resolveManagedDocumentPathInfo,
   resolveDocumentTypeFromRelativePath,

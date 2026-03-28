@@ -2,7 +2,10 @@ import {
   isDocumentStatus,
   isDocumentType,
   isManagedDocumentRelativePath,
+  isWorkItemPlanningState,
+  listAllActiveDocumentPaths,
   listDocuments,
+  readDocumentsSkippingInvalidWorkItems,
   readColdStart,
   readDocument,
   readPlanningBacklog,
@@ -29,6 +32,7 @@ import type {
   WebTimelineQueryInput,
   WebTimelineView,
 } from "./types.ts";
+import { AllProjectsFilterValue } from "./constants.ts";
 
 const defaultTimelineLimit = 50;
 const maxTimelineLimit = 200;
@@ -78,7 +82,7 @@ const getPlanningState = (
     return undefined;
   }
 
-  return document.planningState;
+  return isWorkItemPlanningState(document.planningState) ? document.planningState : undefined;
 };
 
 const getDependencyCount = (
@@ -134,6 +138,17 @@ const toListDocumentsQuery = (query: WebTimelineQuery): ListDocumentsQuery => {
     status: query.status,
     type: query.type,
   };
+};
+
+const listAvailableProjects = (context: RepositoryContext): string[] => {
+  const { documents } = readDocumentsSkippingInvalidWorkItems(
+    context,
+    listAllActiveDocumentPaths(context),
+  );
+
+  return [...new Set(documents.map((document) => document.metadata.project))].sort((left, right) => {
+    return left.localeCompare(right);
+  });
 };
 
 const readBoundedResult = (
@@ -198,17 +213,21 @@ export const isWebReadError = (error: unknown): error is WebReadError => {
 export const normalizeWebTimelineQuery = (
   input: WebTimelineQueryInput,
 ): WebTimelineQuery => {
-  const project = trimOptionalValue(input.project);
-  const type = trimOptionalValue(input.type);
-  const status = trimOptionalValue(input.status);
+  const rawProject = trimOptionalValue(input.project);
+  const project = rawProject === AllProjectsFilterValue ? undefined : rawProject;
+  const rawType = trimOptionalValue(input.type);
+  const rawStatus = trimOptionalValue(input.status);
 
-  if (type && !isDocumentType(type)) {
-    throw createWebReadError("invalid-query", `Unsupported document type: ${type}`, 400);
+  if (rawType && !isDocumentType(rawType)) {
+    throw createWebReadError("invalid-query", `Unsupported document type: ${rawType}`, 400);
   }
 
-  if (status && !isDocumentStatus(status)) {
-    throw createWebReadError("invalid-query", `Unsupported document status: ${status}`, 400);
+  if (rawStatus && !isDocumentStatus(rawStatus)) {
+    throw createWebReadError("invalid-query", `Unsupported document status: ${rawStatus}`, 400);
   }
+
+  const type = rawType && isDocumentType(rawType) ? rawType : undefined;
+  const status = rawStatus && isDocumentStatus(rawStatus) ? rawStatus : undefined;
 
   return {
     limit: parseLimit(trimOptionalValue(input.limit)),
@@ -229,6 +248,7 @@ export const readWebTimeline = (
 
   return {
     appliedQuery: query,
+    availableProjects: listAvailableProjects(context),
     rows: result.documents.map((document) => toWebDocumentSummary(document)),
     invalidDocuments: result.invalidDocuments,
   };

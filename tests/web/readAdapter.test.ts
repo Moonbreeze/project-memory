@@ -71,6 +71,7 @@ test("Web read adapter normalizes timeline filters and maps document summaries",
     status: "active",
     type: "session-note",
   });
+  assert.deepEqual(view.availableProjects, ["acme-app", "beta-app"]);
   assert.equal(view.rows.length, 1);
   assert.equal(view.rows[0]?.project, "acme-app");
   assert.equal(view.rows[0]?.topic, "timeline-target");
@@ -78,6 +79,12 @@ test("Web read adapter normalizes timeline filters and maps document summaries",
     view.rows[0]?.routePath,
     `/documents/${encodeURIComponent(view.rows[0]?.relativePath ?? "")}`,
   );
+
+  const allProjectsQuery = normalizeWebTimelineQuery({
+    project: "*",
+  });
+
+  assert.equal(allProjectsQuery.project, undefined);
 });
 
 test("Web read adapter returns a normalized invalid-document error for invalid managed documents", () => {

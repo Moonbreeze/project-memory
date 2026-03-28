@@ -52,15 +52,66 @@ test("Web timeline route lists managed documents using shared core reads", async
   );
 
   assert.equal(response.statusCode, 200);
-  assert.match(response.body, /Latest Documents/);
+  assert.match(response.body, /<h1 class="view-mode">Timeline<\/h1>/);
   assert.match(response.body, /web-baseline/);
   assert.match(response.body, /timeline-ordering/);
+  assert.match(response.body, /id="timeline-project-filter" name="project"/);
+  assert.match(response.body, /Project Memory/);
+  assert.match(response.body, /Read-only latest-first browsing over managed project-memory documents\./);
   assert.match(response.body, /Type/);
   assert.match(response.body, /Project/);
   assert.match(response.body, /Status/);
   assert.match(response.body, /Path/);
-  assert.match(response.body, /Open document/);
   assert.match(response.body, new RegExp(encodeURIComponent(sessionNote.relativePath)));
+});
+
+test("Web timeline route defaults to the most recent project while keeping an explicit all-projects option", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+  setupTestProjectTaxonomy(context, "beta-app", ["docs"]);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "older project row",
+      date: "2026-03-21",
+      summary: "Seed an older project row.",
+      actions: ["Keep one older project row available."],
+      followUp: ["Allow manual switching to all projects later."],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "beta-app",
+      topic: "newer project row",
+      date: "2026-03-22",
+      summary: "Seed the newest project row.",
+      actions: ["Make one project the default timeline scope."],
+      followUp: ["Keep all projects available as an explicit option."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /<option value="\*">All projects<\/option>/);
+  assert.match(response.body, /<option value="beta-app" selected="selected">beta-app<\/option>/);
+  assert.match(response.body, /newer-project-row/);
+  assert.doesNotMatch(response.body, /older-project-row/);
+  assert.match(response.body, /from=%2Ftimeline%3Fproject%3Dbeta-app/);
 });
 
 test("Web timeline route keeps same-day results in shared-core latest-first order", async () => {
@@ -106,7 +157,7 @@ test("Web timeline route keeps same-day results in shared-core latest-first orde
   );
 
   assert.equal(response.statusCode, 200);
-  assert.match(response.body, /Ordered by shared-core latest-first chronology/);
+  assert.match(response.body, /Read-only latest-first browsing over managed project-memory documents\./);
   assert.match(response.body, /Recorded At/);
 
   const laterIndex = response.body.indexOf("later-note");
@@ -178,9 +229,16 @@ test("Web timeline route applies normalized query filters through the read adapt
     response.body,
     /from=%2Ftimeline%3Fproject%3Dacme-app%26type%3Dsession-note/,
   );
+  assert.match(response.body, /<form class="filter-form" method="GET" action="\/timeline" onchange="this\.requestSubmit\(\)">/);
+  assert.match(response.body, /id="timeline-project-filter" name="project"/);
+  assert.match(response.body, /<option value="\*">All projects<\/option>/);
+  assert.match(response.body, /<option value="acme-app" selected="selected">acme-app<\/option>/);
+  assert.match(response.body, /<option value="beta-app">beta-app<\/option>/);
+  assert.match(response.body, /<option value="session-note" selected="selected">session-note<\/option>/);
   assert.match(response.body, /Project/);
   assert.match(response.body, /Type/);
-  assert.match(response.body, /Clear filters/);
+  assert.doesNotMatch(response.body, /Apply filters/);
+  assert.match(response.body, /aria-label="Clear filters"/);
 });
 
 test("Web timeline route renders a deterministic empty state for unmatched filters", async () => {
@@ -214,9 +272,47 @@ test("Web timeline route renders a deterministic empty state for unmatched filte
 
   assert.equal(response.statusCode, 200);
   assert.match(response.body, /No Matching Documents/);
+  assert.match(response.body, /Project Memory/);
+  assert.match(response.body, /<option value="acme-app" selected="selected">acme-app<\/option>/);
+  assert.match(response.body, /<option value="decision" selected="selected">decision<\/option>/);
   assert.match(response.body, /project: acme-app/);
   assert.match(response.body, /type: decision/);
-  assert.match(response.body, /Clear filters/);
+  assert.match(response.body, /aria-label="Clear filters"/);
+});
+
+test("Web timeline filter controls preserve explicit non-filter query parameters when clearing filters", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "limited row",
+      date: "2026-03-22",
+      summary: "Seed one row for query-preserving filter controls.",
+      actions: ["Render one matching row."],
+      followUp: ["Keep explicit limit values in the clear-filter URL."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline?project=acme-app&status=active&limit=10",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /<input type="hidden" name="limit" value="10">/);
+  assert.match(response.body, /href="\/timeline\?limit=10"/);
+  assert.match(response.body, /<option value="active" selected="selected">active<\/option>/);
 });
 
 test("Web timeline route renders a deterministic empty repository state without filters", async () => {
@@ -238,7 +334,7 @@ test("Web timeline route renders a deterministic empty repository state without 
   assert.equal(response.statusCode, 200);
   assert.match(response.body, /No Documents Yet/);
   assert.match(response.body, /No managed documents are available in this repository yet\./);
-  assert.doesNotMatch(response.body, /Clear filters/);
+  assert.doesNotMatch(response.body, /aria-label="Clear filters"/);
 });
 
 test("Web timeline route reports invalid managed documents skipped during list reads", async () => {
@@ -511,6 +607,7 @@ test("resolveWebRuntimeConfig prefers project-memory-specific host and port over
 
     assert.equal(config.host, "0.0.0.0");
     assert.equal(config.port, 4510);
+    assert.ok(config.context);
     assert.equal(config.context.memoryRootDir, memoryRootDir);
   } finally {
     process.env.PROJECT_MEMORY_ROOT = originalProjectMemoryRoot;

@@ -2,9 +2,15 @@ import fs from "node:fs";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
-import { createRepositoryContext } from "../core/index.ts";
+import {
+  createRepositoryContext,
+  DocumentStatusValues,
+  DocumentTypeValues,
+} from "../core/index.ts";
 
 import {
+  AllProjectsFilterLabel,
+  AllProjectsFilterValue,
   DefaultWebHost,
   DefaultWebPort,
   GenericWebHostEnvVar,
@@ -78,14 +84,20 @@ type TimelineContext = {
   activeFilters: Array<{ label: string; value: string }>;
   hasFilters: boolean;
   normalizedPath: string;
+  limit?: string;
+  project?: string;
+  projectSelection?: string;
+  status?: string;
+  type?: string;
 };
 
 const parseTimelineContext = (timelineReturnPath: string): TimelineContext => {
-  const normalizedPath = normalizeTimelineReturnPath(timelineReturnPath);
-  const timelineUrl = new URL(normalizedPath, "http://127.0.0.1");
+  const timelineReturnUrl = normalizeTimelineReturnPath(timelineReturnPath);
+  const timelineUrl = new URL(timelineReturnUrl, "http://127.0.0.1");
   const activeFilters: TimelineContext["activeFilters"] = [];
 
-  const project = timelineUrl.searchParams.get("project")?.trim();
+  const projectSelection = timelineUrl.searchParams.get("project")?.trim();
+  const project = projectSelection === AllProjectsFilterValue ? undefined : projectSelection;
   if (project) {
     activeFilters.push({ label: "Project", value: project });
   }
@@ -100,12 +112,54 @@ const parseTimelineContext = (timelineReturnPath: string): TimelineContext => {
     activeFilters.push({ label: "Status", value: status });
   }
 
+  const limit = timelineUrl.searchParams.get("limit")?.trim();
+  const normalizedPath = createTimelineQueryPath({
+    limit,
+    projectSelection,
+    status,
+    type,
+  });
+
   return {
     activeFilters,
     hasFilters: activeFilters.length > 0,
+    limit,
     normalizedPath,
+    project,
+    projectSelection,
+    status,
+    type,
   };
 };
+
+function createTimelineQueryPath(
+  query: {
+    limit?: string;
+    projectSelection?: string;
+    status?: string;
+    type?: string;
+  },
+): string {
+  const timelineUrl = new URL(TimelineRoutePath, "http://127.0.0.1");
+
+  if (query.projectSelection) {
+    timelineUrl.searchParams.set("project", query.projectSelection);
+  }
+
+  if (query.type) {
+    timelineUrl.searchParams.set("type", query.type);
+  }
+
+  if (query.status) {
+    timelineUrl.searchParams.set("status", query.status);
+  }
+
+  if (query.limit) {
+    timelineUrl.searchParams.set("limit", query.limit);
+  }
+
+  return timelineUrl.search ? `${TimelineRoutePath}?${timelineUrl.searchParams.toString()}` : TimelineRoutePath;
+}
 
 const renderMetadataEntries = (
   entries: ReadonlyArray<{ label: string; value: string }>,
@@ -170,6 +224,81 @@ const renderTagList = (
   ].join("\n");
 };
 
+const renderSelectOptions = (
+  options: ReadonlyArray<{ label: string; value: string }>,
+  selectedValue: string | undefined,
+): string => {
+  return [
+    ...options.map((option) => {
+      const isSelected = option.value === selectedValue ? ' selected="selected"' : "";
+      return `      <option value="${escapeHtml(option.value)}"${isSelected}>${escapeHtml(option.label)}</option>`;
+    }),
+  ].join("\n");
+};
+
+const renderTimelineFilterForm = (
+  timelineContext: TimelineContext,
+  availableProjects: ReadonlyArray<string>,
+  resetPath: string,
+): string => {
+  const projectOptions = [
+    { label: AllProjectsFilterLabel, value: AllProjectsFilterValue },
+    ...availableProjects.map((project) => {
+      return { label: project, value: project };
+    }),
+  ];
+  const typeOptions = [
+    { label: "All document types", value: "" },
+    ...DocumentTypeValues.map((type) => {
+      return { label: type, value: type };
+    }),
+  ];
+  const statusOptions = [
+    { label: "All statuses", value: "" },
+    ...DocumentStatusValues.map((status) => {
+      return { label: status, value: status };
+    }),
+  ];
+  const showReset = timelineContext.normalizedPath !== resetPath;
+
+  return [
+    '<form class="filter-form" method="GET" action="/timeline" onchange="this.requestSubmit()">',
+    ...(timelineContext.limit
+      ? [
+          `    <input type="hidden" name="limit" value="${escapeHtml(timelineContext.limit)}">`,
+        ]
+      : []),
+    '  <div class="filter-grid">',
+    '      <div class="filter-field project-field">',
+    '        <label for="timeline-project-filter">Project</label>',
+    '        <select id="timeline-project-filter" name="project">',
+    renderSelectOptions(projectOptions, timelineContext.projectSelection),
+    "        </select>",
+    "      </div>",
+    '      <div class="filter-field type-field">',
+    '        <label for="timeline-type-filter">Type</label>',
+    '        <select id="timeline-type-filter" name="type">',
+    renderSelectOptions(typeOptions, timelineContext.type),
+    "        </select>",
+    "      </div>",
+    '      <div class="filter-field status-field">',
+    '        <label for="timeline-status-filter">Status</label>',
+    '        <select id="timeline-status-filter" name="status">',
+    renderSelectOptions(statusOptions, timelineContext.status),
+    "        </select>",
+    "      </div>",
+    '    <div class="filter-actions">',
+    ...(showReset
+      ? [
+          `      <a class="icon-button" href="${escapeHtml(resetPath)}" aria-label="Clear filters" title="Clear filters">&#128465;</a>`,
+        ]
+      : []),
+    "    </div>",
+    "  </div>",
+    "</form>",
+  ].join("\n");
+};
+
 const renderTimelineQuerySummary = (view: WebTimelineView): string => {
   const summaryParts = [`${view.rows.length} result${view.rows.length === 1 ? "" : "s"}`];
 
@@ -211,13 +340,31 @@ const normalizeTimelineReturnPath = (rawValue: string | null): string => {
   }
 };
 
+const renderTimelineInlineMetadata = (
+  entries: ReadonlyArray<{ label: string; value: string }>,
+): string => {
+  return [
+    '<div class="timeline-meta" aria-label="Document metadata">',
+    ...entries.map((entry) => {
+      return `  <span><span class="timeline-meta-label">${escapeHtml(entry.label)}</span>${escapeHtml(entry.value)}</span>`;
+    }),
+    "</div>",
+  ].join("\n");
+};
+
 const createDocumentHref = (routePath: string, timelineReturnPath: string): string => {
   const documentUrl = new URL(routePath, "http://127.0.0.1");
   documentUrl.searchParams.set("from", timelineReturnPath);
   return `${documentUrl.pathname}?${documentUrl.searchParams.toString()}`;
 };
 
-const renderHtmlPage = (title: string, content: string): string => {
+const renderHtmlPage = (
+  title: string,
+  content: string,
+  options: { showSiteHeader?: boolean } = {},
+): string => {
+  const showSiteHeader = options.showSiteHeader ?? true;
+
   return [
     "<!doctype html>",
     '<html lang="en">',
@@ -229,7 +376,7 @@ const renderHtmlPage = (title: string, content: string): string => {
     "    :root { color-scheme: light; font-family: Georgia, 'Times New Roman', serif; }",
     "    * { box-sizing: border-box; }",
     "    body { margin: 0; background: radial-gradient(circle at top, rgba(211, 170, 109, 0.22), transparent 28%), linear-gradient(180deg, #f7f1e3 0%, #fffdf8 100%); color: #1d1b19; }",
-    "    main { max-width: 1040px; margin: 0 auto; padding: 32px 20px 48px; }",
+    "    main { max-width: 1320px; margin: 0 auto; padding: 24px 20px 48px; }",
     "    header { margin-bottom: 24px; }",
     "    h1 { margin: 0 0 8px; font-size: 2.2rem; }",
     "    h2, h3 { margin-top: 0; }",
@@ -245,9 +392,10 @@ const renderHtmlPage = (title: string, content: string): string => {
     "    .panel { background: rgba(255, 255, 255, 0.84); border: 1px solid #d8cfbf; border-radius: 12px; padding: 18px 20px; box-shadow: 0 12px 30px rgba(75, 53, 32, 0.08); }",
     "    .page-intro { display: grid; gap: 10px; margin-bottom: 18px; }",
     "    .page-stack { display: grid; gap: 18px; }",
-    "    .timeline-list { list-style: none; padding-left: 0; margin: 24px 0 0; display: grid; gap: 16px; }",
-    "    .timeline-item { display: grid; gap: 14px; }",
-    "    .timeline-title { margin-bottom: 0; font-size: 1.35rem; }",
+    "    .timeline-list { list-style: none; padding-left: 0; margin: 0; }",
+    "    .timeline-item { display: grid; gap: 8px; padding: 14px 0; border-bottom: 1px solid rgba(93, 46, 12, 0.14); }",
+    "    .timeline-item:last-child { border-bottom: none; }",
+    "    .timeline-title { margin: 0; font-size: 1.18rem; line-height: 1.2; }",
     "    .timeline-title a { color: #5d2e0c; text-decoration: none; }",
     "    .timeline-title a:hover { text-decoration: underline; }",
     "    .timeline-actions { display: flex; gap: 12px; flex-wrap: wrap; }",
@@ -256,8 +404,29 @@ const renderHtmlPage = (title: string, content: string): string => {
     "    .tag-list { list-style: none; padding-left: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 10px; }",
     "    .tag-list li { margin: 0; padding: 6px 10px; border-radius: 999px; background: #f1e5d3; color: #4d3424; font-size: 0.92rem; }",
     "    .tag-label { margin-right: 6px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6a5c; }",
+    "    .view-shell { position: sticky; top: 0; z-index: 10; margin-bottom: 18px; padding: 14px 18px; border: 1px solid rgba(93, 46, 12, 0.16); border-radius: 14px; background: rgba(255, 251, 244, 0.92); backdrop-filter: blur(10px); box-shadow: 0 12px 30px rgba(75, 53, 32, 0.08); }",
+    "    .view-shell-bar { display: grid; gap: 14px; }",
+    "    .view-context { display: grid; gap: 4px; }",
+    "    .view-eyebrow { margin: 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a5c; }",
+    "    .view-mode { margin: 0; font-size: 1.9rem; }",
+    "    .view-shell .meta { margin: 0; }",
+    "    .filter-form { display: block; }",
+    "    .filter-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }",
+    "    .filter-field { display: grid; gap: 6px; }",
+    "    .filter-field.project-field { min-width: 220px; flex: 1 1 220px; }",
+    "    .filter-field.type-field, .filter-field.status-field { min-width: 180px; flex: 0 1 220px; }",
+    "    .filter-field label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a5c; }",
+    "    .filter-field select { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #c9b79f; border-radius: 10px; background: #fffdf8; color: #1d1b19; font: inherit; }",
+    "    .filter-field select:focus { outline: 2px solid rgba(123, 47, 20, 0.2); border-color: #7b2f14; }",
+    "    .filter-actions { display: flex; align-items: end; min-height: 44px; }",
+    "    .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; border: 1px solid rgba(93, 46, 12, 0.18); background: rgba(255, 255, 255, 0.84); color: #5d2e0c; font-size: 1.1rem; text-decoration: none; }",
+    "    .icon-button:hover { background: #fff4e8; }",
     "    .state-list { margin: 0; padding-left: 20px; }",
     "    .state-list li { margin-bottom: 10px; }",
+    "    .timeline-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; color: #5f564d; font-size: 0.92rem; }",
+    "    .timeline-meta span { min-width: 0; }",
+    "    .timeline-meta-label { margin-right: 6px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a5c; }",
+    "    .timeline-results { padding: 0 2px; }",
     "    .metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px 18px; margin: 0; }",
     "    .metadata-grid dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6a5c; }",
     "    .metadata-grid dd { margin: 4px 0 0; font-size: 0.98rem; word-break: break-word; }",
@@ -270,19 +439,31 @@ const renderHtmlPage = (title: string, content: string): string => {
     "    .markdown-body li { margin-bottom: 8px; }",
     "    .markdown-body a { color: #7b2f14; }",
     "    @media (max-width: 640px) {",
-    "      main { padding: 24px 14px 36px; }",
+      "      main { padding: 24px 14px 36px; }",
     "      h1 { font-size: 1.9rem; }",
-    "      .panel { padding: 16px; }",
+    "      .view-shell { top: 0; padding: 12px; margin-bottom: 14px; }",
+    "      .view-shell-bar { gap: 12px; }",
+    "      .view-mode { font-size: 1.45rem; }",
+    "      .filter-grid { gap: 10px; }",
+    "      .filter-field.project-field, .filter-field.type-field, .filter-field.status-field { min-width: min(100%, 180px); flex: 1 1 140px; }",
+    "      .filter-actions { min-height: 40px; }",
+      "      .timeline-item { padding: 12px 0; }",
+      "      .timeline-meta { gap: 6px 12px; font-size: 0.88rem; }",
+      "      .panel { padding: 16px; }",
     "    }",
     "  </style>",
     "</head>",
     "<body>",
     "  <main>",
-    "    <header>",
-    "      <h1>Project Memory</h1>",
-    "      <div class=\"meta\">Read-only Web shell over the shared core repository context.</div>",
-    "    </header>",
-    "    <nav><a href=\"/timeline\">Timeline</a></nav>",
+    ...(showSiteHeader
+      ? [
+          "    <header>",
+          "      <h1>Project Memory</h1>",
+          "      <div class=\"meta\">Read-only Web shell over the shared core repository context.</div>",
+          "    </header>",
+          "    <nav><a href=\"/timeline\">Timeline</a></nav>",
+        ]
+      : []),
     content,
     "  </main>",
     "</body>",
@@ -290,11 +471,17 @@ const renderHtmlPage = (title: string, content: string): string => {
   ].join("\n");
 };
 
-const renderTimeline = (view: WebTimelineView, timelineReturnPath: string): string => {
+const renderTimeline = (
+  view: WebTimelineView,
+  timelineReturnPath: string,
+  resetPath: string,
+): string => {
   const timelineContext = parseTimelineContext(timelineReturnPath);
-  const actions: RenderAction[] = timelineContext.hasFilters
-    ? [{ href: TimelineRoutePath, label: "Clear filters" }]
-    : [];
+  const filterForm = renderTimelineFilterForm(
+    timelineContext,
+    view.availableProjects,
+    resetPath,
+  );
   const emptyStateTitle = timelineContext.hasFilters
     ? "No Matching Documents"
     : "No Documents Yet";
@@ -314,37 +501,32 @@ const renderTimeline = (view: WebTimelineView, timelineReturnPath: string): stri
         "  </ul>",
         "</section>",
       ].join("\n");
+  const shell = [
+    '<section class="view-shell">',
+    '  <div class="view-shell-bar">',
+    '    <div class="view-context">',
+    '      <p class="view-eyebrow">Project Memory</p>',
+    "      <h1 class=\"view-mode\">Timeline</h1>",
+    '      <p class="meta">Read-only latest-first browsing over managed project-memory documents.</p>',
+    `      <p class="meta">${escapeHtml(renderTimelineQuerySummary(view))}</p>`,
+    "    </div>",
+    filterForm.split("\n").map((line) => `    ${line}`).join("\n"),
+    "  </div>",
+    "</section>",
+  ].join("\n");
   const items = view.rows.length === 0
     ? [
-        '<section class="page-intro panel">',
-        renderBreadcrumbs([{ label: "Timeline" }]).split("\n").map((line) => `  ${line}`).join("\n"),
-        "  <h2>Timeline</h2>",
-        '  <p class="meta">Read-only latest-first browsing over managed project-memory documents.</p>',
-        `  <p class="meta">${escapeHtml(renderTimelineQuerySummary(view))}</p>`,
-        `  ${renderTagList(timelineContext.activeFilters, "No project, type, or status filters are active.")}`,
-        "</section>",
+        shell,
         '<section class="panel">',
         `  <h2>${escapeHtml(emptyStateTitle)}</h2>`,
         `  <p>${escapeHtml(emptyStateMessage)}</p>`,
-        ...(actions.length > 0
-          ? [renderActionLinks(actions).split("\n").map((line) => `  ${line}`).join("\n")]
-          : []),
         "</section>",
         invalidDocumentPanel,
       ].filter((section) => section.length > 0).join("\n")
     : [
-        '<section class="page-intro panel">',
-        renderBreadcrumbs([{ label: "Timeline" }]).split("\n").map((line) => `  ${line}`).join("\n"),
-        "  <h2>Latest Documents</h2>",
-        '  <p class="meta">Ordered by shared-core latest-first chronology using date, recorded_at, then relativePath.</p>',
-        `  <p class="meta">${escapeHtml(renderTimelineQuerySummary(view))}</p>`,
-        `  ${renderTagList(timelineContext.activeFilters, "No project, type, or status filters are active.")}`,
-        ...(actions.length > 0
-          ? [renderActionLinks(actions).split("\n").map((line) => `  ${line}`).join("\n")]
-          : []),
-        "</section>",
+        shell,
         invalidDocumentPanel,
-        '<section aria-label="Timeline results">',
+        '<section class="timeline-results" aria-label="Timeline results">',
         '  <ul class="timeline-list">',
         ...view.rows.map((document) => {
           const metadataEntries = [
@@ -365,12 +547,9 @@ const renderTimeline = (view: WebTimelineView, timelineReturnPath: string): stri
           const documentHref = createDocumentHref(document.routePath, timelineReturnPath);
 
           return [
-            '    <li class="timeline-item panel">',
+            '    <li class="timeline-item">',
             `      <h3 class="timeline-title"><a href="${escapeHtml(documentHref)}">${escapeHtml(document.topic)}</a></h3>`,
-            renderMetadataEntries(metadataEntries).split("\n").map((line) => `      ${line}`).join("\n"),
-            '      <div class="timeline-actions">',
-            `        <a href="${escapeHtml(documentHref)}">Open document</a>`,
-            "      </div>",
+            renderTimelineInlineMetadata(metadataEntries).split("\n").map((line) => `      ${line}`).join("\n"),
             "    </li>",
           ].join("\n");
         }),
@@ -378,7 +557,11 @@ const renderTimeline = (view: WebTimelineView, timelineReturnPath: string): stri
         "</section>",
       ].join("\n");
 
-  return renderHtmlPage("Project Memory Timeline", `<div class="page-stack">${items}</div>`);
+  return renderHtmlPage(
+    "Project Memory Timeline",
+    `<div class="page-stack">${items}</div>`,
+    { showSiteHeader: false },
+  );
 };
 
 const renderDocumentView = (
@@ -655,16 +838,49 @@ export const handleWebRequest = async (
 
   if (pathname === "/" || pathname === TimelineRoutePath) {
     try {
+      const rawProjectSelection = requestUrl.searchParams.get("project")?.trim() ?? undefined;
       const timelineQuery = normalizeWebTimelineQuery({
         limit: requestUrl.searchParams.get("limit") ?? undefined,
-        project: requestUrl.searchParams.get("project") ?? undefined,
+        project: rawProjectSelection,
         status: requestUrl.searchParams.get("status") ?? undefined,
         type: requestUrl.searchParams.get("type") ?? undefined,
       });
-      const timelineResult = readWebTimeline(timelineQuery, context);
+      const rawStatus = requestUrl.searchParams.get("status")?.trim() ?? undefined;
+      const rawType = requestUrl.searchParams.get("type")?.trim() ?? undefined;
+      const shouldDefaultProject = !rawProjectSelection && !rawStatus && !rawType;
+      const baselineTimelineResult = readWebTimeline(timelineQuery, context);
+      const defaultProjectSelection = shouldDefaultProject
+        ? baselineTimelineResult.rows[0]?.project
+        : undefined;
+      const effectiveTimelineQuery = defaultProjectSelection
+        ? { ...timelineQuery, project: defaultProjectSelection }
+        : timelineQuery;
+      const effectiveProjectSelection = rawProjectSelection
+        ?? defaultProjectSelection
+        ?? undefined;
+      const timelineResult = defaultProjectSelection
+        ? readWebTimeline(effectiveTimelineQuery, context)
+        : baselineTimelineResult;
+      const effectiveTimelinePath = createTimelineQueryPath({
+        limit: requestUrl.searchParams.get("limit")?.trim() ?? undefined,
+        projectSelection: effectiveProjectSelection,
+        status: effectiveTimelineQuery.status,
+        type: effectiveTimelineQuery.type,
+      });
+      const resetPath = createTimelineQueryPath({
+        limit: requestUrl.searchParams.get("limit")?.trim() ?? undefined,
+        projectSelection: defaultProjectSelection,
+      });
+
       return buildHtmlResponse(
         200,
-        renderTimeline(timelineResult, normalizeTimelinePath(pathname, requestUrl.search)),
+        renderTimeline(
+          timelineResult,
+          shouldDefaultProject
+            ? effectiveTimelinePath
+            : normalizeTimelinePath(pathname, requestUrl.search),
+          resetPath,
+        ),
       );
     } catch (error) {
       if (isWebReadError(error)) {

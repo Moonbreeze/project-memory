@@ -4,6 +4,16 @@
 export const DefaultWebHost = "127.0.0.1";
 
 /**
+ * Explicit select value used by the Web UI for the cross-project timeline mode.
+ */
+export const AllProjectsFilterValue = "*";
+
+/**
+ * Human-readable label for the cross-project timeline mode.
+ */
+export const AllProjectsFilterLabel = "All projects";
+
+/**
  * Default network port for the local Web UI.
  */
 export const DefaultWebPort = 4310;

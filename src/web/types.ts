@@ -127,6 +127,8 @@ export type WebDocumentSummary = {
 export type WebTimelineView = {
   /** Normalized filters that produced the rows. */
   appliedQuery: WebTimelineQuery;
+  /** Available project slugs discovered from active managed documents. */
+  availableProjects: string[];
   /** Timeline rows in display order. */
   rows: WebDocumentSummary[];
   /** Invalid managed documents skipped during aggregation. */
