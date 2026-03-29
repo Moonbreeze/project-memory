@@ -4,6 +4,7 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
 import {
   createRepositoryContext,
+  resolveManagedWebServerConfig,
   DocumentStatusValues,
   DocumentTypeValues,
 } from "../core/index.ts";
@@ -22,8 +23,10 @@ import {
 import { baselineMarkdownRendererNote, renderMarkdownToHtml } from "./markdown.ts";
 import {
   isWebReadError,
+  normalizeWebSearchQuery,
   normalizeWebTimelineQuery,
   readWebDocument,
+  readWebSearch,
   readWebTimeline,
 } from "./readAdapter.ts";
 import type {
@@ -32,35 +35,12 @@ import type {
   WebRequestInput,
   WebResponsePayload,
   WebRuntimeConfig,
+  WebSearchView,
   WebTimelineView,
 } from "./types.ts";
 
 const TimelineRoutePath = "/timeline";
-
-const getPreferredEnvValue = (preferredName: string, fallbackName: string): string | undefined => {
-  const preferredValue = process.env[preferredName]?.trim();
-  if (preferredValue) {
-    return preferredValue;
-  }
-
-  const fallbackValue = process.env[fallbackName]?.trim();
-  if (fallbackValue) {
-    return fallbackValue;
-  }
-
-  return undefined;
-};
-
-const parsePort = (rawPort: string): number => {
-  const parsedPort = Number.parseInt(rawPort, 10);
-  if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-    throw new Error(
-      `${ProjectMemoryWebPortEnvVar}/${GenericWebPortEnvVar} must be an integer between 1 and 65535`,
-    );
-  }
-
-  return parsedPort;
-};
+const SearchRoutePath = "/search";
 
 const escapeHtml = (value: string): string => {
   return value
@@ -90,6 +70,26 @@ type TimelineContext = {
   projectSelection?: string;
   status?: string;
   type?: string;
+};
+
+type SearchContext = {
+  activeFilters: Array<{ label: string; value: string }>;
+  backPath: string;
+  hasExecutedQuery: boolean;
+  normalizedPath: string;
+  limit?: string;
+  project?: string;
+  projectSelection?: string;
+  queryText?: string;
+  type?: string;
+};
+
+type ReturnContext = {
+  activeFilters: Array<{ label: string; value: string }>;
+  backLabel: string;
+  kind: "search" | "timeline";
+  normalizedPath: string;
+  rootLabel: string;
 };
 
 const parseTimelineContext = (timelineReturnPath: string): TimelineContext => {
@@ -160,6 +160,40 @@ function createTimelineQueryPath(
   }
 
   return timelineUrl.search ? `${TimelineRoutePath}?${timelineUrl.searchParams.toString()}` : TimelineRoutePath;
+}
+
+function createSearchQueryPath(
+  query: {
+    from?: string;
+    limit?: string;
+    projectSelection?: string;
+    q?: string;
+    type?: string;
+  },
+): string {
+  const searchUrl = new URL(SearchRoutePath, "http://127.0.0.1");
+
+  if (query.q) {
+    searchUrl.searchParams.set("q", query.q);
+  }
+
+  if (query.projectSelection) {
+    searchUrl.searchParams.set("project", query.projectSelection);
+  }
+
+  if (query.type) {
+    searchUrl.searchParams.set("type", query.type);
+  }
+
+  if (query.limit) {
+    searchUrl.searchParams.set("limit", query.limit);
+  }
+
+  if (query.from) {
+    searchUrl.searchParams.set("from", query.from);
+  }
+
+  return searchUrl.search ? `${SearchRoutePath}?${searchUrl.searchParams.toString()}` : SearchRoutePath;
 }
 
 const renderMetadataEntries = (
@@ -237,6 +271,32 @@ const renderSelectOptions = (
   ].join("\n");
 };
 
+const renderCollapsibleControl = (
+  options: {
+    body: string;
+    buttonLabel: string;
+    controlId: string;
+    defaultExpanded: boolean;
+    displayMode: "always" | "mobile-only";
+    summary: string;
+  },
+): string => {
+  const checkedAttribute = options.defaultExpanded ? ' checked="checked"' : "";
+
+  return [
+    `<div class="collapsible-control" data-display-mode="${escapeHtml(options.displayMode)}">`,
+    `  <input class="collapsible-toggle-input" type="checkbox" id="${escapeHtml(options.controlId)}"${checkedAttribute}>`,
+    '  <div class="collapsible-toggle-row">',
+    `    <p class="collapsible-toggle-summary">${escapeHtml(options.summary)}</p>`,
+    `    <label class="collapsible-toggle-button" for="${escapeHtml(options.controlId)}">${escapeHtml(options.buttonLabel)}</label>`,
+    "  </div>",
+    '  <div class="collapsible-panel-body">',
+    options.body.split("\n").map((line) => `    ${line}`).join("\n"),
+    "  </div>",
+    "</div>",
+  ].join("\n");
+};
+
 const renderTimelineFilterForm = (
   timelineContext: TimelineContext,
   availableProjects: ReadonlyArray<string>,
@@ -300,6 +360,62 @@ const renderTimelineFilterForm = (
   ].join("\n");
 };
 
+const renderSearchForm = (
+  searchContext: SearchContext,
+  availableProjects: ReadonlyArray<string>,
+  resetPath: string,
+): string => {
+  const projectOptions = [
+    { label: AllProjectsFilterLabel, value: AllProjectsFilterValue },
+    ...availableProjects.map((project) => {
+      return { label: project, value: project };
+    }),
+  ];
+  const typeOptions = [
+    { label: "All document types", value: "" },
+    ...DocumentTypeValues.map((type) => {
+      return { label: type, value: type };
+    }),
+  ];
+  const showReset = searchContext.normalizedPath !== resetPath;
+
+  return [
+    '<form class="search-form" method="GET" action="/search">',
+    ...(searchContext.backPath !== TimelineRoutePath
+      ? [`  <input type="hidden" name="from" value="${escapeHtml(searchContext.backPath)}">`]
+      : []),
+    '  <div class="search-grid">',
+    '    <div class="search-field query-field">',
+    '      <label for="search-query">Search</label>',
+    `      <input id="search-query" name="q" type="search" value="${escapeHtml(searchContext.queryText ?? "")}" placeholder="Search active managed documents">`,
+    "    </div>",
+    '    <div class="search-field project-field">',
+    '      <label for="search-project-filter">Project</label>',
+    '      <select id="search-project-filter" name="project">',
+    renderSelectOptions(projectOptions, searchContext.projectSelection),
+    "      </select>",
+    "    </div>",
+    '    <div class="search-field type-field">',
+    '      <label for="search-type-filter">Type</label>',
+    '      <select id="search-type-filter" name="type">',
+    renderSelectOptions(typeOptions, searchContext.type),
+    "      </select>",
+    "    </div>",
+    '    <div class="search-field limit-field">',
+    '      <label for="search-limit">Limit</label>',
+    `      <input id="search-limit" name="limit" type="number" min="1" max="200" value="${escapeHtml(searchContext.limit ?? "50")}">`,
+    "    </div>",
+    '    <div class="search-actions">',
+    '      <button class="primary-button" type="submit">Search</button>',
+    ...(showReset
+      ? [`      <a class="icon-button" href="${escapeHtml(resetPath)}" aria-label="Clear search" title="Clear search">&#128465;</a>`]
+      : []),
+    "    </div>",
+    "  </div>",
+    "</form>",
+  ].join("\n");
+};
+
 const renderTimelineQuerySummary = (view: WebTimelineView): string => {
   const summaryParts = [`${view.rows.length} result${view.rows.length === 1 ? "" : "s"}`];
 
@@ -320,6 +436,33 @@ const renderTimelineQuerySummary = (view: WebTimelineView): string => {
   return summaryParts.join(" · ");
 };
 
+const renderSearchQuerySummary = (
+  view: WebSearchView,
+  hasExecutedQuery: boolean,
+): string => {
+  if (!hasExecutedQuery) {
+    return "Use the shared-core search surface with optional project and type narrowing.";
+  }
+
+  const summaryParts = [`${view.results.length} result${view.results.length === 1 ? "" : "s"}`];
+
+  if (view.appliedQuery.text) {
+    summaryParts.push(`query: ${view.appliedQuery.text}`);
+  }
+
+  if (view.appliedQuery.project) {
+    summaryParts.push(`project: ${view.appliedQuery.project}`);
+  }
+
+  if (view.appliedQuery.type) {
+    summaryParts.push(`type: ${view.appliedQuery.type}`);
+  }
+
+  summaryParts.push(`limit: ${String(view.appliedQuery.limit)}`);
+
+  return summaryParts.join(" · ");
+};
+
 const renderTimelineFilterSummary = (timelineContext: TimelineContext): string => {
   if (timelineContext.activeFilters.length === 0) {
     return "All projects · all document types · all statuses";
@@ -330,12 +473,97 @@ const renderTimelineFilterSummary = (timelineContext: TimelineContext): string =
   }).join(" · ");
 };
 
+const parseSearchContext = (searchReturnPath: string): SearchContext => {
+  const normalizedSearchPath = normalizeSearchReturnPath(searchReturnPath);
+  const searchUrl = new URL(normalizedSearchPath, "http://127.0.0.1");
+  const activeFilters: SearchContext["activeFilters"] = [];
+  const queryText = searchUrl.searchParams.get("q")?.trim();
+  const projectSelection = searchUrl.searchParams.get("project")?.trim();
+  const project = projectSelection === AllProjectsFilterValue ? undefined : projectSelection;
+  const type = searchUrl.searchParams.get("type")?.trim();
+  const limit = searchUrl.searchParams.get("limit")?.trim();
+  const hasExplicitBackPath = searchUrl.searchParams.has("from");
+  const backPath = normalizeTimelineReturnPath(searchUrl.searchParams.get("from"));
+  const hasExecutedQuery = ["q", "project", "type", "limit"].some((parameter) => {
+    return searchUrl.searchParams.has(parameter);
+  });
+
+  if (queryText) {
+    activeFilters.push({ label: "Query", value: queryText });
+  }
+
+  if (project) {
+    activeFilters.push({ label: "Project", value: project });
+  }
+
+  if (type) {
+    activeFilters.push({ label: "Type", value: type });
+  }
+
+  if (limit) {
+    activeFilters.push({ label: "Limit", value: limit });
+  }
+
+  return {
+    activeFilters,
+    backPath,
+    hasExecutedQuery,
+    limit,
+    normalizedPath: createSearchQueryPath({
+      from: hasExplicitBackPath ? backPath : undefined,
+      limit,
+      projectSelection,
+      q: queryText,
+      type,
+    }),
+    project,
+    projectSelection,
+    queryText,
+    type,
+  };
+};
+
+const renderSearchFilterSummary = (searchContext: SearchContext): string => {
+  if (searchContext.activeFilters.length === 0) {
+    return "Search the current corpus";
+  }
+
+  return searchContext.activeFilters.map((entry) => {
+    return `${entry.label.toLowerCase()}: ${entry.value}`;
+  }).join(" · ");
+};
+
 const normalizeTimelinePath = (pathname: string, search: string): string => {
   if (pathname !== "/" && pathname !== TimelineRoutePath) {
     return TimelineRoutePath;
   }
 
-  return search ? `${TimelineRoutePath}${search}` : TimelineRoutePath;
+  const timelineUrl = new URL(`${TimelineRoutePath}${search}`, "http://127.0.0.1");
+  return createTimelineQueryPath({
+    limit: timelineUrl.searchParams.get("limit")?.trim() ?? undefined,
+    projectSelection: timelineUrl.searchParams.get("project")?.trim() ?? undefined,
+    status: timelineUrl.searchParams.get("status")?.trim() ?? undefined,
+    type: timelineUrl.searchParams.get("type")?.trim() ?? undefined,
+  });
+};
+
+const normalizeSearchPath = (pathname: string, search: string): string => {
+  if (pathname !== SearchRoutePath) {
+    return SearchRoutePath;
+  }
+
+  const searchUrl = new URL(`${SearchRoutePath}${search}`, "http://127.0.0.1");
+  const hasExplicitBackPath = searchUrl.searchParams.has("from");
+
+  return createSearchQueryPath({
+    from: hasExplicitBackPath
+      ? normalizeTimelineReturnPath(searchUrl.searchParams.get("from"))
+      : undefined,
+    limit: searchUrl.searchParams.get("limit")?.trim() ?? undefined,
+    projectSelection: searchUrl.searchParams.get("project")?.trim() ?? undefined,
+    q: searchUrl.searchParams.get("q")?.trim() ?? undefined,
+    type: searchUrl.searchParams.get("type")?.trim() ?? undefined,
+  });
 };
 
 const normalizeTimelineReturnPath = (rawValue: string | null): string => {
@@ -349,6 +577,61 @@ const normalizeTimelineReturnPath = (rawValue: string | null): string => {
   } catch {
     return TimelineRoutePath;
   }
+};
+
+const normalizeSearchReturnPath = (rawValue: string | null): string => {
+  if (!rawValue) {
+    return SearchRoutePath;
+  }
+
+  try {
+    const url = new URL(rawValue, "http://127.0.0.1");
+    return normalizeSearchPath(url.pathname, url.search);
+  } catch {
+    return SearchRoutePath;
+  }
+};
+
+const normalizeReturnPath = (rawValue: string | null): string => {
+  if (!rawValue) {
+    return TimelineRoutePath;
+  }
+
+  try {
+    const url = new URL(rawValue, "http://127.0.0.1");
+    if (url.pathname === SearchRoutePath) {
+      return normalizeSearchPath(url.pathname, url.search);
+    }
+
+    return normalizeTimelinePath(url.pathname, url.search);
+  } catch {
+    return TimelineRoutePath;
+  }
+};
+
+const parseReturnContext = (returnPath: string): ReturnContext => {
+  const normalizedPath = normalizeReturnPath(returnPath);
+
+  if (normalizedPath.startsWith(SearchRoutePath)) {
+    const searchContext = parseSearchContext(normalizedPath);
+
+    return {
+      activeFilters: searchContext.activeFilters,
+      backLabel: "Back to search",
+      kind: "search",
+      normalizedPath: searchContext.normalizedPath,
+      rootLabel: "Search",
+    };
+  }
+
+  const timelineContext = parseTimelineContext(normalizedPath);
+  return {
+    activeFilters: timelineContext.activeFilters,
+    backLabel: "Back to timeline",
+    kind: "timeline",
+    normalizedPath: timelineContext.normalizedPath,
+    rootLabel: "Timeline",
+  };
 };
 
 const renderTimelineInlineMetadata = (
@@ -463,13 +746,18 @@ const renderHtmlPage = (
     "    .view-mode { margin: 0; font-size: 1.9rem; }",
     "    .view-shell .meta { margin: 0; }",
     "    .filter-panel { display: grid; gap: 12px; }",
-    "    .filter-toggle-input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }",
-    "    .filter-toggle-row { display: none; }",
-    "    .filter-toggle-summary { margin: 0; font-size: 0.92rem; color: #5f564d; }",
-    "    .filter-toggle-button { display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(93, 46, 12, 0.16); background: rgba(255, 255, 255, 0.84); color: #5d2e0c; font-weight: 700; cursor: pointer; }",
-    "    .filter-toggle-button::before { content: '+'; font-size: 1rem; line-height: 1; }",
-    "    .filter-toggle-input:checked + .filter-toggle-row .filter-toggle-button::before { content: '-'; }",
-    "    .filter-panel-body { display: block; }",
+    "    .collapsible-control { display: grid; gap: 12px; }",
+    "    .collapsible-toggle-input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }",
+    "    .collapsible-toggle-row { display: none; }",
+    "    .collapsible-toggle-summary { margin: 0; font-size: 0.92rem; color: #5f564d; }",
+    "    .collapsible-toggle-button { display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(93, 46, 12, 0.16); background: rgba(255, 255, 255, 0.84); color: #5d2e0c; font-weight: 700; cursor: pointer; }",
+    "    .collapsible-toggle-button::before { content: '+'; font-size: 1rem; line-height: 1; }",
+    "    .collapsible-toggle-input:checked + .collapsible-toggle-row .collapsible-toggle-button::before { content: '-'; }",
+    "    .collapsible-panel-body { display: block; }",
+    "    .collapsible-control[data-display-mode='always'] .collapsible-toggle-row { display: flex; align-items: start; justify-content: space-between; gap: 10px; }",
+    "    .collapsible-control[data-display-mode='always'] .collapsible-toggle-summary { flex: 1 1 auto; min-width: 0; }",
+    "    .collapsible-control[data-display-mode='always'] .collapsible-panel-body { display: none; }",
+    "    .collapsible-control[data-display-mode='always'] .collapsible-toggle-input:checked ~ .collapsible-panel-body { display: block; }",
     "    .filter-form { display: block; }",
     "    .filter-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }",
     "    .filter-field { display: grid; gap: 6px; }",
@@ -479,6 +767,18 @@ const renderHtmlPage = (
     "    .filter-field select { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #c9b79f; border-radius: 10px; background: #fffdf8; color: #1d1b19; font: inherit; }",
     "    .filter-field select:focus { outline: 2px solid rgba(123, 47, 20, 0.2); border-color: #7b2f14; }",
     "    .filter-actions { display: flex; align-items: end; min-height: 44px; }",
+    "    .search-form { display: block; }",
+    "    .search-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }",
+    "    .search-field { display: grid; gap: 6px; }",
+    "    .search-field.query-field { min-width: 280px; flex: 2 1 320px; }",
+    "    .search-field.project-field, .search-field.type-field { min-width: 180px; flex: 1 1 220px; }",
+    "    .search-field.limit-field { width: 110px; flex: 0 0 110px; }",
+    "    .search-field label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a5c; }",
+    "    .search-field input, .search-field select { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #c9b79f; border-radius: 10px; background: #fffdf8; color: #1d1b19; font: inherit; }",
+    "    .search-field input:focus, .search-field select:focus { outline: 2px solid rgba(123, 47, 20, 0.2); border-color: #7b2f14; }",
+    "    .search-actions { display: flex; align-items: end; gap: 10px; min-height: 44px; }",
+    "    .primary-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border: 1px solid rgba(93, 46, 12, 0.18); border-radius: 999px; background: #7b2f14; color: #fffaf5; font: inherit; font-weight: 700; cursor: pointer; }",
+    "    .primary-button:hover { background: #5d2e0c; }",
     "    .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; border: 1px solid rgba(93, 46, 12, 0.18); background: rgba(255, 255, 255, 0.84); color: #5d2e0c; font-size: 1.1rem; text-decoration: none; }",
     "    .icon-button:hover { background: #fff4e8; }",
     "    .state-list { margin: 0; padding-left: 20px; }",
@@ -504,14 +804,17 @@ const renderHtmlPage = (
     "      .view-shell { top: 0; padding: 12px; margin-bottom: 14px; }",
     "      .view-shell-bar { gap: 12px; }",
     "      .view-mode { font-size: 1.45rem; }",
-    "      .filter-panel { gap: 10px; }",
-    "      .filter-toggle-row { display: flex; align-items: start; justify-content: space-between; gap: 10px; }",
-    "      .filter-toggle-summary { flex: 1 1 auto; min-width: 0; }",
-    "      .filter-panel-body { display: none; }",
-    "      .filter-toggle-input:checked ~ .filter-panel-body { display: block; }",
-    "      .filter-grid { gap: 10px; }",
-    "      .filter-field.project-field, .filter-field.type-field, .filter-field.status-field { min-width: min(100%, 180px); flex: 1 1 140px; }",
-    "      .filter-actions { min-height: 40px; }",
+      "      .filter-panel { gap: 10px; }",
+      "      .collapsible-control[data-display-mode='mobile-only'] .collapsible-toggle-row { display: flex; align-items: start; justify-content: space-between; gap: 10px; }",
+      "      .collapsible-control[data-display-mode='mobile-only'] .collapsible-toggle-summary { flex: 1 1 auto; min-width: 0; }",
+      "      .collapsible-control[data-display-mode='mobile-only'] .collapsible-panel-body { display: none; }",
+      "      .collapsible-control[data-display-mode='mobile-only'] .collapsible-toggle-input:checked ~ .collapsible-panel-body { display: block; }",
+      "      .filter-grid { gap: 10px; }",
+      "      .filter-field.project-field, .filter-field.type-field, .filter-field.status-field { min-width: min(100%, 180px); flex: 1 1 140px; }",
+      "      .filter-actions { min-height: 40px; }",
+      "      .search-grid { gap: 10px; }",
+      "      .search-field.query-field, .search-field.project-field, .search-field.type-field, .search-field.limit-field { min-width: min(100%, 180px); flex: 1 1 140px; width: auto; }",
+      "      .search-actions { width: 100%; justify-content: flex-start; min-height: 40px; }",
       "      .timeline-item { padding: 12px 0; }",
       "      .timeline-meta { gap: 6px 12px; font-size: 0.88rem; }",
       "      .panel { padding: 16px; }",
@@ -547,6 +850,12 @@ const renderTimeline = (
     view.availableProjects,
     resetPath,
   );
+  const searchPath = createSearchQueryPath({
+    from: timelineContext.normalizedPath,
+    limit: timelineContext.limit,
+    projectSelection: timelineContext.projectSelection,
+    type: timelineContext.type,
+  });
   const emptyStateTitle = timelineContext.hasFilters
     ? "No Matching Documents"
     : "No Documents Yet";
@@ -574,16 +883,17 @@ const renderTimeline = (
     "      <h1 class=\"view-mode\">Timeline</h1>",
     '      <p class="meta">Read-only latest-first browsing over managed project-memory documents.</p>',
     `      <p class="meta">${escapeHtml(renderTimelineQuerySummary(view))}</p>`,
+    renderActionLinks([{ href: searchPath, label: "Search documents" }]).split("\n").map((line) => `      ${line}`).join("\n"),
     "    </div>",
     '    <div class="filter-panel">',
-    '      <input class="filter-toggle-input" type="checkbox" id="timeline-filter-toggle">',
-    '      <div class="filter-toggle-row">',
-    `        <p class="filter-toggle-summary">${escapeHtml(renderTimelineFilterSummary(timelineContext))}</p>`,
-    '        <label class="filter-toggle-button" for="timeline-filter-toggle">Filters</label>',
-    "      </div>",
-    '      <div class="filter-panel-body">',
-    filterForm.split("\n").map((line) => `        ${line}`).join("\n"),
-    "      </div>",
+    renderCollapsibleControl({
+      body: filterForm,
+      buttonLabel: "Filters",
+      controlId: "timeline-filter-toggle",
+      defaultExpanded: false,
+      displayMode: "mobile-only",
+      summary: renderTimelineFilterSummary(timelineContext),
+    }).split("\n").map((line) => `      ${line}`).join("\n"),
     "    </div>",
     "  </div>",
     "</section>",
@@ -642,11 +952,106 @@ const renderTimeline = (
   );
 };
 
+const renderSearch = (
+  view: WebSearchView,
+  searchReturnPath: string,
+  resetPath: string,
+): string => {
+  const searchContext = parseSearchContext(searchReturnPath);
+  const searchForm = renderSearchForm(
+    searchContext,
+    view.availableProjects,
+    resetPath,
+  );
+  const collapsibleForm = renderCollapsibleControl({
+    body: searchForm,
+    buttonLabel: "Search options",
+    controlId: "search-form-toggle",
+    defaultExpanded: !searchContext.hasExecutedQuery,
+    displayMode: "always",
+    summary: renderSearchFilterSummary(searchContext),
+  });
+  const emptyStateTitle = searchContext.hasExecutedQuery
+    ? "No Matching Results"
+    : "Search the Corpus";
+  const emptyStateMessage = searchContext.hasExecutedQuery
+    ? "No managed documents matched the current search query."
+    : "Enter a query or narrow by project and type to search active managed documents.";
+  const shell = [
+    '<section class="view-shell">',
+    '  <div class="view-shell-bar">',
+    '    <div class="view-context">',
+    '      <p class="view-eyebrow">Project Memory</p>',
+    "      <h1 class=\"view-mode\">Search</h1>",
+    '      <p class="meta">Read-only search over the existing shared-core substring query surface.</p>',
+    `      <p class="meta">${escapeHtml(renderSearchQuerySummary(view, searchContext.hasExecutedQuery))}</p>`,
+    renderActionLinks([{ href: searchContext.backPath, label: "Back to timeline" }]).split("\n").map((line) => `      ${line}`).join("\n"),
+    "    </div>",
+    collapsibleForm.split("\n").map((line) => `    ${line}`).join("\n"),
+    "  </div>",
+    "</section>",
+  ].join("\n");
+
+  if (view.results.length === 0) {
+    return renderHtmlPage(
+      "Project Memory Search",
+      [
+        '<div class="page-stack">',
+        shell,
+        '<section class="panel">',
+        `  <h2>${escapeHtml(emptyStateTitle)}</h2>`,
+        `  <p>${escapeHtml(emptyStateMessage)}</p>`,
+        "</section>",
+        "</div>",
+      ].join("\n"),
+      { showSiteHeader: false },
+    );
+  }
+
+  return renderHtmlPage(
+    "Project Memory Search",
+    [
+      '<div class="page-stack">',
+      shell,
+      '<section class="timeline-results" aria-label="Search results">',
+      '  <ul class="timeline-list">',
+      ...view.results.map((document) => {
+        const showRecordedAt = hasPreciseRecordedAt(document.date, document.recordedAt);
+        const metadataEntries = [
+          { label: "Type", value: document.type },
+          { label: "Project", value: document.project },
+          { label: "Status", value: document.status },
+          { label: "Date", value: document.date },
+          ...(showRecordedAt
+            ? [{ label: "Recorded At", value: formatRecordedAtForDisplay(document.recordedAt ?? "") }]
+            : []),
+          { label: "Path", value: document.relativePath },
+        ];
+        const documentHref = createDocumentHref(document.routePath, searchContext.normalizedPath);
+
+        return [
+          '    <li class="timeline-item">',
+          `      <h3 class="timeline-title"><a href="${escapeHtml(documentHref)}">${escapeHtml(document.topic)}</a></h3>`,
+          '      <div class="timeline-preview" aria-label="Search excerpt">',
+          `        <p class="timeline-preview-primary">${escapeHtml(document.excerpt)}</p>`,
+          "      </div>",
+          renderTimelineInlineMetadata(metadataEntries).split("\n").map((line) => `      ${line}`).join("\n"),
+          "    </li>",
+        ].join("\n");
+      }),
+      "  </ul>",
+      "</section>",
+      "</div>",
+    ].join("\n"),
+    { showSiteHeader: false },
+  );
+};
+
 const renderDocumentView = (
   document: WebDocumentDetail,
-  timelineReturnPath: string,
+  returnPath: string,
 ): string => {
-  const timelineContext = parseTimelineContext(timelineReturnPath);
+  const returnContext = parseReturnContext(returnPath);
   const showRecordedAt = hasPreciseRecordedAt(document.date, document.recordedAt);
   const metadataEntries = [
     { label: "Topic", value: document.topic },
@@ -665,14 +1070,14 @@ const renderDocumentView = (
     [
       '<section class="page-intro panel">',
       renderBreadcrumbs([
-        { href: timelineContext.normalizedPath, label: "Timeline" },
+        { href: returnContext.normalizedPath, label: returnContext.rootLabel },
         { label: document.topic },
       ]).split("\n").map((line) => `  ${line}`).join("\n"),
       `  <h2>${escapeHtml(document.topic)}</h2>`,
       '  <p class="meta">Exact managed document view resolved through the shared-core read surface.</p>',
-      `  ${renderTagList(timelineContext.activeFilters, "Opened from the unfiltered timeline view.")}`,
+      `  ${renderTagList(returnContext.activeFilters, returnContext.kind === "search" ? "Opened directly from the search surface." : "Opened from the unfiltered timeline view.")}`,
       renderActionLinks([
-        { href: timelineContext.normalizedPath, label: "Back to timeline" },
+        { href: returnContext.normalizedPath, label: returnContext.backLabel },
       ]).split("\n").map((line) => `  ${line}`).join("\n"),
       "</section>",
       "<section class=\"panel\">",
@@ -863,9 +1268,9 @@ const buildConfigurationErrorResponse = (
 
 const buildReadErrorResponse = (
   error: WebReadError,
-  timelineReturnPath: string = TimelineRoutePath,
+  returnPath: string = TimelineRoutePath,
 ): WebResponsePayload => {
-  const timelineContext = parseTimelineContext(timelineReturnPath);
+  const returnContext = parseReturnContext(returnPath);
   const title = error.code === "configuration-error"
     ? "Configuration Error"
     : error.code === "invalid-document"
@@ -879,12 +1284,12 @@ const buildReadErrorResponse = (
     renderErrorPage(title, error.message, {
       actions: error.code === "configuration-error"
         ? []
-        : [{ href: timelineContext.normalizedPath, label: "Back to timeline" }],
+        : [{ href: returnContext.normalizedPath, label: returnContext.backLabel }],
       breadcrumbs: [
-        { href: timelineContext.normalizedPath, label: "Timeline" },
+        { href: returnContext.normalizedPath, label: returnContext.rootLabel },
         { label: title },
       ],
-      metadataEntries: timelineContext.activeFilters,
+      metadataEntries: returnContext.activeFilters,
     }),
   );
 };
@@ -903,7 +1308,7 @@ export const handleWebRequest = async (
 
   const requestUrl = normalizeUrlFromInput(request);
   const pathname = requestUrl.pathname;
-  const timelineReturnPath = normalizeTimelineReturnPath(requestUrl.searchParams.get("from"));
+  const returnPath = normalizeReturnPath(requestUrl.searchParams.get("from"));
   const configurationError = getWebConfigurationError(config);
   if (configurationError) {
     return buildConfigurationErrorResponse(configurationError, config);
@@ -972,17 +1377,49 @@ export const handleWebRequest = async (
     }
   }
 
+  if (pathname === SearchRoutePath) {
+    try {
+      const searchPath = normalizeSearchPath(pathname, requestUrl.search);
+      const searchContext = parseSearchContext(searchPath);
+      const searchQuery = normalizeWebSearchQuery({
+        limit: requestUrl.searchParams.get("limit") ?? undefined,
+        project: requestUrl.searchParams.get("project") ?? undefined,
+        q: requestUrl.searchParams.get("q") ?? undefined,
+        type: requestUrl.searchParams.get("type") ?? undefined,
+      });
+      const searchResult = searchContext.hasExecutedQuery
+        ? readWebSearch(searchQuery, context)
+        : {
+            appliedQuery: searchQuery,
+            availableProjects: readWebTimeline({ limit: 1 }, context).availableProjects,
+            results: [],
+          };
+      const resetPath = createSearchQueryPath({
+        from: searchContext.backPath !== TimelineRoutePath ? searchContext.backPath : undefined,
+      });
+
+      return buildHtmlResponse(200, renderSearch(searchResult, searchPath, resetPath));
+    } catch (error) {
+      if (isWebReadError(error)) {
+        return buildReadErrorResponse(error, SearchRoutePath);
+      }
+
+      throw error;
+    }
+  }
+
   const documentRoute = decodeDocumentRoute(pathname);
   if (documentRoute.kind === "invalid") {
+    const returnContext = parseReturnContext(returnPath);
     return buildHtmlResponse(
       400,
       renderErrorPage("Invalid Document", documentRoute.message, {
-        actions: [{ href: timelineReturnPath, label: "Back to timeline" }],
+        actions: [{ href: returnContext.normalizedPath, label: returnContext.backLabel }],
         breadcrumbs: [
-          { href: timelineReturnPath, label: "Timeline" },
+          { href: returnContext.normalizedPath, label: returnContext.rootLabel },
           { label: "Invalid Document" },
         ],
-        metadataEntries: parseTimelineContext(timelineReturnPath).activeFilters,
+        metadataEntries: returnContext.activeFilters,
       }),
     );
   }
@@ -990,10 +1427,10 @@ export const handleWebRequest = async (
   if (documentRoute.kind === "matched") {
     try {
       const document = readWebDocument(documentRoute.relativePath, context);
-      return buildHtmlResponse(200, renderDocumentView(document, timelineReturnPath));
+      return buildHtmlResponse(200, renderDocumentView(document, returnPath));
     } catch (error) {
       if (isWebReadError(error)) {
-        return buildReadErrorResponse(error, timelineReturnPath);
+        return buildReadErrorResponse(error, returnPath);
       }
 
       throw error;
@@ -1016,21 +1453,30 @@ export const handleWebRequest = async (
  * Resolves the local Web runtime configuration from environment variables.
  */
 export const resolveWebRuntimeConfig = (): WebRuntimeConfig => {
-  const host = getPreferredEnvValue(ProjectMemoryWebHostEnvVar, GenericWebHostEnvVar) ?? DefaultWebHost;
-  const rawPort = getPreferredEnvValue(ProjectMemoryWebPortEnvVar, GenericWebPortEnvVar);
-  const port = rawPort ? parsePort(rawPort) : DefaultWebPort;
-
   try {
+    const context = createRepositoryContext();
+    const lifecycleConfig = resolveManagedWebServerConfig({}, context);
+
     return {
-      context: createRepositoryContext(),
-      host,
-      port,
+      context,
+      host: lifecycleConfig.bind.host,
+      port: lifecycleConfig.bind.port,
     };
   } catch (error) {
+    const fallbackHost = process.env[ProjectMemoryWebHostEnvVar]?.trim()
+      || process.env[GenericWebHostEnvVar]?.trim()
+      || DefaultWebHost;
+    const fallbackPort = Number.parseInt(
+      process.env[ProjectMemoryWebPortEnvVar]?.trim()
+        || process.env[GenericWebPortEnvVar]?.trim()
+        || `${DefaultWebPort}`,
+      10,
+    );
+
     return {
       configurationError: error instanceof Error ? error.message : String(error),
-      host,
-      port,
+      host: fallbackHost,
+      port: Number.isInteger(fallbackPort) ? fallbackPort : DefaultWebPort,
     };
   }
 };
@@ -1080,10 +1526,6 @@ export const startWebServer = async (
       resolve();
     });
   });
-
-  process.stdout.write(
-    `Project Memory Web listening on http://${config.host}:${config.port}\n`,
-  );
 
   return server;
 };

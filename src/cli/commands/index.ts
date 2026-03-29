@@ -22,6 +22,9 @@ import { upsertCanonicalDocCommand } from "./upsertCanonicalDoc.ts";
 import { upsertProviderNoteCommand } from "./upsertProviderNote.ts";
 import { upsertTaxonomyRegistryCommand } from "./upsertTaxonomyRegistry.ts";
 import { upsertWorkItemCommand } from "./upsertWorkItem.ts";
+import { webStartCommand } from "./webStart.ts";
+import { webStatusCommand } from "./webStatus.ts";
+import { webStopCommand } from "./webStop.ts";
 
 import type { CliCommandHandler } from "../types.ts";
 
@@ -53,4 +56,7 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "commit-pending-changes": commitPendingChangesCommand,
   "push-pending-changes": pushPendingChangesCommand,
   "archive-document": archiveDocumentCommand,
+  "web-start": webStartCommand,
+  "web-status": webStatusCommand,
+  "web-stop": webStopCommand,
 };

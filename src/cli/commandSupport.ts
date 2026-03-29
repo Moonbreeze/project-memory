@@ -172,6 +172,22 @@ export const parseOptionalLimit = (value: string | undefined): number | undefine
 };
 
 /**
+ * Parses an optional TCP port flag.
+ */
+export const parseOptionalPort = (value: string | undefined, key: string): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const numericValue = Number.parseInt(value, 10);
+  if (!Number.isInteger(numericValue) || numericValue < 1 || numericValue > 65535) {
+    throw new Error(`Invalid --${key} value: ${value}`);
+  }
+
+  return numericValue;
+};
+
+/**
  * Parses an optional boolean flag encoded as `true` or `false`.
  */
 export const parseOptionalBoolean = (

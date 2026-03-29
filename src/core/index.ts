@@ -58,6 +58,11 @@ export * from "./shared/index.ts";
 export { archiveDocument, resolveArchiveRelativePath } from "./archive/index.ts";
 
 /**
+ * Core managed Web runtime operations.
+ */
+export * from "./webRuntime/index.ts";
+
+/**
  * Core git operations.
  */
 export { commitPendingChanges, pushPendingChanges } from "./git/index.ts";

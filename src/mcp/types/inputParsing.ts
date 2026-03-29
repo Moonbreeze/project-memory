@@ -59,6 +59,7 @@ import type {
   TaxonomyRegistryInput,
   TopicEntryInput,
   VerificationResultInput,
+  WebServerLifecycleInput,
   WorkItemContextLocator,
   WorkItemEvidenceLocator,
   WorkItemInput,
@@ -883,5 +884,21 @@ export const parseChooseWorkflowInput = (value: unknown): ChooseWorkflowInput =>
   return {
     goal: readRequiredString(params.goal, "goal"),
     currentStep: readOptionalString(params.currentStep, "currentStep"),
+  };
+};
+
+/**
+ * Parses params for `web_start`, `web_status`, and `web_stop`.
+ */
+export const parseWebServerLifecycleInput = (
+  value: unknown,
+): WebServerLifecycleInput => {
+  const params = readParams(value);
+
+  return {
+    host: readOptionalString(params.host, "host"),
+    port: readOptionalNumber(params.port, "port"),
+    publicBaseUrl: readOptionalString(params.publicBaseUrl, "publicBaseUrl"),
+    suggestPublicUrl: readOptionalBoolean(params.suggestPublicUrl, "suggestPublicUrl"),
   };
 };

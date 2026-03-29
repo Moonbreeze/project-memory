@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -123,6 +124,36 @@ const createPushLoggingGitWrapper = (): { binDir: string; logPath: string } => {
 const parseLastJson = (chunks: string[]): unknown => {
   const payload = chunks.join("").trim();
   return JSON.parse(payload);
+};
+
+/**
+ * Allocates one free local TCP port for lifecycle tests.
+ */
+const findFreePort = async (): Promise<number> => {
+  const server = createServer();
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Failed to resolve temporary port");
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+
+  return address.port;
 };
 
 test("CLI install creates an external memory repository and bootstraps one project", async () => {
@@ -1960,4 +1991,95 @@ test("CLI commits only the selected project when multiple projects have pending 
   assert.match(status.stdout, /projects\/beta-app\/decisions\//);
 
   delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("CLI web-start/web-status/web-stop manage the shared Web runtime", async () => {
+  const rootDir = setupTestRepo();
+  const port = await findFreePort();
+  const previousMemoryRoot = process.env.PROJECT_MEMORY_ROOT;
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  const startCapture = createCapturedIo();
+  const statusCapture = createCapturedIo();
+  const stopCapture = createCapturedIo();
+
+  try {
+    await runCli(
+      [
+        "web-start",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        `${port}`,
+        "--public-base-url",
+        "https://example.com/project-memory",
+        "--prompt-public-url",
+        "false",
+      ],
+      startCapture.io,
+    );
+
+    const started = parseLastJson(startCapture.captured.stdout);
+    if (
+      !isRecord(started)
+      || started.state !== "running"
+      || started.outcome !== "started"
+      || !isRecord(started.timelineLinks)
+      || typeof started.timelineLinks.public !== "string"
+    ) {
+      throw new Error("Unexpected web-start result shape");
+    }
+
+    assert.equal(started.timelineLinks.public, "https://example.com/project-memory/timeline");
+
+    await runCli(
+      [
+        "web-status",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        `${port}`,
+      ],
+      statusCapture.io,
+    );
+
+    const status = parseLastJson(statusCapture.captured.stdout);
+    if (!isRecord(status) || status.state !== "running") {
+      throw new Error("Unexpected web-status result shape");
+    }
+
+    await runCli(
+      [
+        "web-stop",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        `${port}`,
+      ],
+      stopCapture.io,
+    );
+
+    const stopped = parseLastJson(stopCapture.captured.stdout);
+    if (!isRecord(stopped) || stopped.outcome !== "stopped") {
+      throw new Error("Unexpected web-stop result shape");
+    }
+  } finally {
+    const cleanupCapture = createCapturedIo();
+    await runCli(
+      [
+        "web-stop",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        `${port}`,
+      ],
+      cleanupCapture.io,
+    ).catch(() => undefined);
+
+    if (previousMemoryRoot === undefined) {
+      delete process.env.PROJECT_MEMORY_ROOT;
+    } else {
+      process.env.PROJECT_MEMORY_ROOT = previousMemoryRoot;
+    }
+  }
 });

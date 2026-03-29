@@ -5,6 +5,9 @@ import { archiveWorkItemTool } from "../archiveWorkItem.ts";
 import { closeWorkItemTool } from "../closeWorkItem.ts";
 import { commitPendingChangesTool } from "../commitPendingChanges.ts";
 import { pushPendingChangesTool } from "../pushPendingChanges.ts";
+import { webStartTool } from "../webStart.ts";
+import { webStatusTool } from "../webStatus.ts";
+import { webStopTool } from "../webStop.ts";
 import { createEnumStringSchema, createObjectSchema } from "../schema.ts";
 
 import type { RegisteredMcpTool } from "../toolTypes.ts";
@@ -13,6 +16,78 @@ import type { RegisteredMcpTool } from "../toolTypes.ts";
  * MCP lifecycle-oriented tool definitions.
  */
 export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
+  web_start: {
+    name: "web_start",
+    description:
+      "Start the managed read-only Web server for the current PROJECT_MEMORY_ROOT using singleton lifecycle semantics keyed by memory root and bind configuration.",
+    inputSchema: createObjectSchema({
+      host: {
+        type: "string",
+        description: "Optional bind host override.",
+      },
+      port: {
+        type: "number",
+        description: "Optional bind port override.",
+      },
+      publicBaseUrl: {
+        type: "string",
+        description: "Optional explicit public base URL override used only for returned links.",
+      },
+      suggestPublicUrl: {
+        type: "boolean",
+        description: "Whether to include a best-effort public URL suggestion in the result.",
+      },
+    }),
+    handler: webStartTool,
+  },
+  web_status: {
+    name: "web_status",
+    description:
+      "Return the lifecycle status of the managed read-only Web server for the current PROJECT_MEMORY_ROOT, including resolved local/public links.",
+    inputSchema: createObjectSchema({
+      host: {
+        type: "string",
+        description: "Optional bind host override used to select the runtime key.",
+      },
+      port: {
+        type: "number",
+        description: "Optional bind port override used to select the runtime key.",
+      },
+      publicBaseUrl: {
+        type: "string",
+        description: "Optional explicit public base URL override used only for returned links.",
+      },
+      suggestPublicUrl: {
+        type: "boolean",
+        description: "Whether to include a best-effort public URL suggestion in the result.",
+      },
+    }),
+    handler: webStatusTool,
+  },
+  web_stop: {
+    name: "web_stop",
+    description:
+      "Stop the managed read-only Web server for the current PROJECT_MEMORY_ROOT and clean any stale runtime record for the selected singleton key.",
+    inputSchema: createObjectSchema({
+      host: {
+        type: "string",
+        description: "Optional bind host override used to select the runtime key.",
+      },
+      port: {
+        type: "number",
+        description: "Optional bind port override used to select the runtime key.",
+      },
+      publicBaseUrl: {
+        type: "string",
+        description: "Optional explicit public base URL override used only for returned links.",
+      },
+      suggestPublicUrl: {
+        type: "boolean",
+        description: "Whether to include a best-effort public URL suggestion in the result.",
+      },
+    }),
+    handler: webStopTool,
+  },
   archive_document: {
     name: "archive_document",
     resultMode: "compact-document",

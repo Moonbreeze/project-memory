@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { Buffer } from "node:buffer";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -142,6 +143,36 @@ const callTool = (id: string, name: string, args: Record<string, unknown>): unkn
       arguments: args,
     },
   });
+};
+
+/**
+ * Allocates one free local TCP port for lifecycle tests.
+ */
+const findFreePort = async (): Promise<number> => {
+  const server = createServer();
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Failed to resolve temporary port");
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+
+  return address.port;
 };
 
 test("MCP server requires PROJECT_MEMORY_ROOT for document access", () => {
@@ -1849,4 +1880,62 @@ test("MCP server exposes bounded read entrypoints", () => {
   assert.equal(rationaleResult.structuredContent.documents.length, 3);
 
   delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("MCP web_start/web_status/web_stop manage the shared Web runtime", async () => {
+  const rootDir = setupTestRepo();
+  const port = await findFreePort();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+
+  try {
+    const startResponse = callTool("web-start", "web_start", {
+      host: "127.0.0.1",
+      port,
+      publicBaseUrl: "https://example.com/project-memory",
+    });
+    const startResult = readToolResult(startResponse);
+    if (
+      !isRecord(startResult.structuredContent)
+      || startResult.structuredContent.state !== "running"
+      || startResult.structuredContent.outcome !== "started"
+      || !isRecord(startResult.structuredContent.timelineLinks)
+    ) {
+      throw new Error("Expected web_start structured content");
+    }
+
+    assert.equal(
+      startResult.structuredContent.timelineLinks.public,
+      "https://example.com/project-memory/timeline",
+    );
+
+    const statusResponse = callTool("web-status", "web_status", {
+      host: "127.0.0.1",
+      port,
+    });
+    const statusResult = readToolResult(statusResponse);
+    if (
+      !isRecord(statusResult.structuredContent)
+      || statusResult.structuredContent.state !== "running"
+    ) {
+      throw new Error("Expected web_status structured content");
+    }
+
+    const stopResponse = callTool("web-stop", "web_stop", {
+      host: "127.0.0.1",
+      port,
+    });
+    const stopResult = readToolResult(stopResponse);
+    if (
+      !isRecord(stopResult.structuredContent)
+      || stopResult.structuredContent.outcome !== "stopped"
+    ) {
+      throw new Error("Expected web_stop structured content");
+    }
+  } finally {
+    callTool("web-stop-cleanup", "web_stop", {
+      host: "127.0.0.1",
+      port,
+    });
+    delete process.env.PROJECT_MEMORY_ROOT;
+  }
 });
