@@ -383,6 +383,127 @@ test("Web timeline route reports invalid managed documents skipped during list r
   assert.match(response.body, /broken-work-item/);
 });
 
+test("Web timeline route exposes a compact entry point into search", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "search entry point",
+      date: "2026-03-22",
+      summary: "Seed one row so the timeline defaults to this project.",
+      actions: ["Expose the search entry point from the shell."],
+      followUp: ["Keep navigation into the dedicated search route compact."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/timeline",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Search documents/);
+  assert.match(response.body, /href="\/search\?project=acme-app&amp;from=%2Ftimeline%3Fproject%3Dacme-app"/);
+});
+
+test("Web search route wraps shared-core search with the approved query contract", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+  setupTestProjectTaxonomy(context, "beta-app", ["docs"]);
+
+  const sessionNote = appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "search route target",
+      date: "2026-03-22",
+      summary: "Searchable summary for the dedicated search page.",
+      actions: ["Keep one search hit in the selected project."],
+      followUp: ["Preserve exact-document navigation from search results."],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "beta-app",
+      topic: "other project result",
+      date: "2026-03-22",
+      summary: "Searchable summary that should be filtered out by project.",
+      actions: ["Keep one non-matching result in another project."],
+      followUp: ["Leave project filtering to the shared-core wrapper."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/search?q=searchable%20summary&project=acme-app&type=session-note&limit=5&from=%2Ftimeline%3Fproject%3Dacme-app",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /<h1 class="view-mode">Search<\/h1>/);
+  assert.match(response.body, /Read-only search over the existing shared-core substring query surface\./);
+  assert.match(response.body, /1 result · query: searchable summary · project: acme-app · type: session-note · limit: 5/);
+  assert.match(response.body, /query: searchable summary · project: acme-app · type: session-note · limit: 5/);
+  assert.match(response.body, /id="search-form-toggle"/);
+  assert.doesNotMatch(response.body, /id="search-form-toggle"[^>]*checked="checked"/);
+  assert.match(response.body, /<input type="hidden" name="from" value="\/timeline\?project=acme-app">/);
+  assert.match(response.body, /<input id="search-query" name="q" type="search" value="searchable summary"/);
+  assert.match(response.body, /<option value="acme-app" selected="selected">acme-app<\/option>/);
+  assert.match(response.body, /<option value="session-note" selected="selected">session-note<\/option>/);
+  assert.match(response.body, /<input id="search-limit" name="limit" type="number" min="1" max="200" value="5">/);
+  assert.match(response.body, /Back to timeline/);
+  assert.match(response.body, /search-route-target/);
+  assert.match(response.body, /Searchable summary for the dedicated search page\./);
+  assert.doesNotMatch(response.body, /other-project-result/);
+  assert.match(
+    response.body,
+    new RegExp(`from=${encodeURIComponent(`/search?q=searchable+summary&project=acme-app&type=session-note&limit=5&from=%2Ftimeline%3Fproject%3Dacme-app`).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+  );
+  assert.match(response.body, new RegExp(encodeURIComponent(sessionNote.relativePath)));
+});
+
+test("Web search route keeps the search form expanded before any query executes", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: "/search",
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Search the Corpus/);
+  assert.match(response.body, /Use the shared-core search surface with optional project and type narrowing\./);
+  assert.match(response.body, /id="search-form-toggle"[^>]*checked="checked"/);
+});
+
 test("Web document route renders provenance metadata and preserves timeline context", async () => {
   const memoryRootDir = setupTestRepo();
   const context = createTestRepositoryContext(memoryRootDir);
@@ -452,6 +573,47 @@ test("Web document route renders provenance metadata and preserves timeline cont
   assert.match(response.body, /Project<\/span>acme-app/);
   assert.match(response.body, /Type<\/span>session-note/);
   assert.match(response.body, new RegExp(sessionNote.relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("Web document route preserves search return context", async () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+
+  const sessionNote = appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "search document context",
+      date: "2026-03-22",
+      summary: "Seed one exact document opened from search.",
+      actions: ["Keep search origin visible in the exact document view."],
+      followUp: ["Return to the same search query after reading the document."],
+    },
+    context,
+  );
+
+  const response = await handleWebRequest(
+    {
+      method: "GET",
+      url: `/documents/${encodeURIComponent(sessionNote.relativePath)}?from=${encodeURIComponent("/search?q=seed&project=acme-app&type=session-note&limit=5&from=%2Ftimeline%3Fproject%3Dacme-app")}`,
+    },
+    {
+      context,
+      host: "127.0.0.1",
+      port: 0,
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Back to search/);
+  assert.match(
+    response.body,
+    /href="\/search\?q=seed&amp;project=acme-app&amp;type=session-note&amp;limit=5&amp;from=%2Ftimeline%3Fproject%3Dacme-app"/,
+  );
+  assert.match(response.body, /Query<\/span>seed/);
+  assert.match(response.body, /Project<\/span>acme-app/);
+  assert.match(response.body, /Type<\/span>session-note/);
+  assert.match(response.body, /Limit<\/span>5/);
 });
 
 test("Web document route omits Recorded At when only day-level fallback is available", async () => {

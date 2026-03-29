@@ -11,6 +11,7 @@ import {
   readPlanningBacklog,
   readPlanningTopicEntry,
   readRationaleEntry,
+  searchDocuments,
   readTopicEntry,
 } from "../core/index.ts";
 import type {
@@ -19,6 +20,7 @@ import type {
   ListedDocument,
   ParsedDocument,
   RepositoryContext,
+  SearchResult,
 } from "../core/index.ts";
 
 import type {
@@ -28,6 +30,10 @@ import type {
   WebDocumentSummary,
   WebReadError,
   WebReadErrorCode,
+  WebSearchQuery,
+  WebSearchQueryInput,
+  WebSearchResult,
+  WebSearchView,
   WebTimelineQuery,
   WebTimelineQueryInput,
   WebTimelineView,
@@ -36,7 +42,9 @@ import { AllProjectsFilterValue } from "./constants.ts";
 import { extractSemanticPreview } from "./preview.ts";
 
 const defaultTimelineLimit = 50;
+const defaultSearchLimit = 50;
 const maxTimelineLimit = 200;
+const maxSearchLimit = 200;
 
 const createDocumentRoutePath = (relativePath: string): string => {
   return `/documents/${encodeURIComponent(relativePath)}`;
@@ -59,16 +67,23 @@ const trimOptionalValue = (value: string | undefined): string | undefined => {
   return trimmedValue;
 };
 
-const parseLimit = (value: string | undefined): number => {
+const parseLimit = (
+  value: string | undefined,
+  options: {
+    defaultValue: number;
+    label: string;
+    maxValue: number;
+  },
+): number => {
   if (!value) {
-    return defaultTimelineLimit;
+    return options.defaultValue;
   }
 
   const parsedLimit = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > maxTimelineLimit) {
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > options.maxValue) {
     throw createWebReadError(
       "invalid-query",
-      `Timeline limit must be an integer between 1 and ${maxTimelineLimit}.`,
+      `${options.label} limit must be an integer between 1 and ${options.maxValue}.`,
       400,
     );
   }
@@ -139,6 +154,20 @@ const toListDocumentsQuery = (query: WebTimelineQuery): ListDocumentsQuery => {
     project: query.project,
     status: query.status,
     type: query.type,
+  };
+};
+
+const toWebSearchResult = (document: SearchResult): WebSearchResult => {
+  return {
+    routePath: createDocumentRoutePath(document.relativePath),
+    relativePath: document.relativePath,
+    type: document.type,
+    project: document.metadata.project,
+    topic: document.metadata.topic,
+    status: document.metadata.status,
+    date: document.metadata.date,
+    recordedAt: document.metadata.recorded_at,
+    excerpt: document.excerpt,
   };
 };
 
@@ -232,9 +261,42 @@ export const normalizeWebTimelineQuery = (
   const status = rawStatus && isDocumentStatus(rawStatus) ? rawStatus : undefined;
 
   return {
-    limit: parseLimit(trimOptionalValue(input.limit)),
+    limit: parseLimit(trimOptionalValue(input.limit), {
+      defaultValue: defaultTimelineLimit,
+      label: "Timeline",
+      maxValue: maxTimelineLimit,
+    }),
     project,
     status,
+    type,
+  };
+};
+
+/**
+ * Normalizes raw search query parameters into typed shared-core filters.
+ */
+export const normalizeWebSearchQuery = (
+  input: WebSearchQueryInput,
+): WebSearchQuery => {
+  const rawProject = trimOptionalValue(input.project);
+  const project = rawProject === AllProjectsFilterValue ? undefined : rawProject;
+  const rawText = trimOptionalValue(input.q);
+  const rawType = trimOptionalValue(input.type);
+
+  if (rawType && !isDocumentType(rawType)) {
+    throw createWebReadError("invalid-query", `Unsupported document type: ${rawType}`, 400);
+  }
+
+  const type = rawType && isDocumentType(rawType) ? rawType : undefined;
+
+  return {
+    limit: parseLimit(trimOptionalValue(input.limit), {
+      defaultValue: defaultSearchLimit,
+      label: "Search",
+      maxValue: maxSearchLimit,
+    }),
+    project,
+    text: rawText,
     type,
   };
 };
@@ -259,6 +321,30 @@ export const readWebTimeline = (
     availableProjects: listAvailableProjects(context),
     rows: result.documents.map((document) => toWebDocumentSummary(document)),
     invalidDocuments: result.invalidDocuments,
+  };
+};
+
+/**
+ * Reads one search result list through the shared-core search surface.
+ */
+export const readWebSearch = (
+  query: WebSearchQuery,
+  context: RepositoryContext,
+): WebSearchView => {
+  const results = searchDocuments(
+    {
+      limit: query.limit,
+      project: query.project,
+      text: query.text,
+      type: query.type,
+    },
+    context,
+  );
+
+  return {
+    appliedQuery: query,
+    availableProjects: listAvailableProjects(context),
+    results: results.map((document) => toWebSearchResult(document)),
   };
 };
 

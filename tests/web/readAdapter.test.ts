@@ -4,9 +4,11 @@ import test from "node:test";
 import { appendSessionNote, createDecision } from "../../src/core/index.ts";
 import {
   isWebReadError,
+  normalizeWebSearchQuery,
   normalizeWebTimelineQuery,
   readWebBoundedRead,
   readWebDocument,
+  readWebSearch,
   readWebTimeline,
 } from "../../src/web/readAdapter.ts";
 import {
@@ -123,6 +125,66 @@ test("Web read adapter derives semantic previews from type-specific Markdown sec
     view.rows[0]?.preview.secondary,
     "Expose the first consequence as secondary preview text.",
   );
+});
+
+test("Web read adapter normalizes search filters and maps compact search hits", () => {
+  const memoryRootDir = setupTestRepo();
+  const context = createTestRepositoryContext(memoryRootDir);
+  setupTestProjectTaxonomy(context, "acme-app", ["docs"]);
+  setupTestProjectTaxonomy(context, "beta-app", ["docs"]);
+
+  appendSessionNote(
+    {
+      project: "acme-app",
+      topic: "search target",
+      date: "2026-03-22",
+      summary: "Searchable summary for the shared-core search wrapper.",
+      actions: ["Keep one matching search hit."],
+      followUp: ["Preserve exact-document routing from search results."],
+    },
+    context,
+  );
+  appendSessionNote(
+    {
+      project: "beta-app",
+      topic: "other search target",
+      date: "2026-03-22",
+      summary: "Searchable summary that project filtering should remove.",
+      actions: ["Keep one non-matching search hit."],
+      followUp: ["Leave project filtering in the adapter."],
+    },
+    context,
+  );
+
+  const query = normalizeWebSearchQuery({
+    limit: "10",
+    project: "acme-app",
+    q: "searchable summary",
+    type: "session-note",
+  });
+  const view = readWebSearch(query, context);
+
+  assert.deepEqual(view.appliedQuery, {
+    limit: 10,
+    project: "acme-app",
+    text: "searchable summary",
+    type: "session-note",
+  });
+  assert.deepEqual(view.availableProjects, ["acme-app", "beta-app"]);
+  assert.equal(view.results.length, 1);
+  assert.equal(view.results[0]?.project, "acme-app");
+  assert.equal(view.results[0]?.topic, "search-target");
+  assert.match(view.results[0]?.excerpt ?? "", /Searchable summary/);
+  assert.equal(
+    view.results[0]?.routePath,
+    `/documents/${encodeURIComponent(view.results[0]?.relativePath ?? "")}`,
+  );
+
+  const allProjectsQuery = normalizeWebSearchQuery({
+    project: "*",
+  });
+
+  assert.equal(allProjectsQuery.project, undefined);
 });
 
 test("Web read adapter returns a normalized invalid-document error for invalid managed documents", () => {

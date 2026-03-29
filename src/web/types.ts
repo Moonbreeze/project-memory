@@ -75,6 +75,34 @@ export type WebTimelineQuery = {
 };
 
 /**
+ * Raw search filter values received from Web route query parameters.
+ */
+export type WebSearchQueryInput = {
+  /** Optional full-text search term. */
+  q?: string;
+  /** Optional project slug filter. */
+  project?: string;
+  /** Optional document type filter. */
+  type?: string;
+  /** Optional result limit. */
+  limit?: string;
+};
+
+/**
+ * Normalized search query values accepted by the shared-core search adapter.
+ */
+export type WebSearchQuery = {
+  /** Optional full-text search term. */
+  text?: string;
+  /** Optional project slug filter. */
+  project?: string;
+  /** Optional document type filter. */
+  type?: DocumentType;
+  /** Final result limit. */
+  limit: number;
+};
+
+/**
  * Normalized read error code surfaced by the Web adapter.
  */
 export type WebReadErrorCode =
@@ -155,6 +183,42 @@ export type WebDocumentDetail = WebDocumentSummary & {
   metadata: Frontmatter;
   /** Raw Markdown body. */
   body: string;
+};
+
+/**
+ * One compact search hit shaped for Web rendering.
+ */
+export type WebSearchResult = {
+  /** Stable document route path. */
+  routePath: string;
+  /** Repository-relative path. */
+  relativePath: string;
+  /** Managed document kind. */
+  type: DocumentType;
+  /** Owning project slug. */
+  project: string;
+  /** Document topic slug. */
+  topic: string;
+  /** Lifecycle status. */
+  status: DocumentStatus;
+  /** Day bucket used by the document path. */
+  date: string;
+  /** Optional timeline timestamp for intra-day ordering. */
+  recordedAt?: string;
+  /** Compact excerpt returned by the shared-core search surface. */
+  excerpt: string;
+};
+
+/**
+ * Search view returned by the Web adapter.
+ */
+export type WebSearchView = {
+  /** Normalized query that produced the results. */
+  appliedQuery: WebSearchQuery;
+  /** Available project slugs discovered from active managed documents. */
+  availableProjects: string[];
+  /** Search hits in display order. */
+  results: WebSearchResult[];
 };
 
 /**
