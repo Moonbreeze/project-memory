@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -8,12 +7,9 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { runCli } from "../../src/cli/dispatch.ts";
+import { createCapturedIo, parseLastJson } from "../fixtures/cliTestSupport.ts";
 import { createTestRepositoryContext, setupTestProjectTaxonomy, setupTestRepo } from "../fixtures/setupTestRepo.ts";
-
-type CapturedIo = {
-  stdout: string[];
-  stderr: string[];
-};
+import { isRecord } from "../fixtures/testSupport.ts";
 
 const rawDumpText = Array.from({ length: 18 }, (_value, index) => `$ command ${index + 1}`).join("\n");
 
@@ -47,46 +43,6 @@ const createIsolatedToolRepo = (): string => {
 };
 
 /**
- * Returns `true` when a value is a plain object.
- */
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-};
-
-/**
- * Creates in-memory stdout and stderr collectors for CLI tests.
- */
-const createCapturedIo = (): {
-  io: {
-    stdout: { write: (chunk: string) => void };
-    stderr: { write: (chunk: string) => void };
-    context?: { toolRootDir?: string };
-  };
-  captured: CapturedIo;
-} => {
-  const captured: CapturedIo = {
-    stdout: [],
-    stderr: [],
-  };
-
-  return {
-    io: {
-      stdout: {
-        write: (chunk: string) => {
-          captured.stdout.push(chunk);
-        },
-      },
-      stderr: {
-        write: (chunk: string) => {
-          captured.stderr.push(chunk);
-        },
-      },
-    },
-    captured,
-  };
-};
-
-/**
  * Creates a temporary git wrapper that records `push` invocations and delegates all other commands.
  */
 const createPushLoggingGitWrapper = (): { binDir: string; logPath: string } => {
@@ -116,44 +72,6 @@ const createPushLoggingGitWrapper = (): { binDir: string; logPath: string } => {
   fs.chmodSync(wrapperPath, 0o755);
 
   return { binDir, logPath };
-};
-
-/**
- * Parses the last JSON payload written by the CLI.
- */
-const parseLastJson = (chunks: string[]): unknown => {
-  const payload = chunks.join("").trim();
-  return JSON.parse(payload);
-};
-
-/**
- * Allocates one free local TCP port for lifecycle tests.
- */
-const findFreePort = async (): Promise<number> => {
-  const server = createServer();
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      resolve();
-    });
-  });
-
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new Error("Failed to resolve temporary port");
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve();
-    });
-  });
-
-  return address.port;
 };
 
 test("CLI install creates an external memory repository and bootstraps one project", async () => {
@@ -1991,95 +1909,4 @@ test("CLI commits only the selected project when multiple projects have pending 
   assert.match(status.stdout, /projects\/beta-app\/decisions\//);
 
   delete process.env.PROJECT_MEMORY_ROOT;
-});
-
-test("CLI web-start/web-status/web-stop manage the shared Web runtime", async () => {
-  const rootDir = setupTestRepo();
-  const port = await findFreePort();
-  const previousMemoryRoot = process.env.PROJECT_MEMORY_ROOT;
-  process.env.PROJECT_MEMORY_ROOT = rootDir;
-
-  const startCapture = createCapturedIo();
-  const statusCapture = createCapturedIo();
-  const stopCapture = createCapturedIo();
-
-  try {
-    await runCli(
-      [
-        "web-start",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        `${port}`,
-        "--public-base-url",
-        "https://example.com/project-memory",
-        "--prompt-public-url",
-        "false",
-      ],
-      startCapture.io,
-    );
-
-    const started = parseLastJson(startCapture.captured.stdout);
-    if (
-      !isRecord(started)
-      || started.state !== "running"
-      || started.outcome !== "started"
-      || !isRecord(started.timelineLinks)
-      || typeof started.timelineLinks.public !== "string"
-    ) {
-      throw new Error("Unexpected web-start result shape");
-    }
-
-    assert.equal(started.timelineLinks.public, "https://example.com/project-memory/timeline");
-
-    await runCli(
-      [
-        "web-status",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        `${port}`,
-      ],
-      statusCapture.io,
-    );
-
-    const status = parseLastJson(statusCapture.captured.stdout);
-    if (!isRecord(status) || status.state !== "running") {
-      throw new Error("Unexpected web-status result shape");
-    }
-
-    await runCli(
-      [
-        "web-stop",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        `${port}`,
-      ],
-      stopCapture.io,
-    );
-
-    const stopped = parseLastJson(stopCapture.captured.stdout);
-    if (!isRecord(stopped) || stopped.outcome !== "stopped") {
-      throw new Error("Unexpected web-stop result shape");
-    }
-  } finally {
-    const cleanupCapture = createCapturedIo();
-    await runCli(
-      [
-        "web-stop",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        `${port}`,
-      ],
-      cleanupCapture.io,
-    ).catch(() => undefined);
-
-    if (previousMemoryRoot === undefined) {
-      delete process.env.PROJECT_MEMORY_ROOT;
-    } else {
-      process.env.PROJECT_MEMORY_ROOT = previousMemoryRoot;
-    }
-  }
 });

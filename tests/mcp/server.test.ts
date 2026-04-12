@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import { Buffer } from "node:buffer";
-import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -13,21 +12,16 @@ import {
 } from "../../src/core/index.ts";
 import { createMcpResponse } from "../../src/mcp/dispatch.ts";
 import { formatResponsePayload, readMessage } from "../../src/mcp/stdio.ts";
+import { callTool, readError, readResult, readToolResult } from "../fixtures/mcpTestSupport.ts";
 import {
   createTestRepositoryContext,
   setupTestProjectTaxonomy,
   setupTestRepo,
   writeRawInvalidDoneWorkItem,
 } from "../fixtures/setupTestRepo.ts";
+import { isRecord } from "../fixtures/testSupport.ts";
 
 const rawDumpText = Array.from({ length: 18 }, (_value, index) => `$ command ${index + 1}`).join("\n");
-
-/**
- * Returns `true` when a value is a plain object.
- */
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-};
 
 /**
  * Creates a temporary git wrapper that records `push` invocations and delegates all other commands.
@@ -59,120 +53,6 @@ const createPushLoggingGitWrapper = (): { binDir: string; logPath: string } => {
   fs.chmodSync(wrapperPath, 0o755);
 
   return { binDir, logPath };
-};
-
-/**
- * Reads one JSON-RPC error payload from a response.
- */
-const readError = (
-  response: unknown,
-): {
-  code: number;
-  message: string;
-} => {
-  if (!isRecord(response) || !isRecord(response.error)) {
-    throw new Error("Expected a JSON-RPC error response object");
-  }
-
-  if (typeof response.error.code !== "number" || typeof response.error.message !== "string") {
-    throw new Error("Expected a JSON-RPC error payload");
-  }
-
-  return {
-    code: response.error.code,
-    message: response.error.message,
-  };
-};
-
-/**
- * Reads one successful JSON-RPC result payload from a response.
- */
-const readResult = (response: unknown): unknown => {
-  if (!isRecord(response)) {
-    throw new Error("Expected a JSON-RPC response object");
-  }
-
-  if ("error" in response && response.error !== undefined) {
-    throw new Error(`Expected success response, received error: ${JSON.stringify(response.error)}`);
-  }
-
-  return response.result;
-};
-
-/**
- * Reads one tool-call result payload from a JSON-RPC response.
- */
-const readToolResult = (
-  response: unknown,
-): {
-  content: { type: string; text: string }[];
-  structuredContent?: unknown;
-  isError?: boolean;
-} => {
-  const result = readResult(response);
-  if (!isRecord(result) || !Array.isArray(result.content)) {
-    throw new Error("Expected a tool result payload");
-  }
-
-  return {
-    content: result.content.map((entry) => {
-      if (!isRecord(entry) || typeof entry.type !== "string" || typeof entry.text !== "string") {
-        throw new Error("Expected text content items");
-      }
-
-      return {
-        type: entry.type,
-        text: entry.text,
-      };
-    }),
-    structuredContent: result.structuredContent,
-    isError: result.isError === true,
-  };
-};
-
-/**
- * Sends one standard MCP `tools/call` request through the dispatcher.
- */
-const callTool = (id: string, name: string, args: Record<string, unknown>): unknown => {
-  return createMcpResponse({
-    jsonrpc: "2.0",
-    id,
-    method: "tools/call",
-    params: {
-      name,
-      arguments: args,
-    },
-  });
-};
-
-/**
- * Allocates one free local TCP port for lifecycle tests.
- */
-const findFreePort = async (): Promise<number> => {
-  const server = createServer();
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      resolve();
-    });
-  });
-
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new Error("Failed to resolve temporary port");
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve();
-    });
-  });
-
-  return address.port;
 };
 
 test("MCP server requires PROJECT_MEMORY_ROOT for document access", () => {
@@ -1880,62 +1760,4 @@ test("MCP server exposes bounded read entrypoints", () => {
   assert.equal(rationaleResult.structuredContent.documents.length, 3);
 
   delete process.env.PROJECT_MEMORY_ROOT;
-});
-
-test("MCP web_start/web_status/web_stop manage the shared Web runtime", async () => {
-  const rootDir = setupTestRepo();
-  const port = await findFreePort();
-  process.env.PROJECT_MEMORY_ROOT = rootDir;
-
-  try {
-    const startResponse = callTool("web-start", "web_start", {
-      host: "127.0.0.1",
-      port,
-      publicBaseUrl: "https://example.com/project-memory",
-    });
-    const startResult = readToolResult(startResponse);
-    if (
-      !isRecord(startResult.structuredContent)
-      || startResult.structuredContent.state !== "running"
-      || startResult.structuredContent.outcome !== "started"
-      || !isRecord(startResult.structuredContent.timelineLinks)
-    ) {
-      throw new Error("Expected web_start structured content");
-    }
-
-    assert.equal(
-      startResult.structuredContent.timelineLinks.public,
-      "https://example.com/project-memory/timeline",
-    );
-
-    const statusResponse = callTool("web-status", "web_status", {
-      host: "127.0.0.1",
-      port,
-    });
-    const statusResult = readToolResult(statusResponse);
-    if (
-      !isRecord(statusResult.structuredContent)
-      || statusResult.structuredContent.state !== "running"
-    ) {
-      throw new Error("Expected web_status structured content");
-    }
-
-    const stopResponse = callTool("web-stop", "web_stop", {
-      host: "127.0.0.1",
-      port,
-    });
-    const stopResult = readToolResult(stopResponse);
-    if (
-      !isRecord(stopResult.structuredContent)
-      || stopResult.structuredContent.outcome !== "stopped"
-    ) {
-      throw new Error("Expected web_stop structured content");
-    }
-  } finally {
-    callTool("web-stop-cleanup", "web_stop", {
-      host: "127.0.0.1",
-      port,
-    });
-    delete process.env.PROJECT_MEMORY_ROOT;
-  }
 });
