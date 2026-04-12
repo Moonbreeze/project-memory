@@ -239,7 +239,7 @@ export type DecisionInput = CreateDocumentInput & {
 };
 
 /**
- * Input required to create a runbook.
+ * Input required to create or replace one runbook.
  */
 export type RunbookInput = CreateDocumentInput & {
   /** Runbook purpose. */

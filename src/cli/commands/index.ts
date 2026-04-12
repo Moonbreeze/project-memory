@@ -20,6 +20,7 @@ import { pushPendingChangesCommand } from "./pushPendingChanges.ts";
 import { searchDocumentsCommand } from "./searchDocuments.ts";
 import { upsertCanonicalDocCommand } from "./upsertCanonicalDoc.ts";
 import { upsertProviderNoteCommand } from "./upsertProviderNote.ts";
+import { upsertRunbookCommand } from "./upsertRunbook.ts";
 import { upsertTaxonomyRegistryCommand } from "./upsertTaxonomyRegistry.ts";
 import { upsertWorkItemCommand } from "./upsertWorkItem.ts";
 import { webStartCommand } from "./webStart.ts";
@@ -39,6 +40,7 @@ export const cliCommandHandlers: Record<string, CliCommandHandler> = {
   "record-verification-result": recordVerificationResultCommand,
   "upsert-provider-note": upsertProviderNoteCommand,
   "upsert-canonical-doc": upsertCanonicalDocCommand,
+  "upsert-runbook": upsertRunbookCommand,
   "upsert-taxonomy-registry": upsertTaxonomyRegistryCommand,
   "upsert-work-item": upsertWorkItemCommand,
   "close-work-item": closeWorkItemCommand,

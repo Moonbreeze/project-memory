@@ -285,7 +285,7 @@ export const createDecision = (
 /**
  * Creates or replaces a runbook document.
  */
-export const createRunbook = (
+export const upsertRunbook = (
   input: RunbookInput,
   context = createRepositoryContext(),
 ): ParsedDocument => {
@@ -304,6 +304,11 @@ export const createRunbook = (
   });
   return writeDocument(context, relativePath, metadata, body);
 };
+
+/**
+ * Legacy alias for `upsertRunbook`.
+ */
+export const createRunbook = upsertRunbook;
 
 /**
  * Creates or updates one managed work-item document.

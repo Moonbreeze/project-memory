@@ -46,7 +46,7 @@ A normal documentation lifecycle is described first as model operations, not as 
 4. Record session-level progress in a `session-note`.
 5. Record a `verification-result` when a meaningful check completes. If the slice included code changes, do this before `done` and describe the checks that actually ran.
 6. If stable policy or architecture changes, create a `decision`. For non-draft decisions, record one explicit stable-guidance review outcome as part of the write.
-7. If long-lived guidance changes, update the relevant `canonical-doc`, `runbook`, or `provider-note`. If guidance does not change, the decision should still record that review outcome explicitly.
+7. If long-lived guidance changes, update the relevant `canonical-doc`, `runbook`, or `provider-note`. These are mutable stable-guidance surfaces, so the write should replace the current document in place rather than creating an immutable historical record. If guidance does not change, the decision should still record that review outcome explicitly.
 8. Update the `work-item` so its `evidence` links to the relevant `session-note` and `verification-result` records.
 9. Close the `work-item` when the slice is done.
 10. Archive the `work-item` later only if the finished slice should leave the active planning surface.

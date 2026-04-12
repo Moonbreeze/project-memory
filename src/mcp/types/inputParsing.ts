@@ -587,7 +587,7 @@ export const parseDecisionInput = (value: unknown): DecisionInput => {
 };
 
 /**
- * Parses params for `create_runbook`.
+ * Parses params for `upsert_runbook` and `create_runbook`.
  */
 export const parseRunbookInput = (value: unknown): RunbookInput => {
   const params = readParams(value);

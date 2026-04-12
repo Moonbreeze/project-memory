@@ -9,7 +9,7 @@ import {
 import type { CliCommandHandler } from "../types.ts";
 
 /**
- * Handles the `create-runbook` CLI command.
+ * Handles the legacy `create-runbook` CLI alias.
  */
 export const createRunbookCommand: CliCommandHandler = (flags, io) => {
   printJson(

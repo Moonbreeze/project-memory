@@ -90,7 +90,7 @@ const chooseStableGuidanceTool = (value: string): WorkflowToolRecommendation => 
 
   if (includesAny(value, ["procedure", "playbook", "operational", "runbook", "repeatable"])) {
     return createRecommendation(
-      "create_runbook",
+      "upsert_runbook",
       "Repeatable operational guidance belongs in a runbook.",
     );
   }

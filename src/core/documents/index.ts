@@ -35,6 +35,7 @@ export {
   createRunbook,
   recordVerificationResult,
   upsertCanonicalDoc,
+  upsertRunbook,
   upsertWorkItem,
   upsertProviderNote,
 } from "./creation.ts";
