@@ -157,6 +157,11 @@ test("validateWorkItemDefinition accepts the minimal future Session 5 schema", (
         topic: "bounded-read-entrypoints-session-4",
       },
     ],
+    definitionOfDone: [
+      { id: "tests-pass", criterion: "Run unit tests for the spec module.", evidenceRequired: false },
+    ],
+    dodEvidence: [],
+    definitionOfDoneMode: "structured",
   });
 
   assert.deepEqual(result, { ok: true });
@@ -214,6 +219,11 @@ test("validateWorkItemDefinition rejects invalid lifecycle combinations and cros
         topic: "foreign-evidence",
       },
     ],
+    definitionOfDone: [
+      { id: "invalid-id", criterion: "Still validate lifecycle errors.", evidenceRequired: false },
+    ],
+    dodEvidence: [],
+    definitionOfDoneMode: "structured",
   });
 
   assert.equal(result.ok, false);
@@ -261,6 +271,11 @@ test("validateWorkItemDefinition requires session-note evidence for done work it
         topic: "session-6-close-flow-checks",
       },
     ],
+    definitionOfDone: [
+      { id: "done-check", criterion: "Complete closure checks.", evidenceRequired: false },
+    ],
+    dodEvidence: [],
+    definitionOfDoneMode: "structured",
   });
 
   assert.equal(result.ok, false);
@@ -270,4 +285,81 @@ test("validateWorkItemDefinition requires session-note evidence for done work it
   }
 
   assert(result.errors.includes("Done work items must include at least one session-note locator in evidence"));
+});
+
+test("validateWorkItemDefinition enforces structured DoD IDs, bindings, and required coverage", () => {
+  const sessionLocator = {
+    type: "session-note" as const,
+    project: "project-memory",
+    date: "2026-03-21",
+    topic: "structured-dod-session",
+  };
+  const verificationLocator = {
+    type: "verification-result" as const,
+    project: "project-memory",
+    date: "2026-03-21",
+    topic: "structured-dod-checks",
+  };
+  const result = validateWorkItemDefinition({
+    metadata: {
+      project: "project-memory",
+      topic: "structured-dod",
+      date: "2026-03-21",
+      status: "active",
+      workItemState: "done",
+    },
+    summary: "Validate structured completion coverage.",
+    outcome: "Required criteria have explicit evidence.",
+    origin: { kind: "ad-hoc", note: "DoD validation coverage." },
+    dependencies: [],
+    context: [],
+    verification: ["Run focused checks."],
+    evidence: [sessionLocator, verificationLocator],
+    definitionOfDone: [
+      { id: "tests-pass", criterion: "Focused tests pass.", evidenceRequired: true },
+      { id: "notes-written", criterion: "Notes are updated.", evidenceRequired: false },
+    ],
+    dodEvidence: [
+      { locator: sessionLocator, covers: ["tests-pass", "notes-written"] },
+      { locator: verificationLocator, covers: ["tests-pass"] },
+    ],
+    definitionOfDoneMode: "structured",
+  });
+  assert.deepEqual(result, { ok: true });
+
+  const invalid = validateWorkItemDefinition({
+    metadata: {
+      project: "project-memory",
+      topic: "structured-dod-invalid",
+      date: "2026-03-21",
+      status: "active",
+      workItemState: "done",
+    },
+    summary: "Reject malformed completion coverage.",
+    outcome: "Invalid bindings are explicit.",
+    origin: { kind: "ad-hoc", note: "Negative DoD validation coverage." },
+    dependencies: [],
+    context: [],
+    verification: ["Run focused checks."],
+    evidence: [sessionLocator],
+    definitionOfDone: [
+      { id: "Bad ID", criterion: "Invalid ID.", evidenceRequired: true },
+      { id: "duplicate", criterion: "First.", evidenceRequired: true },
+      { id: "duplicate", criterion: "Second.", evidenceRequired: false },
+    ],
+    dodEvidence: [
+      { locator: verificationLocator, covers: ["unknown", "unknown"] },
+      { locator: verificationLocator, covers: [] },
+    ],
+    definitionOfDoneMode: "structured",
+  });
+  assert.equal(invalid.ok, false);
+  if (invalid.ok) throw new Error("Expected validation failure");
+  assert(invalid.errors.includes("definitionOfDone criterion id must use lowercase ASCII kebab-case"));
+  assert(invalid.errors.includes("definitionOfDone criterion ids must be unique"));
+  assert(invalid.errors.includes("dodEvidence locator must also be present in evidence"));
+  assert(invalid.errors.includes("dodEvidence covers must not contain duplicate criterion ids"));
+  assert(invalid.errors.includes("dodEvidence must not contain duplicate locator bindings"));
+  assert(invalid.errors.includes("dodEvidence covers must contain at least one criterion id"));
+  assert(invalid.errors.includes("Done work items require evidence covering criterion: duplicate"));
 });

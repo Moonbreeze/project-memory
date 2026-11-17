@@ -27,3 +27,11 @@
 ## Evidence
 
 {{evidence}}
+
+## Definition of Done
+
+{{definition_of_done}}
+
+## DoD Evidence
+
+{{dod_evidence}}

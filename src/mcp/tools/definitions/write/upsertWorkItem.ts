@@ -8,6 +8,7 @@ import {
   WorkItemOriginKindValues,
   WorkItemStateValues,
 } from "../../../../core/workItems/index.ts";
+import { kebabCaseSlugPatternSource } from "../../../../core/shared/index.ts";
 import { DocumentSourceValues } from "../../../../core/types/index.ts";
 
 /**
@@ -17,7 +18,7 @@ export const upsertWorkItemMcpTool: RegisteredMcpTool = {
   name: "upsert_work_item",
   resultMode: "compact-document",
   description:
-    "Create or replace one managed work-item document for an executable backlog slice. In the normal lifecycle this is the document to open before active implementation and to update again before closure so origin, dependencies, context, verification targets, evidence, visibility status, and execution progress stay explicit instead of leaking into decisions or session prose.",
+    "Create or replace one managed work-item document for an executable backlog slice. Every full upsert requires a non-empty structured Definition of Done; DoD evidence bindings map existing general-evidence locators to criterion IDs. Update again before closure so origin, dependencies, context, verification targets, evidence coverage, visibility status, and execution progress stay explicit instead of leaking into decisions or session prose.",
   inputSchema: createObjectSchema(
     {
       project: {
@@ -76,6 +77,40 @@ export const upsertWorkItemMcpTool: RegisteredMcpTool = {
           type: "string",
         },
       },
+      definitionOfDone: {
+        type: "array",
+        description: "Required non-empty completion criteria with stable lowercase kebab-case IDs.",
+        minItems: 1,
+        items: createObjectSchema(
+          {
+            id: {
+              type: "string",
+              description: "Stable lowercase kebab-case criterion ID.",
+              pattern: `^${kebabCaseSlugPatternSource}$`,
+            },
+            criterion: { type: "string", description: "Human-readable completion criterion." },
+            evidenceRequired: { type: "boolean", description: "Whether done requires linked coverage." },
+          },
+          ["id", "criterion", "evidenceRequired"],
+        ),
+      },
+      dodEvidence: {
+        type: "array",
+        description: "Evidence bindings. Each locator must also occur in evidence and can cover multiple criterion IDs.",
+        items: createObjectSchema(
+          {
+            locator: { type: "string", description: "Session-note or verification-result locator." },
+            covers: {
+              type: "array",
+              description: "Non-empty unique declared criterion IDs.",
+              items: { type: "string" },
+              minItems: 1,
+              uniqueItems: true,
+            },
+          },
+          ["locator", "covers"],
+        ),
+      },
       date: {
         type: "string",
         description: "Optional explicit date in YYYY-MM-DD format.",
@@ -90,7 +125,7 @@ export const upsertWorkItemMcpTool: RegisteredMcpTool = {
         "Optional execution lifecycle state controlling planning progress for the work-item slice; this is separate from document visibility tracked by status.",
       ),
     },
-    ["project", "topic", "summary", "outcome", "originKind", "verification"],
+    ["project", "topic", "summary", "outcome", "originKind", "verification", "definitionOfDone"],
   ),
   handler: upsertWorkItemTool,
 };

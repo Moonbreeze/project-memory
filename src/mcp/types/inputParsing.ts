@@ -61,6 +61,8 @@ import type {
   VerificationResultInput,
   WebServerLifecycleInput,
   WorkItemContextLocator,
+  WorkItemDefinitionOfDoneCriterion,
+  WorkItemDodEvidenceBinding,
   WorkItemEvidenceLocator,
   WorkItemInput,
   WorkItemOrigin,
@@ -486,6 +488,52 @@ const readWorkItemEvidenceList = (value: unknown): WorkItemEvidenceLocator[] => 
   });
 };
 
+/** Parses the required structured definition-of-done array. */
+const readWorkItemDefinitionOfDone = (value: unknown): WorkItemDefinitionOfDoneCriterion[] => {
+  if (!Array.isArray(value)) {
+    throw new Error("Invalid definitionOfDone array");
+  }
+  return value.map((entry) => {
+    if (!isRecord(entry)) {
+      throw new Error("Invalid definitionOfDone criterion");
+    }
+    if (Object.keys(entry).some((key) => !["id", "criterion", "evidenceRequired"].includes(key))) {
+      throw new Error("Invalid definitionOfDone criterion fields");
+    }
+    if (typeof entry.evidenceRequired !== "boolean") {
+      throw new Error("Invalid boolean field: definitionOfDone.evidenceRequired");
+    }
+    return {
+      id: readRequiredString(entry.id, "definitionOfDone.id"),
+      criterion: readRequiredString(entry.criterion, "definitionOfDone.criterion"),
+      evidenceRequired: entry.evidenceRequired,
+    };
+  });
+};
+
+/** Parses the optional structured DoD evidence binding array. */
+const readWorkItemDodEvidence = (value: unknown): WorkItemDodEvidenceBinding[] => {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error("Invalid dodEvidence array");
+  }
+  return value.map((entry) => {
+    if (!isRecord(entry)) {
+      throw new Error("Invalid dodEvidence binding");
+    }
+    if (Object.keys(entry).some((key) => !["locator", "covers"].includes(key))) {
+      throw new Error("Invalid dodEvidence binding fields");
+    }
+    const locator = parseWorkItemLocatorString(readRequiredString(entry.locator, "dodEvidence.locator"));
+    if (locator.type !== "session-note" && locator.type !== "verification-result") {
+      throw new Error("dodEvidence.locator must be a session-note or verification-result");
+    }
+    return { locator, covers: readStringArray(entry.covers, "dodEvidence.covers") };
+  });
+};
+
 /**
  * Parses `tools/call` params into a validated tool invocation.
  */
@@ -685,6 +733,8 @@ export const parseWorkItemInput = (value: unknown): WorkItemInput => {
     context: readWorkItemContextList(params.context),
     verification: readStringArray(params.verification, "verification"),
     evidence: readWorkItemEvidenceList(params.evidence),
+    definitionOfDone: readWorkItemDefinitionOfDone(params.definitionOfDone),
+    dodEvidence: readWorkItemDodEvidence(params.dodEvidence),
     date: readOptionalString(params.date, "date"),
     source: readOptionalDocumentSource(params.source),
     status: readOptionalWorkItemDocumentStatus(params.status),

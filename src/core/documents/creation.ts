@@ -317,6 +317,12 @@ export const upsertWorkItem = (
   input: WorkItemInput,
   context = createRepositoryContext(),
 ): ParsedDocument => {
+  if (!Array.isArray(input.definitionOfDone) || input.definitionOfDone.length === 0) {
+    throw new Error("Full work-item upsert requires a non-empty structured Definition of Done");
+  }
+  if (!Array.isArray(input.dodEvidence)) {
+    throw new Error("Full work-item upsert requires a DoD evidence bindings array");
+  }
   const workItemStatus: WorkItemDocumentStatus = input.status ?? "active";
   const workItemState: WorkItemState = input.workItemState ?? "open";
   const initialMetadata = defaultFrontmatter({
@@ -349,6 +355,9 @@ export const upsertWorkItem = (
     context: input.context,
     verification: input.verification,
     evidence: input.evidence,
+    definitionOfDone: input.definitionOfDone,
+    dodEvidence: input.dodEvidence,
+    definitionOfDoneMode: "structured",
   };
   const validation = validateWorkItemDefinition(definition);
   if (!validation.ok) {
@@ -380,12 +389,25 @@ export const closeWorkItem = (
     throw new Error("Archived work items cannot be closed");
   }
 
+  if (existingDefinition.definitionOfDoneMode === "legacy-inferred" && input.state === "done") {
+    throw new Error("Legacy work item must be migrated with a full structured Definition of Done upsert before transition to done");
+  }
+
   if (currentState === input.state) {
     return existingDocument;
   }
 
   if (currentState === "done" || currentState === "canceled") {
     throw new Error(`Cannot transition work item from ${currentState} to ${input.state}`);
+  }
+
+  if (existingDefinition.definitionOfDoneMode === "legacy-inferred") {
+    return writeDocument(
+      context,
+      relativePath,
+      { ...existingDocument.metadata, work_item_state: "canceled" },
+      existingDocument.body,
+    );
   }
 
   return upsertWorkItem(
@@ -403,6 +425,8 @@ export const closeWorkItem = (
       context: existingDefinition.context,
       verification: existingDefinition.verification,
       evidence: existingDefinition.evidence,
+      definitionOfDone: existingDefinition.definitionOfDone,
+      dodEvidence: existingDefinition.dodEvidence,
     },
     context,
   );
@@ -434,6 +458,15 @@ export const archiveWorkItem = (
     throw new Error(`Only done or canceled work items can be archived; received ${currentState}`);
   }
 
+  if (existingDefinition.definitionOfDoneMode === "legacy-inferred") {
+    return writeDocument(
+      context,
+      relativePath,
+      { ...existingDocument.metadata, status: "archived" },
+      existingDocument.body,
+    );
+  }
+
   return upsertWorkItem(
     {
       project: existingDefinition.metadata.project,
@@ -449,6 +482,8 @@ export const archiveWorkItem = (
       context: existingDefinition.context,
       verification: existingDefinition.verification,
       evidence: existingDefinition.evidence,
+      definitionOfDone: existingDefinition.definitionOfDone,
+      dodEvidence: existingDefinition.dodEvidence,
     },
     context,
   );

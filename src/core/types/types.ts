@@ -449,6 +449,8 @@ export type BoundedReadDependencySurface = {
 export type BoundedReadPlanningExplainability = {
   /** Repository-relative path of the selected work-item document. */
   relativePath: string;
+  /** Human-readable summary of the selected work item. */
+  summary: string;
   /** Derived planning state attached to the work item. */
   planningState: string;
   /** Total declared dependency count on the work item. */

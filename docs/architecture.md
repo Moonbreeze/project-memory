@@ -112,6 +112,8 @@ Work items can store:
 - explicit same-project context locators
 - verification targets
 - explicit same-project evidence locators
+- a non-empty structured Definition of Done
+- many-to-many evidence bindings from existing evidence documents to DoD criterion IDs
 
 The evidence field is part of the model, not incidental annotation.
 It is the structured link between execution chronology and checks:
@@ -120,6 +122,10 @@ It is the structured link between execution chronology and checks:
 - `verification-result` locators record what was checked
 
 The runtime treats that relationship as part of closure semantics rather than as optional annotation on finished work.
+
+The Markdown representation is deterministic and human-readable: each `## Definition of Done` bullet is a compact JSON object with keys `id`, `criterion`, and `evidenceRequired`; each `## DoD Evidence` bullet is a compact JSON object with `locator` and `covers`. JSON string escaping keeps free-form criterion text unambiguous. Criterion IDs use lowercase ASCII kebab-case. A work item can become `done` only when every evidence-required criterion is covered, in addition to the existing general-evidence session-note requirement.
+
+The runtime validates shape, uniqueness, same-project membership, managed-document existence, and required coverage. It deliberately does not judge semantic quality. Records with neither new section are read as `legacy-inferred` for bounded planning; exactly one section is invalid. Legacy records require an explicit full structured upsert before active or done transitions, while cancellation may preserve their old body.
 
 The current runtime model keeps those relationships same-project by default.
 

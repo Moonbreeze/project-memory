@@ -42,6 +42,12 @@ export type JsonSchemaProperty = {
   } | JsonSchemaObject;
   /** Optional enum values for string fields. */
   enum?: string[];
+  /** Optional regular-expression constraint for string fields. */
+  pattern?: string;
+  /** Optional minimum item count for array fields. */
+  minItems?: number;
+  /** Optional uniqueness constraint for array fields. */
+  uniqueItems?: boolean;
 };
 
 /**

@@ -14,6 +14,8 @@ import {
   isWorkItemState,
   type WorkItemContextLocator,
   type WorkItemDefinition,
+  type WorkItemDefinitionOfDoneCriterion,
+  type WorkItemDodEvidenceBinding,
   type WorkItemDocumentLocator,
   type WorkItemDocumentStatus,
   type WorkItemEvidenceLocator,
@@ -45,7 +47,16 @@ const emptySections = (): WorkItemSections => {
     "## Context": "",
     "## Verification": "",
     "## Evidence": "",
+    "## Definition of Done": "",
+    "## DoD Evidence": "",
   };
+};
+
+/** Returns the recognized headings that are actually present in a body. */
+const presentWorkItemHeadings = (body: string): Set<WorkItemSectionHeading> => {
+  return new Set(
+    body.split(/\r?\n/).map((line) => line.trim()).filter(isWorkItemSectionHeading),
+  );
 };
 
 /**
@@ -320,6 +331,54 @@ const parseOrigin = (sectionBody: string): WorkItemOrigin => {
   };
 };
 
+/** Parses one JSON bullet object used by the structured DoD sections. */
+const parseJsonBulletObjects = (sectionBody: string, fieldName: string): unknown[] => {
+  return parseBulletList(sectionBody, fieldName).map((item) => {
+    try {
+      return JSON.parse(item);
+    } catch {
+      throw new Error(`${fieldName} items must be valid JSON objects`);
+    }
+  });
+};
+
+/** Parses stored definition-of-done criteria. */
+const parseDefinitionOfDone = (sectionBody: string): WorkItemDefinitionOfDoneCriterion[] => {
+  return parseJsonBulletObjects(sectionBody, "definition of done").map((value) => {
+    if (
+      typeof value !== "object" || value === null || Array.isArray(value)
+      || !("id" in value) || typeof value.id !== "string"
+      || !("criterion" in value) || typeof value.criterion !== "string"
+      || !("evidenceRequired" in value) || typeof value.evidenceRequired !== "boolean"
+      || Object.keys(value).some((key) => !["id", "criterion", "evidenceRequired"].includes(key))
+    ) {
+      throw new Error("definition of done items must contain only id, criterion, and evidenceRequired");
+    }
+
+    return { id: value.id, criterion: value.criterion, evidenceRequired: value.evidenceRequired };
+  });
+};
+
+/** Parses stored evidence-to-DoD bindings. */
+const parseDodEvidence = (sectionBody: string): WorkItemDodEvidenceBinding[] => {
+  return parseJsonBulletObjects(sectionBody, "DoD evidence").map((value) => {
+    if (
+      typeof value !== "object" || value === null || Array.isArray(value)
+      || !("locator" in value) || typeof value.locator !== "string"
+      || !("covers" in value) || !Array.isArray(value.covers)
+      || value.covers.some((id) => typeof id !== "string")
+      || Object.keys(value).some((key) => !["locator", "covers"].includes(key))
+    ) {
+      throw new Error("DoD evidence items must contain only locator and string-array covers");
+    }
+    const locator = parseWorkItemLocatorString(value.locator);
+    if (locator.type !== "session-note" && locator.type !== "verification-result") {
+      throw new Error("DoD evidence locator must be a session-note or verification-result");
+    }
+    return { locator, covers: value.covers };
+  });
+};
+
 /**
  * Reads and validates the document status for one stored work-item document.
  */
@@ -388,6 +447,15 @@ export const renderWorkItemBody = (
     context: renderList(definition.context.map(serializeWorkItemLocator)),
     verification: renderList(definition.verification),
     evidence: renderList(definition.evidence.map(serializeWorkItemLocator)),
+    definition_of_done: renderList(definition.definitionOfDone.map((criterion) => JSON.stringify({
+      id: criterion.id,
+      criterion: criterion.criterion,
+      evidenceRequired: criterion.evidenceRequired,
+    }))),
+    dod_evidence: renderList(definition.dodEvidence.map((binding) => JSON.stringify({
+      locator: serializeWorkItemLocator(binding.locator),
+      covers: binding.covers,
+    }))),
   });
 };
 
@@ -402,6 +470,13 @@ export const parseWorkItemDocument = (
   }
 
   const sections = splitWorkItemSections(document.body);
+  const headings = presentWorkItemHeadings(document.body);
+  const hasDefinitionOfDone = headings.has("## Definition of Done");
+  const hasDodEvidence = headings.has("## DoD Evidence");
+  if (hasDefinitionOfDone !== hasDodEvidence) {
+    throw new Error("Work-item Definition of Done and DoD Evidence sections must either both be present or both be absent");
+  }
+  const verification = parseBulletList(sections["## Verification"], "verification");
 
   return {
     metadata: {
@@ -424,12 +499,21 @@ export const parseWorkItemDocument = (
       "context",
       createWorkItemContextLocator,
     ),
-    verification: parseBulletList(sections["## Verification"], "verification"),
+    verification,
     evidence: parseLocatorList(
       sections["## Evidence"],
       "evidence",
       createWorkItemEvidenceLocator,
     ),
+    definitionOfDone: hasDefinitionOfDone
+      ? parseDefinitionOfDone(sections["## Definition of Done"])
+      : verification.map((criterion, index) => ({
+          id: `legacy-verification-${index + 1}`,
+          criterion,
+          evidenceRequired: false,
+        })),
+    dodEvidence: hasDodEvidence ? parseDodEvidence(sections["## DoD Evidence"]) : [],
+    definitionOfDoneMode: hasDefinitionOfDone ? "structured" : "legacy-inferred",
   };
 };
 

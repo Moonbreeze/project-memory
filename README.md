@@ -62,6 +62,8 @@ Today the supported local entrypoints are wrappers:
 The wrappers source `.project-memory.env` automatically, so you normally do not need to export `PROJECT_MEMORY_ROOT` by hand.
 They are intentionally low-level entrypoints, not polished end-user commands.
 
+Every new or fully updated work item must declare a non-empty structured Definition of Done. Evidence bindings explicitly map existing same-project `session-note` or `verification-result` records to criterion IDs; required criteria must all be covered before `done`. Project Memory validates this structure and the existence of linked documents, not whether a criterion or its evidence is semantically persuasive. Legacy work items without both DoD sections remain readable but must be explicitly rewritten with structured DoD before active/done lifecycle transitions.
+
 The read-only Web shell is also available through npm:
 
 ```bash

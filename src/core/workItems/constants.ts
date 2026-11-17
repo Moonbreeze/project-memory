@@ -76,4 +76,6 @@ export const WorkItemSectionHeading = [
   "## Context",
   "## Verification",
   "## Evidence",
+  "## Definition of Done",
+  "## DoD Evidence",
 ] as const;

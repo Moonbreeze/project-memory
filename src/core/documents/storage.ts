@@ -4,7 +4,12 @@ import path from "node:path";
 import { createRepositoryContext } from "../config/index.ts";
 import { isDocumentSource, isDocumentStatus } from "../types/index.ts";
 import { validateBody, validateFrontmatter } from "../validation/index.ts";
-import { isWorkItemState, validateStoredWorkItemDocument } from "../workItems/index.ts";
+import {
+  isWorkItemState,
+  parseWorkItemDocument,
+  resolveWorkItemLocatorRelativePath,
+  validateStoredWorkItemDocument,
+} from "../workItems/index.ts";
 import type {
   Frontmatter,
   InvalidDocumentDiagnostic,
@@ -94,6 +99,27 @@ const readStoredDocument = (
   };
 };
 
+/** Ensures every structured DoD binding resolves to an existing valid evidence document. */
+const validateStoredWorkItemEvidence = (
+  context: RepositoryContext,
+  document: ParsedDocument,
+): void => {
+  const definition = parseWorkItemDocument(document);
+  for (const binding of definition.dodEvidence) {
+    const evidenceDocument = readDocument(
+      context,
+      resolveWorkItemLocatorRelativePath(binding.locator),
+    );
+    if (evidenceDocument.type !== binding.locator.type) {
+      throw new Error(`DoD evidence locator did not resolve to a ${binding.locator.type} document`);
+    }
+    const bodyValidation = validateBody(context, evidenceDocument.type, evidenceDocument.body);
+    if (!bodyValidation.ok) {
+      throw new Error(`DoD evidence document is invalid: ${bodyValidation.errors.join("; ")}`);
+    }
+  }
+};
+
 /**
  * Validates and writes one Markdown document to disk.
  */
@@ -113,17 +139,30 @@ export const writeDocument = (
 
   const bodyValidation = validateBody(context, type, body);
   if (!bodyValidation.ok) {
-    throw new Error(bodyValidation.errors.join("; "));
+    const isLegacyWorkItem = type === "work-item"
+      && !body.includes("## Definition of Done")
+      && !body.includes("## DoD Evidence");
+    const errors = isLegacyWorkItem
+      ? bodyValidation.errors.filter((error) => {
+          return error !== "Document body is missing required section: ## Definition of Done"
+            && error !== "Document body is missing required section: ## DoD Evidence";
+        })
+      : bodyValidation.errors;
+    if (errors.length > 0) {
+      throw new Error(errors.join("; "));
+    }
   }
 
   if (type === "work-item") {
-    validateStoredWorkItemDocument({
+    const workItemDocument: ParsedDocument = {
       path: "",
       relativePath,
       type,
       metadata,
       body: body.trimEnd(),
-    });
+    };
+    validateStoredWorkItemDocument(workItemDocument);
+    validateStoredWorkItemEvidence(context, workItemDocument);
   }
 
   const absolutePath = path.join(context.memoryRootDir, relativePath);
@@ -152,6 +191,7 @@ export const readDocument = (
 
   if (parsedDocument.type === "work-item") {
     validateStoredWorkItemDocument(parsedDocument);
+    validateStoredWorkItemEvidence(context, parsedDocument);
   }
 
   return parsedDocument;

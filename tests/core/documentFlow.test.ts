@@ -16,6 +16,7 @@ import {
   createDecision,
   createRunbook,
   listDocuments,
+  parseWorkItemDocument,
   pushPendingChanges,
   readDocument,
   readColdStart,
@@ -29,8 +30,9 @@ import {
   searchDocuments,
   upsertTaxonomyRegistry,
   upsertCanonicalDoc,
-  upsertWorkItem,
+  upsertWorkItem as coreUpsertWorkItem,
 } from "../../src/core/index.ts";
+import type { WorkItemInput } from "../../src/core/index.ts";
 import {
   createTestRepositoryContext,
   setupTestProjectTaxonomy,
@@ -43,6 +45,25 @@ const setupAcmeTaxonomy = (
   scopes: string[],
 ): void => {
   setupTestProjectTaxonomy(context, "acme-app", scopes);
+};
+
+type TestWorkItemInput = Omit<WorkItemInput, "definitionOfDone" | "dodEvidence"> &
+  Partial<Pick<WorkItemInput, "definitionOfDone" | "dodEvidence">>;
+
+const upsertWorkItem = (
+  input: TestWorkItemInput,
+  context: ReturnType<typeof createTestRepositoryContext>,
+) => {
+  return coreUpsertWorkItem(
+    {
+      ...input,
+      definitionOfDone: input.definitionOfDone ?? [
+        { id: "legacy-test-target", criterion: input.verification[0] ?? "Complete the test target.", evidenceRequired: false },
+      ],
+      dodEvidence: input.dodEvidence ?? [],
+    },
+    context,
+  );
 };
 
 const createSessionNoteEvidence = (
@@ -1309,6 +1330,225 @@ test("upsertWorkItem writes a managed work item and exposes planning metadata th
   assert.match(reread.body, /Session 6 implementation seed/);
 });
 
+test("upsertWorkItem renders and reads many-to-many DoD evidence and validates locator existence", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  const sessionLocator = createSessionNoteEvidence(context, "acme-app", "dod-session", "2026-03-11");
+  recordVerificationResult(
+    {
+      project: "acme-app",
+      topic: "dod-checks",
+      date: "2026-03-11",
+      scope: "Structured DoD",
+      steps: ["Run focused checks"],
+      result: "Pass",
+    },
+    context,
+  );
+  const verificationLocator = {
+    type: "verification-result" as const,
+    project: "acme-app",
+    date: "2026-03-11",
+    topic: "dod-checks",
+  };
+  const document = coreUpsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "structured dod slice",
+      date: "2026-03-11",
+      summary: "Persist structured completion criteria.",
+      outcome: "Evidence covers declared criteria.",
+      origin: { kind: "ad-hoc", note: "Structured DoD integration coverage." },
+      dependencies: [],
+      context: [],
+      verification: ["Run focused checks."],
+      evidence: [sessionLocator, verificationLocator],
+      definitionOfDone: [
+        { id: "tests-pass", criterion: "Focused tests pass.", evidenceRequired: true },
+        { id: "notes-exist", criterion: "Session notes exist.", evidenceRequired: true },
+      ],
+      dodEvidence: [
+        { locator: sessionLocator, covers: ["tests-pass", "notes-exist"] },
+        { locator: verificationLocator, covers: ["tests-pass"] },
+      ],
+      workItemState: "done",
+    },
+    context,
+  );
+  const definition = parseWorkItemDocument(readDocument(context, document.relativePath));
+  assert.equal(definition.definitionOfDoneMode, "structured");
+  assert.deepEqual(definition.dodEvidence[0]?.covers, ["tests-pass", "notes-exist"]);
+  assert.match(document.body, /## Definition of Done/);
+  assert.match(document.body, /## DoD Evidence/);
+
+  assert.throws(
+    () => coreUpsertWorkItem(
+      {
+        project: "acme-app",
+        topic: "missing dod evidence",
+        date: "2026-03-11",
+        summary: "Reject a missing evidence document.",
+        outcome: "Bindings resolve before write.",
+        origin: { kind: "ad-hoc", note: "Negative existence coverage." },
+        dependencies: [],
+        context: [],
+        verification: ["Attempt the write."],
+        evidence: [{ ...verificationLocator, topic: "does-not-exist" }],
+        definitionOfDone: [{ id: "checked", criterion: "Check exists.", evidenceRequired: false }],
+        dodEvidence: [{ locator: { ...verificationLocator, topic: "does-not-exist" }, covers: ["checked"] }],
+      },
+      context,
+    ),
+    /ENOENT/,
+  );
+
+  const invalidEvidence = recordVerificationResult(
+    {
+      project: "acme-app",
+      topic: "invalid-dod-checks",
+      date: "2026-03-11",
+      scope: "Invalid structured evidence",
+      steps: ["Corrupt the managed body"],
+      result: "Pass",
+    },
+    context,
+  );
+  fs.writeFileSync(
+    invalidEvidence.path,
+    fs.readFileSync(invalidEvidence.path, "utf8").replace("## Result", "## Broken Result"),
+    "utf8",
+  );
+  const invalidEvidenceLocator = {
+    type: "verification-result" as const,
+    project: "acme-app",
+    date: "2026-03-11",
+    topic: "invalid-dod-checks",
+  };
+  assert.throws(
+    () => coreUpsertWorkItem(
+      {
+        project: "acme-app",
+        topic: "invalid managed dod evidence",
+        date: "2026-03-11",
+        summary: "Reject an invalid managed evidence document.",
+        outcome: "Bindings resolve only to valid documents.",
+        origin: { kind: "ad-hoc", note: "Invalid evidence coverage." },
+        dependencies: [],
+        context: [],
+        verification: ["Attempt the write."],
+        evidence: [invalidEvidenceLocator],
+        definitionOfDone: [{ id: "checked", criterion: "Check is valid.", evidenceRequired: false }],
+        dodEvidence: [{ locator: invalidEvidenceLocator, covers: ["checked"] }],
+      },
+      context,
+    ),
+    /DoD evidence document is invalid: .*missing required section: ## Result/,
+  );
+});
+
+test("readDocument rejects partial DoD sections and malformed stored JSON bullets", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  const partial = upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "partial dod sections",
+      date: "2026-03-11",
+      summary: "Reject one missing structured section.",
+      outcome: "Stored DoD sections remain paired.",
+      origin: { kind: "ad-hoc", note: "Stored parsing coverage." },
+      dependencies: [],
+      context: [],
+      verification: ["Read the malformed document."],
+      evidence: [],
+    },
+    context,
+  );
+  fs.writeFileSync(
+    partial.path,
+    fs.readFileSync(partial.path, "utf8").replace(/\n## DoD Evidence[\s\S]*$/, "\n"),
+    "utf8",
+  );
+  assert.throws(
+    () => readDocument(context, partial.relativePath),
+    /Definition of Done and DoD Evidence sections must either both be present or both be absent/,
+  );
+
+  const malformed = upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "malformed dod json",
+      date: "2026-03-11",
+      summary: "Reject malformed stored JSON.",
+      outcome: "Structured bullets parse robustly.",
+      origin: { kind: "ad-hoc", note: "Stored JSON parsing coverage." },
+      dependencies: [],
+      context: [],
+      verification: ["Read the malformed document."],
+      evidence: [],
+    },
+    context,
+  );
+  fs.writeFileSync(
+    malformed.path,
+    fs.readFileSync(malformed.path, "utf8").replace(
+      /- \{"id":"legacy-test-target"[^\n]*/,
+      "- {not-json}",
+    ),
+    "utf8",
+  );
+  assert.throws(
+    () => readDocument(context, malformed.relativePath),
+    /definition of done items must be valid JSON objects/,
+  );
+});
+
+test("legacy work items remain readable, reject done, and preserve their body through cancellation and archive", () => {
+  const rootDir = setupTestRepo();
+  const context = createTestRepositoryContext(rootDir);
+  const created = upsertWorkItem(
+    {
+      project: "acme-app",
+      topic: "legacy dod slice",
+      date: "2026-03-11",
+      summary: "Read one pre-DoD work item.",
+      outcome: "Legacy planning remains available.",
+      origin: { kind: "ad-hoc", note: "Legacy compatibility coverage." },
+      dependencies: [],
+      context: [],
+      verification: ["Migrate explicitly before done."],
+      evidence: [],
+    },
+    context,
+  );
+  const raw = fs.readFileSync(created.path, "utf8").replace(/\n## Definition of Done[\s\S]*$/, "\n");
+  fs.writeFileSync(created.path, raw, "utf8");
+
+  const legacyDocument = readDocument(context, created.relativePath);
+  const legacy = parseWorkItemDocument(legacyDocument);
+  assert.equal(legacy.definitionOfDoneMode, "legacy-inferred");
+  assert.equal(legacy.definitionOfDone[0]?.id, "legacy-verification-1");
+  assert.throws(
+    () => closeWorkItem(
+      { project: "acme-app", topic: "legacy dod slice", date: "2026-03-11", state: "done" },
+      context,
+    ),
+    /must be migrated .* structured Definition of Done/,
+  );
+  const canceled = closeWorkItem(
+    { project: "acme-app", topic: "legacy dod slice", date: "2026-03-11", state: "canceled" },
+    context,
+  );
+  assert.equal(canceled.body, legacyDocument.body.trimEnd());
+  assert.doesNotMatch(canceled.body, /## Definition of Done|## DoD Evidence/);
+  const archived = archiveWorkItem(
+    { project: "acme-app", topic: "legacy dod slice", date: "2026-03-11" },
+    context,
+  );
+  assert.equal(archived.body, legacyDocument.body.trimEnd());
+  assert.equal(parseWorkItemDocument(archived).definitionOfDoneMode, "legacy-inferred");
+});
+
 test("closeWorkItem applies a terminal lifecycle state and removes the item from backlog planning", () => {
   const rootDir = setupTestRepo();
   const context = createTestRepositoryContext(rootDir);
@@ -1334,6 +1574,12 @@ test("closeWorkItem applies a terminal lifecycle state and removes the item from
       context: [],
       verification: ["Confirm the close helper updates only lifecycle metadata."],
       evidence: [sessionEvidence],
+      definitionOfDone: [
+        { id: "close-preserves-dod", criterion: "Closure preserves structured DoD.", evidenceRequired: true },
+      ],
+      dodEvidence: [
+        { locator: sessionEvidence, covers: ["close-preserves-dod"] },
+      ],
       workItemState: "in_progress",
     },
     context,
@@ -1351,6 +1597,13 @@ test("closeWorkItem applies a terminal lifecycle state and removes the item from
 
   assert.equal(closed.metadata.work_item_state, "done");
   assert.match(closed.body, /Finish the first closeable slice/);
+  const closedDefinition = parseWorkItemDocument(closed);
+  assert.deepEqual(closedDefinition.definitionOfDone, [
+    { id: "close-preserves-dod", criterion: "Closure preserves structured DoD.", evidenceRequired: true },
+  ]);
+  assert.deepEqual(closedDefinition.dodEvidence, [
+    { locator: sessionEvidence, covers: ["close-preserves-dod"] },
+  ]);
 
   const backlog = listDocuments({ project: "acme-app", preset: "backlog" }, context);
   assert.equal(backlog.documents.length, 0);
@@ -1621,6 +1874,12 @@ test("archiveWorkItem archives terminal work items without moving them into the 
       context: [],
       verification: ["Confirm archival updates only the document status."],
       evidence: [sessionEvidence],
+      definitionOfDone: [
+        { id: "archive-preserves-dod", criterion: "Archive preserves structured DoD.", evidenceRequired: true },
+      ],
+      dodEvidence: [
+        { locator: sessionEvidence, covers: ["archive-preserves-dod"] },
+      ],
       workItemState: "done",
     },
     context,
@@ -1638,6 +1897,13 @@ test("archiveWorkItem archives terminal work items without moving them into the 
   assert.equal(archived.metadata.status, "archived");
   assert.equal(archived.metadata.work_item_state, "done");
   assert.match(archived.relativePath, /projects\/acme-app\/work-items\/2026\//);
+  const archivedDefinition = parseWorkItemDocument(archived);
+  assert.deepEqual(archivedDefinition.definitionOfDone, [
+    { id: "archive-preserves-dod", criterion: "Archive preserves structured DoD.", evidenceRequired: true },
+  ]);
+  assert.deepEqual(archivedDefinition.dodEvidence, [
+    { locator: sessionEvidence, covers: ["archive-preserves-dod"] },
+  ]);
 
   const archivedAgain = archiveWorkItem(
     {
@@ -1995,6 +2261,7 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
   assert.deepEqual(
     result.planningExplainability?.map((entry) => [
       entry.relativePath,
+      entry.summary,
       entry.planningState,
       entry.unresolvedDependencyCount,
       entry.dependencySurfaces.map((dependency) => [dependency.relativePath, dependency.resolved]),
@@ -2002,22 +2269,24 @@ test("readPlanningBacklog returns a bounded work-item planning slice without dec
     [
       [
         "projects/acme-app/work-items/2026/2026-03-15-ready-epsilon.md",
+        "Planning slice for ready epsilon.",
         "ready",
         0,
         [["projects/acme-app/work-items/2026/2026-03-16-done-hidden.md", true]],
       ],
-      ["projects/acme-app/work-items/2026/2026-03-14-ready-delta.md", "ready", 0, []],
-      ["projects/acme-app/work-items/2026/2026-03-13-ready-gamma.md", "ready", 0, []],
-      ["projects/acme-app/work-items/2026/2026-03-12-ready-beta.md", "ready", 0, []],
-      ["projects/acme-app/work-items/2026/2026-03-15-in-progress-gamma.md", "in_progress", 0, []],
-      ["projects/acme-app/work-items/2026/2026-03-14-in-progress-beta.md", "in_progress", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-14-ready-delta.md", "Planning slice for ready delta.", "ready", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-13-ready-gamma.md", "Planning slice for ready gamma.", "ready", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-12-ready-beta.md", "Planning slice for ready beta.", "ready", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-15-in-progress-gamma.md", "Planning slice for in progress gamma.", "in_progress", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-14-in-progress-beta.md", "Planning slice for in progress beta.", "in_progress", 0, []],
       [
         "projects/acme-app/work-items/2026/2026-03-14-blocked-gamma.md",
+        "Planning slice for blocked gamma.",
         "blocked",
         1,
         [["projects/acme-app/work-items/2026/2026-03-15-ready-epsilon.md", false]],
       ],
-      ["projects/acme-app/work-items/2026/2026-03-13-blocked-beta.md", "blocked", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-13-blocked-beta.md", "Planning slice for blocked beta.", "blocked", 0, []],
     ],
   );
   assert(
@@ -2327,6 +2596,7 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
   assert.deepEqual(
     result.planningExplainability?.map((entry) => [
       entry.relativePath,
+      entry.summary,
       entry.planningState,
       entry.unresolvedDependencyCount,
       entry.dependencySurfaces.map((dependency) => [dependency.relativePath, dependency.resolved]),
@@ -2334,23 +2604,26 @@ test("readPlanningTopicEntry returns a bounded exact-topic work-item planning sl
     [
       [
         "projects/acme-app/work-items/2026/2026-03-15-resume-slice.md",
+        "Planning slice for resume slice.",
         "ready",
         0,
         [["projects/acme-app/work-items/2026/2026-03-12-resume-slice.md", true]],
       ],
       [
         "projects/acme-app/work-items/2026/2026-03-14-resume-slice.md",
+        "Planning slice for resume slice.",
         "in_progress",
         0,
         [["projects/acme-app/work-items/2026/2026-03-10-resume-prerequisite.md", true]],
       ],
       [
         "projects/acme-app/work-items/2026/2026-03-13-resume-slice.md",
+        "Planning slice for resume slice.",
         "blocked",
         1,
         [["projects/acme-app/work-items/2026/2026-03-15-resume-slice.md", false]],
       ],
-      ["projects/acme-app/work-items/2026/2026-03-12-resume-slice.md", "done", 0, []],
+      ["projects/acme-app/work-items/2026/2026-03-12-resume-slice.md", "Planning slice for resume slice.", "done", 0, []],
     ],
   );
   assert(

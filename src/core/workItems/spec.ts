@@ -263,6 +263,9 @@ export const validateWorkItemDefinition = (
     context,
     verification,
     evidence,
+    definitionOfDone,
+    dodEvidence,
+    definitionOfDoneMode,
   } = definition;
 
   if (!isSlug(metadata.project)) {
@@ -288,11 +291,67 @@ export const validateWorkItemDefinition = (
     validateRequiredText(errors, verificationItem, "verification item");
   }
 
+  if (definitionOfDoneMode === "structured" && definitionOfDone.length === 0) {
+    errors.push("definitionOfDone must contain at least one criterion");
+  }
+
+  const criterionIds = new Set<string>();
+  for (const criterion of definitionOfDone) {
+    if (!kebabCaseSlugPattern.test(criterion.id)) {
+      errors.push("definitionOfDone criterion id must use lowercase ASCII kebab-case");
+    }
+    if (criterionIds.has(criterion.id)) {
+      errors.push("definitionOfDone criterion ids must be unique");
+    }
+    criterionIds.add(criterion.id);
+    validateRequiredText(errors, criterion.criterion, "definitionOfDone criterion");
+    if (typeof criterion.evidenceRequired !== "boolean") {
+      errors.push("definitionOfDone evidenceRequired must be a boolean");
+    }
+  }
+
+  const evidencePaths = new Set(evidence.map(resolveWorkItemLocatorRelativePath));
+  const bindingPaths = new Set<string>();
+  const coveredIds = new Set<string>();
+  for (const binding of dodEvidence) {
+    errors.push(...validateLocator(binding.locator, metadata.project, "dodEvidence locator"));
+    const bindingPath = resolveWorkItemLocatorRelativePath(binding.locator);
+    if (bindingPaths.has(bindingPath)) {
+      errors.push("dodEvidence must not contain duplicate locator bindings");
+    }
+    bindingPaths.add(bindingPath);
+    if (!evidencePaths.has(bindingPath)) {
+      errors.push("dodEvidence locator must also be present in evidence");
+    }
+    if (binding.covers.length === 0) {
+      errors.push("dodEvidence covers must contain at least one criterion id");
+    }
+    const bindingIds = new Set<string>();
+    for (const id of binding.covers) {
+      if (bindingIds.has(id)) {
+        errors.push("dodEvidence covers must not contain duplicate criterion ids");
+      }
+      bindingIds.add(id);
+      if (!criterionIds.has(id)) {
+        errors.push(`dodEvidence covers unknown criterion id: ${id}`);
+      }
+      coveredIds.add(id);
+    }
+  }
+
   if (
     metadata.workItemState === "done"
     && !evidence.some((locator) => locator.type === "session-note")
   ) {
     errors.push("Done work items must include at least one session-note locator in evidence");
+  }
+
+  if (metadata.workItemState === "done") {
+    for (const criterion of definitionOfDone) {
+      if (criterion.evidenceRequired && !coveredIds.has(criterion.id)) {
+        errors.push(`Done work items require evidence covering criterion: ${criterion.id}`);
+      }
+    }
   }
 
   if (metadata.status === "draft" && metadata.workItemState !== "open") {

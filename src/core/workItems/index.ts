@@ -28,6 +28,8 @@ export type {
   WorkItemContextLocator,
   WorkItemContextLocatorType,
   WorkItemDefinition,
+  WorkItemDefinitionOfDoneCriterion,
+  WorkItemDodEvidenceBinding,
   WorkItemInput,
   WorkItemDocumentLocator,
   WorkItemDocumentOrigin,

@@ -132,7 +132,7 @@ export const lifecycleMcpTools: Record<string, RegisteredMcpTool> = {
     name: "close_work_item",
     resultMode: "compact-document",
     description:
-      "Close one existing work-item by applying a terminal lifecycle state after the execution slice is actually done or canceled, typically once the relevant session notes, verification records, work-item evidence links, and durable guidance updates are already recorded. This tool applies terminal state only: it does not create session notes, create verification results, or add evidence links. This is the normal lifecycle step before the memory-repo commit.",
+      "Close one existing work-item by applying a terminal lifecycle state after the execution slice is actually done or canceled, typically once the relevant session notes, verification records, work-item evidence links, DoD coverage bindings, and durable guidance updates are already recorded. Done requires coverage of every evidence-required criterion, and legacy work items must first receive an explicit structured DoD upsert. This tool applies terminal state only: it does not create supporting records or add evidence links. This is the normal lifecycle step before the memory-repo commit.",
     inputSchema: createObjectSchema(
       {
         project: {

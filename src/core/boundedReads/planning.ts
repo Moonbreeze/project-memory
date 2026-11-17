@@ -187,6 +187,7 @@ export const buildPlanningExplainability = (
 
     return {
       relativePath: entry.document.relativePath,
+      summary: entry.definition.summary,
       planningState: entry.planning.planningState,
       dependencyCount: entry.planning.dependencyCount,
       unresolvedDependencyCount: entry.planning.unresolvedDependencyCount,

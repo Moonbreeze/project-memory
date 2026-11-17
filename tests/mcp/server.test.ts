@@ -12,7 +12,7 @@ import {
 } from "../../src/core/index.ts";
 import { createMcpResponse } from "../../src/mcp/dispatch.ts";
 import { formatResponsePayload, readMessage } from "../../src/mcp/stdio.ts";
-import { callTool, readError, readResult, readToolResult } from "../fixtures/mcpTestSupport.ts";
+import { callTool as rawCallTool, readError, readResult, readToolResult } from "../fixtures/mcpTestSupport.ts";
 import {
   createTestRepositoryContext,
   setupTestProjectTaxonomy,
@@ -22,6 +22,22 @@ import {
 import { isRecord } from "../fixtures/testSupport.ts";
 
 const rawDumpText = Array.from({ length: 18 }, (_value, index) => `$ command ${index + 1}`).join("\n");
+
+const callTool = (id: string, name: string, args: Record<string, unknown>): unknown => {
+  if (name !== "upsert_work_item" || args.definitionOfDone !== undefined) {
+    return rawCallTool(id, name, args);
+  }
+  const verification = Array.isArray(args.verification) && typeof args.verification[0] === "string"
+    ? args.verification[0]
+    : "Complete the test target.";
+  return rawCallTool(id, name, {
+    ...args,
+    definitionOfDone: [
+      { id: "legacy-test-target", criterion: verification, evidenceRequired: false },
+    ],
+    dodEvidence: [],
+  });
+};
 
 /**
  * Creates a temporary git wrapper that records `push` invocations and delegates all other commands.
@@ -65,6 +81,27 @@ test("MCP server requires PROJECT_MEMORY_ROOT for document access", () => {
   const toolResult = readToolResult(response);
   assert.equal(toolResult.isError, true);
   assert.match(toolResult.content[0]?.text ?? "", /PROJECT_MEMORY_ROOT is required/);
+});
+
+test("MCP upsert_work_item requires structured Definition of Done input", () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+  try {
+    const response = rawCallTool("missing-dod", "upsert_work_item", {
+      project: "acme-app",
+      topic: "missing-dod",
+      summary: "Reject missing structured completion criteria.",
+      outcome: "MCP input remains explicit.",
+      originKind: "ad-hoc",
+      originNote: "Negative MCP coverage.",
+      verification: ["Attempt the write."],
+    });
+    const result = readToolResult(response);
+    assert.equal(result.isError, true);
+    assert.match(result.content[0]?.text ?? "", /definitionOfDone/);
+  } finally {
+    delete process.env.PROJECT_MEMORY_ROOT;
+  }
 });
 
 test("MCP bootstrap_project creates the reserved taxonomy registry surface", () => {
@@ -415,6 +452,24 @@ test("MCP server completes initialize and tools/list handshake", () => {
   if (!isRecord(upsertWorkItemTool) || !isRecord(upsertWorkItemTool.inputSchema) || !isRecord(upsertWorkItemTool.inputSchema.properties)) {
     throw new Error("Expected upsert_work_item schema in tools/list");
   }
+  const definitionOfDoneSchema = upsertWorkItemTool.inputSchema.properties.definitionOfDone;
+  const dodEvidenceSchema = upsertWorkItemTool.inputSchema.properties.dodEvidence;
+  assert(isRecord(definitionOfDoneSchema));
+  assert(isRecord(dodEvidenceSchema));
+  assert.equal(definitionOfDoneSchema.minItems, 1);
+  assert(isRecord(definitionOfDoneSchema.items));
+  assert(isRecord(definitionOfDoneSchema.items.properties));
+  const criterionIdSchema = definitionOfDoneSchema.items.properties.id;
+  assert(isRecord(criterionIdSchema));
+  assert.equal(criterionIdSchema.pattern, "^[a-z0-9]+(?:-[a-z0-9]+)*$");
+  assert(isRecord(dodEvidenceSchema.items));
+  assert(isRecord(dodEvidenceSchema.items.properties));
+  const coversSchema = dodEvidenceSchema.items.properties.covers;
+  assert(isRecord(coversSchema));
+  assert.equal(coversSchema.minItems, 1);
+  assert.equal(coversSchema.uniqueItems, true);
+  assert(Array.isArray(upsertWorkItemTool.inputSchema.required));
+  assert(upsertWorkItemTool.inputSchema.required.includes("definitionOfDone"));
 
   const searchDocumentsTool = toolsByName.get("search_documents");
   if (!isRecord(searchDocumentsTool) || !isRecord(searchDocumentsTool.inputSchema) || !isRecord(searchDocumentsTool.inputSchema.properties)) {
@@ -1696,6 +1751,12 @@ test("MCP server exposes bounded read entrypoints", () => {
   ) {
     throw new Error("Expected read_planning_backlog planning explainability");
   }
+  assert.equal(
+    isRecord(planningResult.structuredContent.planningExplainability[0])
+      ? planningResult.structuredContent.planningExplainability[0].summary
+      : undefined,
+    "Implement the planning slice.",
+  );
 
   const planningTopicResponse = callTool("bounded-planning-topic", "read_planning_topic_entry", {
     project: "acme-app",
@@ -1734,6 +1795,12 @@ test("MCP server exposes bounded read entrypoints", () => {
   ) {
     throw new Error("Expected read_planning_topic_entry planning explainability");
   }
+  assert.equal(
+    isRecord(planningTopicResult.structuredContent.planningExplainability[0])
+      ? planningTopicResult.structuredContent.planningExplainability[0].summary
+      : undefined,
+    "Implement the planning slice.",
+  );
 
   const topicResponse = callTool("bounded-topic", "read_topic_entry", {
     project: "acme-app",

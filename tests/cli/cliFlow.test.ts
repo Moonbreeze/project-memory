@@ -6,12 +6,27 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { runCli } from "../../src/cli/dispatch.ts";
+import { runCli as rawRunCli } from "../../src/cli/dispatch.ts";
+import type { CliIo } from "../../src/cli/types.ts";
 import { createCapturedIo, parseLastJson } from "../fixtures/cliTestSupport.ts";
 import { createTestRepositoryContext, setupTestProjectTaxonomy, setupTestRepo } from "../fixtures/setupTestRepo.ts";
 import { isRecord } from "../fixtures/testSupport.ts";
 
 const rawDumpText = Array.from({ length: 18 }, (_value, index) => `$ command ${index + 1}`).join("\n");
+
+const runCli = async (argv: string[], io?: CliIo): Promise<void> => {
+  if (argv[0] !== "upsert-work-item" || argv.includes("--definition-of-done-json")) {
+    await rawRunCli(argv, io);
+    return;
+  }
+  await rawRunCli([
+    ...argv,
+    "--definition-of-done-json",
+    JSON.stringify([{ id: "legacy-test-target", criterion: "Complete the test target.", evidenceRequired: false }]),
+    "--dod-evidence-json",
+    "[]",
+  ], io);
+};
 
 /**
  * Copies the minimal runnable tool repository into a temporary directory.
@@ -947,6 +962,12 @@ test("CLI upserts work items and exposes planning metadata through list-document
       "CLI coverage.",
       "--verification",
       "Run CLI integration coverage",
+      "--definition-of-done-json",
+      JSON.stringify([
+        { id: "cli-checks-pass", criterion: "CLI integration coverage passes.", evidenceRequired: false },
+      ]),
+      "--dod-evidence-json",
+      "[]",
       "--date",
       "2026-03-11",
     ],
@@ -962,6 +983,7 @@ test("CLI upserts work items and exposes planning metadata through list-document
     workItemResult.relativePath,
     /projects\/acme-app\/work-items\/2026\/2026-03-11-resume-slice\.md/,
   );
+  assert.match(fs.readFileSync(path.join(rootDir, workItemResult.relativePath), "utf8"), /cli-checks-pass/);
 
   const listCapture = createCapturedIo();
   await runCli(
@@ -982,6 +1004,29 @@ test("CLI upserts work items and exposes planning metadata through list-document
   assert.equal(listedDocument.unresolvedDependencyCount, 0);
 
   delete process.env.PROJECT_MEMORY_ROOT;
+});
+
+test("CLI upsert-work-item requires bounded JSON Definition of Done input", async () => {
+  const rootDir = setupTestRepo();
+  process.env.PROJECT_MEMORY_ROOT = rootDir;
+  try {
+    await assert.rejects(
+      rawRunCli([
+        "upsert-work-item",
+        "--project", "acme-app",
+        "--topic", "missing dod",
+        "--summary", "Reject missing DoD input.",
+        "--outcome", "CLI input stays explicit.",
+        "--origin-kind", "ad-hoc",
+        "--origin-note", "Negative CLI coverage.",
+        "--verification", "Attempt write",
+        "--date", "2026-03-11",
+      ], createCapturedIo().io),
+      /Missing required flag --definition-of-done-json/,
+    );
+  } finally {
+    delete process.env.PROJECT_MEMORY_ROOT;
+  }
 });
 
 test("CLI closes work items through the dedicated lifecycle command", async () => {
@@ -1413,6 +1458,12 @@ test("CLI exposes bounded read entrypoints", async () => {
   if (!Array.isArray(planningResult.planningExplainability) || planningResult.planningExplainability.length !== 1) {
     throw new Error("Expected read-planning-backlog planning explainability");
   }
+  assert.equal(
+    isRecord(planningResult.planningExplainability[0])
+      ? planningResult.planningExplainability[0].summary
+      : undefined,
+    "Implement the planning slice.",
+  );
 
   const planningTopicCapture = createCapturedIo();
   await runCli(
@@ -1449,6 +1500,12 @@ test("CLI exposes bounded read entrypoints", async () => {
   ) {
     throw new Error("Expected read-planning-topic-entry planning explainability");
   }
+  assert.equal(
+    isRecord(planningTopicResult.planningExplainability[0])
+      ? planningTopicResult.planningExplainability[0].summary
+      : undefined,
+    "Implement the planning slice.",
+  );
 
   const topicCapture = createCapturedIo();
   await runCli(

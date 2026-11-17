@@ -26,13 +26,18 @@ The intended paradigm is:
 4. `verification-result` records proof that something was checked.
 5. `canonical-doc`, `runbook`, and `provider-note` hold stable reference knowledge after the work settles.
 
-For `work-item` specifically, `evidence` is where the execution slice links back to the documents that justify closure.
+For `work-item` specifically, `evidence` is where the execution slice links back to the documents that justify closure. Every new or fully updated work item also has a non-empty Definition of Done whose entries contain a stable lowercase kebab-case `id`, criterion text, and an explicit `evidenceRequired` boolean. `dodEvidence` bindings map one evidence locator to one or more criterion IDs, so evidence and criteria form a many-to-many relationship.
 In normal practice that means:
 
 - at least one `session-note` locator for execution chronology
 - zero or more `verification-result` locators for checks that completed
 
 If a `work-item` is marked `done`, it must have at least one `session-note` in `evidence`.
+It must also cover every evidence-required DoD criterion. Each binding locator must already occur in general `evidence` and resolve to an existing valid same-project `session-note` or `verification-result`. Optional criteria may have bindings too. Project Memory validates identifiers, links, coverage, and document existence; it does not assess the semantic quality of criteria or evidence.
+
+Stored work items that predate both DoD sections remain readable with an explicitly inferred legacy definition for planning compatibility. A document containing only one of the two sections is malformed. Legacy records are not silently upgraded: perform a full upsert with structured DoD before moving one to `in_progress`, `blocked`, or `done`; cancellation can preserve the legacy body.
+
+The low-level CLI accepts these structures as bounded inline JSON arrays: `--definition-of-done-json '[{"id":"tests-pass","criterion":"Focused tests pass","evidenceRequired":true}]'` and `--dod-evidence-json '[{"locator":"verification-result:acme-api:2026-03-21:focused-checks","covers":["tests-pass"]}]'`. The latter flag is optional and defaults to an empty array; the Definition of Done flag is required.
 
 Use `list-documents --preset backlog` for executable work only and `list-documents --preset ideas` for the draft-decision inbox that still needs triage.
 
@@ -47,7 +52,7 @@ A normal documentation lifecycle is described first as model operations, not as 
 5. Record a `verification-result` when a meaningful check completes. If the slice included code changes, do this before `done` and describe the checks that actually ran.
 6. If stable policy or architecture changes, create a `decision`. For non-draft decisions, record one explicit stable-guidance review outcome as part of the write.
 7. If long-lived guidance changes, update the relevant `canonical-doc`, `runbook`, or `provider-note`. These are mutable stable-guidance surfaces, so the write should replace the current document in place rather than creating an immutable historical record. If guidance does not change, the decision should still record that review outcome explicitly.
-8. Update the `work-item` so its `evidence` links to the relevant `session-note` and `verification-result` records.
+8. Update the `work-item` so its `evidence` links to the relevant records and `dodEvidence` identifies the DoD criteria each record covers.
 9. Close the `work-item` when the slice is done.
 10. Archive the `work-item` later only if the finished slice should leave the active planning surface.
 11. Commit memory-repo changes separately from code-repo changes.

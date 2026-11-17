@@ -174,6 +174,24 @@ export type WorkItemContextLocator =
  */
 export type WorkItemEvidenceLocator = VerificationResultLocator | SessionNoteLocator;
 
+/** One stable, testable completion criterion declared by a work item. */
+export type WorkItemDefinitionOfDoneCriterion = {
+  /** Stable lowercase ASCII identifier. */
+  id: string;
+  /** Human-readable completion criterion. */
+  criterion: string;
+  /** Whether `done` requires linked evidence covering this criterion. */
+  evidenceRequired: boolean;
+};
+
+/** Many-to-many binding from one evidence document to DoD criteria. */
+export type WorkItemDodEvidenceBinding = {
+  /** Same-project evidence document also present in the general evidence list. */
+  locator: WorkItemEvidenceLocator;
+  /** Declared DoD criterion identifiers covered by this document. */
+  covers: string[];
+};
+
 /**
  * Provenance link back to the originating decision or session note.
  */
@@ -242,6 +260,12 @@ export type WorkItemDefinition = {
   verification: string[];
   /** Same-project evidence documents recorded during or after execution; `done` work items must include at least one session-note locator here. */
   evidence: WorkItemEvidenceLocator[];
+  /** Structured criteria, or optional criteria inferred from legacy verification bullets. */
+  definitionOfDone: WorkItemDefinitionOfDoneCriterion[];
+  /** Explicit evidence-to-criterion bindings. Empty for inferred legacy definitions. */
+  dodEvidence: WorkItemDodEvidenceBinding[];
+  /** Distinguishes stored structured DoD from a readable legacy inference. */
+  definitionOfDoneMode: "structured" | "legacy-inferred";
 };
 
 /**
@@ -276,6 +300,10 @@ export type WorkItemInput = {
   verification: string[];
   /** Same-project evidence documents recorded during or after execution. */
   evidence: WorkItemEvidenceLocator[];
+  /** Non-empty structured completion criteria required on every full upsert. */
+  definitionOfDone: WorkItemDefinitionOfDoneCriterion[];
+  /** Explicit evidence-to-criterion bindings. */
+  dodEvidence: WorkItemDodEvidenceBinding[];
 };
 
 /**
